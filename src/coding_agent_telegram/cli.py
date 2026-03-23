@@ -101,6 +101,13 @@ def main() -> None:
         sandbox_mode=cfg.codex_sandbox_mode,
         codex_model=cfg.codex_model,
         copilot_model=cfg.copilot_model,
+        copilot_autopilot=cfg.copilot_autopilot,
+        copilot_no_ask_user=cfg.copilot_no_ask_user,
+        copilot_allow_all=cfg.copilot_allow_all,
+        copilot_allow_all_tools=cfg.copilot_allow_all_tools,
+        copilot_allow_tools=cfg.copilot_allow_tools,
+        copilot_deny_tools=cfg.copilot_deny_tools,
+        copilot_available_tools=cfg.copilot_available_tools,
     )
     try:
         asyncio.run(_run(cfg, store, runner))

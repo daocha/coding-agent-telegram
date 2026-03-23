@@ -11,17 +11,19 @@ def test_create_and_switch_session(tmp_path: Path):
     store = SessionStore(state, backup)
 
     store.set_current_project_folder("bot-a", 123, "backend")
-    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "codex")
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "codex", branch_name="feature-1")
 
     sessions = store.list_sessions("bot-a", 123)
     assert "sess_1" in sessions
     assert sessions["sess_1"]["project_folder"] == "backend"
     assert sessions["sess_1"]["provider"] == "codex"
+    assert sessions["sess_1"]["branch_name"] == "feature-1"
 
     assert store.switch_session("bot-a", 123, "sess_1")
     chat = store.get_chat_state("bot-a", 123)
     assert chat["active_session_id"] == "sess_1"
     assert chat["current_project_folder"] == "backend"
+    assert chat["current_branch"] == "feature-1"
 
 
 def test_sessions_are_isolated_per_bot(tmp_path: Path):
@@ -91,3 +93,16 @@ def test_replace_session_does_not_duplicate_entries(tmp_path: Path):
     assert "sess_old" not in sessions
     assert "sess_new" in sessions
     assert len(sessions) == 1
+
+
+def test_set_active_session_branch_updates_session_and_chat_state(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "codex", branch_name="main")
+    store.set_active_session_branch("bot-a", 123, "feature-2")
+
+    sessions = store.list_sessions("bot-a", 123)
+    assert sessions["sess_1"]["branch_name"] == "feature-2"
+    assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-2"

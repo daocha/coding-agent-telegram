@@ -20,6 +20,13 @@ class AppConfig:
     copilot_bin: str
     codex_model: str
     copilot_model: str
+    copilot_autopilot: bool
+    copilot_no_ask_user: bool
+    copilot_allow_all: bool
+    copilot_allow_all_tools: bool
+    copilot_allow_tools: tuple[str, ...]
+    copilot_deny_tools: tuple[str, ...]
+    copilot_available_tools: tuple[str, ...]
     codex_approval_policy: str
     codex_sandbox_mode: str
     codex_skip_git_repo_check: bool
@@ -86,6 +93,13 @@ def load_config() -> AppConfig:
         copilot_bin=os.getenv("COPILOT_BIN", "copilot"),
         codex_model=os.getenv("CODEX_MODEL", "").strip(),
         copilot_model=os.getenv("COPILOT_MODEL", "").strip(),
+        copilot_autopilot=_parse_bool(os.getenv("COPILOT_AUTOPILOT", "true"), default=True),
+        copilot_no_ask_user=_parse_bool(os.getenv("COPILOT_NO_ASK_USER", "true"), default=True),
+        copilot_allow_all=_parse_bool(os.getenv("COPILOT_ALLOW_ALL", "true"), default=True),
+        copilot_allow_all_tools=_parse_bool(os.getenv("COPILOT_ALLOW_ALL_TOOLS", "false")),
+        copilot_allow_tools=tuple(_parse_csv_env("COPILOT_ALLOW_TOOLS")),
+        copilot_deny_tools=tuple(_parse_csv_env("COPILOT_DENY_TOOLS")),
+        copilot_available_tools=tuple(_parse_csv_env("COPILOT_AVAILABLE_TOOLS")),
         codex_approval_policy=os.getenv("CODEX_APPROVAL_POLICY", "never"),
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),

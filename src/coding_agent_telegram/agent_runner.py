@@ -34,6 +34,13 @@ class MultiAgentRunner:
         sandbox_mode: str,
         codex_model: str = "",
         copilot_model: str = "",
+        copilot_autopilot: bool = True,
+        copilot_no_ask_user: bool = True,
+        copilot_allow_all: bool = True,
+        copilot_allow_all_tools: bool = False,
+        copilot_allow_tools: tuple[str, ...] = (),
+        copilot_deny_tools: tuple[str, ...] = (),
+        copilot_available_tools: tuple[str, ...] = (),
     ) -> None:
         self.codex_bin = codex_bin
         self.copilot_bin = copilot_bin
@@ -41,6 +48,13 @@ class MultiAgentRunner:
         self.sandbox_mode = sandbox_mode
         self.codex_model = codex_model.strip()
         self.copilot_model = copilot_model.strip()
+        self.copilot_autopilot = copilot_autopilot
+        self.copilot_no_ask_user = copilot_no_ask_user
+        self.copilot_allow_all = copilot_allow_all
+        self.copilot_allow_all_tools = copilot_allow_all_tools
+        self.copilot_allow_tools = tuple(tool.strip() for tool in copilot_allow_tools if tool.strip())
+        self.copilot_deny_tools = tuple(tool.strip() for tool in copilot_deny_tools if tool.strip())
+        self.copilot_available_tools = tuple(tool.strip() for tool in copilot_available_tools if tool.strip())
 
     def _extract_assistant_text(self, event: object) -> str:
         if isinstance(event, str):
@@ -195,13 +209,26 @@ class MultiAgentRunner:
         env = os.environ.copy()
         if skip_git_repo_check:
             env["COPILOT_HOME"] = str(project_path / ".copilot")
-            env["COPILOT_ALLOW_ALL"] = "true"
         return env
 
-    def _copilot_base(self, user_message: str) -> list[str]:
+    def _copilot_base(self, user_message: str, skip_git_repo_check: bool) -> list[str]:
         args = []
         if self.copilot_model:
             args.extend(["--model", self.copilot_model])
+        if self.copilot_autopilot:
+            args.append("--autopilot")
+        if self.copilot_no_ask_user:
+            args.append("--no-ask-user")
+        if self.copilot_allow_all:
+            args.append("--allow-all")
+        elif self.copilot_allow_all_tools or skip_git_repo_check:
+            args.append("--allow-all-tools")
+        for tool in self.copilot_allow_tools:
+            args.extend(["--allow-tool", tool])
+        for tool in self.copilot_deny_tools:
+            args.extend(["--deny-tool", tool])
+        if self.copilot_available_tools:
+            args.extend(["--available-tools", ",".join(self.copilot_available_tools)])
         args.extend(
             [
             "--output-format=json",
@@ -223,7 +250,7 @@ class MultiAgentRunner:
             args = [self.codex_bin, "exec", *self._codex_base(project_path, user_message, skip_git_repo_check)]
             return self._run_with_output_file(args, cwd=project_path, tail_args=1)
         elif provider == "copilot":
-            args = [self.copilot_bin, *self._copilot_base(user_message)]
+            args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
@@ -242,7 +269,7 @@ class MultiAgentRunner:
             args.extend([*self._codex_resume_base(user_message, skip_git_repo_check)[:-1], session_id, user_message])
             return self._run_with_output_file(args, cwd=project_path, tail_args=2)
         elif provider == "copilot":
-            args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message)]
+            args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])

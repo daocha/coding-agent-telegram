@@ -19,6 +19,13 @@ def test_load_config_required(monkeypatch):
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
     assert cfg.copilot_model == ""
+    assert cfg.copilot_autopilot is True
+    assert cfg.copilot_no_ask_user is True
+    assert cfg.copilot_allow_all is True
+    assert cfg.copilot_allow_all_tools is False
+    assert cfg.copilot_allow_tools == ()
+    assert cfg.copilot_deny_tools == ()
+    assert cfg.copilot_available_tools == ()
 
 
 def test_load_config_missing(monkeypatch):

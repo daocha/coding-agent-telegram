@@ -89,7 +89,15 @@ def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
 
     result = runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
 
-    assert calls[0][0] == ["copilot", "--output-format=json", "--prompt", runner.PROMPT_PREFIX + "hello"]
+    assert calls[0][0] == [
+        "copilot",
+        "--autopilot",
+        "--no-ask-user",
+        "--allow-all",
+        "--output-format=json",
+        "--prompt",
+        runner.PROMPT_PREFIX + "hello",
+    ]
     assert calls[0][1] == Path("/tmp/project")
     assert result.session_id == "sess_copilot"
 
@@ -115,6 +123,9 @@ def test_copilot_runner_resume_uses_resume_flag(monkeypatch):
     assert calls[0][0] == [
         "copilot",
         "--resume=sess_1",
+        "--autopilot",
+        "--no-ask-user",
+        "--allow-all",
         "--output-format=json",
         "--prompt",
         runner.PROMPT_PREFIX + "hello again",
@@ -141,7 +152,7 @@ def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
     runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True)
 
     assert calls[0][2]["COPILOT_HOME"] == "/tmp/project/.copilot"
-    assert calls[0][2]["COPILOT_ALLOW_ALL"] == "true"
+    assert "--allow-all" in calls[0][0]
 
 
 def test_codex_runner_passes_model_when_configured(monkeypatch):
@@ -185,4 +196,48 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
 
     runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
 
-    assert calls[0][0][:5] == ["copilot", "--model", "gpt-5", "--output-format=json", "--prompt"]
+    assert calls[0][0][:8] == [
+        "copilot",
+        "--model",
+        "gpt-5",
+        "--autopilot",
+        "--no-ask-user",
+        "--allow-all",
+        "--output-format=json",
+        "--prompt",
+    ]
+
+
+def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
+    calls = []
+
+    def fake_run(args, capture_output, text, check, cwd=None, env=None):
+        calls.append((args, cwd, env))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        copilot_autopilot=False,
+        copilot_no_ask_user=False,
+        copilot_allow_all=False,
+        copilot_allow_all_tools=True,
+        copilot_allow_tools=("shell(git)", "shell(npm)"),
+        copilot_deny_tools=("shell(rm)",),
+        copilot_available_tools=("shell", "apply_patch"),
+    )
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+
+    assert "--allow-all-tools" in calls[0][0]
+    assert calls[0][0].count("--allow-tool") == 2
+    assert "shell(git)" in calls[0][0]
+    assert "shell(npm)" in calls[0][0]
+    assert "--deny-tool" in calls[0][0]
+    assert "shell(rm)" in calls[0][0]
+    assert "--available-tools" in calls[0][0]
+    assert "shell,apply_patch" in calls[0][0]

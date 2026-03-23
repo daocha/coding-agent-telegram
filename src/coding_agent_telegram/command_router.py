@@ -22,6 +22,7 @@ from coding_agent_telegram.diff_utils import (
     snapshot_project_files,
 )
 from coding_agent_telegram.filters import is_sensitive_path, is_valid_project_folder, resolve_project_path
+from coding_agent_telegram.git_utils import GitWorkspaceManager
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import send_code_block, send_text
 
@@ -42,6 +43,7 @@ class CommandRouter:
 
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
+        self.git = GitWorkspaceManager()
 
     def _should_skip_git_repo_check(self, project_folder: str) -> bool:
         return self.deps.cfg.codex_skip_git_repo_check or self.deps.store.is_project_trusted(project_folder)
@@ -70,8 +72,9 @@ class CommandRouter:
         lines = [f"Available sessions (page {page}/{total_pages}):", ""]
         for idx, (sid, data) in enumerate(page_items, start=start + 1):
             status = "active" if sid == active_session_id else "idle"
+            branch_name = data.get("branch_name") or "(current branch)"
             lines.append(
-                f"{idx}. {data['name']} | {data['project_folder']} | {data.get('provider', 'codex')} | {status}"
+                f"{idx}. {data['name']} | {data['project_folder']} | {branch_name} | {data.get('provider', 'codex')} | {status}"
             )
             lines.append(f"session_id: {sid}")
             lines.append("")
@@ -146,8 +149,115 @@ class CommandRouter:
             logger.info("Created project folder '%s' for chat %s.", folder, update.effective_chat.id)
 
         self.deps.store.set_current_project_folder(self.deps.bot_id, update.effective_chat.id, folder)
+        branch_name = self.git.current_branch(path) if self.git.is_git_repo(path) else None
+        self.deps.store.set_current_branch(self.deps.bot_id, update.effective_chat.id, branch_name)
         logger.info("Set current project to '%s' for chat %s.", folder, update.effective_chat.id)
-        await send_text(update, context, f"Project set: {folder}")
+        if branch_name:
+            await send_text(
+                update,
+                context,
+                f"Project set: {folder}\nCurrent branch: {branch_name}\nUse /branch <new_branch> or /branch <origin_branch> <new_branch> if you want a dedicated work branch.\nIf you do not set one, the bot will work on the current branch: {branch_name}",
+            )
+        else:
+            await send_text(update, context, f"Project set: {folder}")
+
+    async def handle_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        allowed, reason = self._chat_allowed(update)
+        if not allowed:
+            await send_text(update, context, reason)
+            return
+
+        chat_id = update.effective_chat.id
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        project_folder = chat_state.get("current_project_folder")
+        if not project_folder:
+            await send_text(update, context, "No project selected.\nPlease run /project <project_folder> first.")
+            return
+
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        if not self.git.is_git_repo(project_path):
+            await send_text(update, context, "Current project is not a git repository.")
+            return
+
+        if not context.args:
+            refresh_result = await asyncio.to_thread(self.git.refresh_current_branch, project_path)
+            if not refresh_result.success:
+                await send_text(update, context, refresh_result.message)
+                return
+            current_branch = self.git.current_branch(project_path) or "(unknown)"
+            default_branch = self.git.default_branch(project_path) or "(unknown)"
+            branches = self.git.list_local_branches(project_path)
+            lines = [
+                f"Project: {project_folder}",
+                f"Current branch: {current_branch}",
+                f"Default branch: {default_branch}",
+                "",
+            ]
+            if refresh_result.warnings:
+                lines.append("Refresh warnings:")
+                for warning in refresh_result.warnings:
+                    lines.append(f"- {warning}")
+                lines.append("")
+            lines.extend(
+                [
+                "Local branches:",
+                ]
+            )
+            if branches:
+                for branch in branches[:20]:
+                    marker = "*" if branch == current_branch else "-"
+                    lines.append(f"{marker} {branch}")
+            else:
+                lines.append("- (none)")
+            lines.extend(
+                [
+                    "",
+                    "Use:",
+                    "/branch <new_branch>",
+                    "/branch <origin_branch> <new_branch>",
+                ]
+            )
+            await send_text(update, context, "\n".join(lines))
+            return
+
+        if len(context.args) not in {1, 2}:
+            await send_text(
+                update,
+                context,
+                "Usage: /branch <new_branch>\nOr: /branch <origin_branch> <new_branch>",
+            )
+            return
+
+        origin_branch = None
+        new_branch = context.args[0].strip()
+        if len(context.args) == 2:
+            origin_branch = context.args[0].strip()
+            new_branch = context.args[1].strip()
+
+        result = await asyncio.to_thread(
+            self.git.prepare_branch,
+            project_path,
+            origin_branch=origin_branch,
+            new_branch=new_branch,
+        )
+        if not result.success:
+            await send_text(update, context, result.message)
+            return
+
+        self.deps.store.set_current_branch(self.deps.bot_id, chat_id, result.current_branch)
+        self.deps.store.set_active_session_branch(self.deps.bot_id, chat_id, result.current_branch or "")
+        logger.info(
+            "Prepared branch '%s' for chat %s in project '%s' from base '%s'.",
+            result.current_branch,
+            chat_id,
+            project_folder,
+            origin_branch or result.default_branch or "unknown",
+        )
+        await send_text(
+            update,
+            context,
+            f"{result.message}\nCurrent branch: {result.current_branch}",
+        )
 
     async def handle_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
@@ -162,6 +272,7 @@ class CommandRouter:
         chat_id = update.effective_chat.id
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
+        branch_name = chat_state.get("current_branch", "")
         if not project_folder:
             await send_text(
                 update,
@@ -219,6 +330,7 @@ class CommandRouter:
             session_name,
             project_folder,
             provider,
+            branch_name=branch_name,
         )
         logger.info(
             "Created session '%s' (%s) for chat %s in project '%s'.",
@@ -230,7 +342,7 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Session created successfully: {session_name}\nSession ID: {result.session_id}\nProject: {project_folder}\nProvider: {provider}",
+            f"Session created successfully: {session_name}\nSession ID: {result.session_id}\nProject: {project_folder}\nProvider: {provider}\nBranch: {branch_name or '(current branch)'}",
         )
 
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -273,6 +385,13 @@ class CommandRouter:
             return
 
         session = self.deps.store.list_sessions(self.deps.bot_id, chat_id)[session_id]
+        branch_name = session.get("branch_name", "")
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
+        if branch_name and self.git.is_git_repo(project_path):
+            checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
+            if not checkout.success:
+                await send_text(update, context, checkout.message)
+                return
         logger.info(
             "Switched chat %s to session '%s' (%s) in project '%s'.",
             chat_id,
@@ -283,7 +402,7 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Switched to session: {session['name']}\nProject: {session['project_folder']}\nProvider: {session.get('provider', 'codex')}",
+            f"Switched to session: {session['name']}\nProject: {session['project_folder']}\nProvider: {session.get('provider', 'codex')}\nBranch: {branch_name or '(current branch)'}",
         )
 
     async def handle_current(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -313,7 +432,7 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Current session: {session['name']}\nProject: {session['project_folder']}\nProvider: {session.get('provider', 'codex')}",
+            f"Current session: {session['name']}\nProject: {session['project_folder']}\nProvider: {session.get('provider', 'codex')}\nBranch: {session.get('branch_name') or '(current branch)'}",
         )
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -340,6 +459,7 @@ class CommandRouter:
         project_folder = session["project_folder"]
         provider = session.get("provider", "codex")
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        branch_name = session.get("branch_name", "")
         logger.info(
             "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'.",
             chat_id,
@@ -348,6 +468,12 @@ class CommandRouter:
             project_folder,
             provider,
         )
+
+        if branch_name and self.git.is_git_repo(project_path):
+            checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
+            if not checkout.success:
+                await send_text(update, context, checkout.message)
+                return
 
         before_snapshot = snapshot_project_files(project_path)
         before = set(changed_files(project_path))
@@ -388,6 +514,7 @@ class CommandRouter:
                     session["name"],
                     project_folder,
                     provider,
+                    branch_name=branch_name,
                 )
                 logger.info(
                     "Replaced session '%s' for chat %s: old=%s new=%s.",

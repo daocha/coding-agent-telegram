@@ -90,6 +90,15 @@ class SessionStore:
         chat_data["current_project_folder"] = project_folder
         self.save(state)
 
+    def set_current_branch(self, bot_id: str, chat_id: int, branch_name: Optional[str]) -> None:
+        state = self.load()
+        chat_data = self._get_chat_data(state, bot_id, chat_id, create=True)
+        if branch_name:
+            chat_data["current_branch"] = branch_name
+        else:
+            chat_data.pop("current_branch", None)
+        self.save(state)
+
     def create_session(
         self,
         bot_id: str,
@@ -98,6 +107,7 @@ class SessionStore:
         session_name: str,
         project_folder: str,
         provider: str,
+        branch_name: Optional[str] = None,
     ) -> None:
         state = self.load()
         chat_data = self._get_chat_data(state, bot_id, chat_id, create=True)
@@ -106,11 +116,14 @@ class SessionStore:
             "name": session_name,
             "project_folder": project_folder,
             "provider": provider,
+            "branch_name": branch_name or "",
             "created_at": now,
             "updated_at": now,
         }
         chat_data["active_session_id"] = session_id
         chat_data["current_project_folder"] = project_folder
+        if branch_name:
+            chat_data["current_branch"] = branch_name
         self.save(state)
 
     def replace_session(
@@ -122,6 +135,7 @@ class SessionStore:
         session_name: str,
         project_folder: str,
         provider: str,
+        branch_name: Optional[str] = None,
     ) -> None:
         state = self.load()
         chat_data = self._get_chat_data(state, bot_id, chat_id, create=True)
@@ -132,17 +146,36 @@ class SessionStore:
             "name": session_name,
             "project_folder": project_folder,
             "provider": provider,
+            "branch_name": branch_name or "",
             "created_at": now,
             "updated_at": now,
         }
         chat_data["active_session_id"] = new_session_id
         chat_data["current_project_folder"] = project_folder
+        if branch_name:
+            chat_data["current_branch"] = branch_name
         self.save(state)
 
     def list_sessions(self, bot_id: str, chat_id: int) -> dict[str, dict[str, str]]:
         state = self.load()
         chat_data = self._get_chat_data(state, bot_id, chat_id)
         return {} if chat_data is None else chat_data.get("sessions", {})
+
+    def set_active_session_branch(self, bot_id: str, chat_id: int, branch_name: str) -> None:
+        state = self.load()
+        chat_data = self._get_chat_data(state, bot_id, chat_id)
+        if not chat_data:
+            return
+        active_session_id = chat_data.get("active_session_id")
+        if not active_session_id:
+            return
+        session = chat_data.get("sessions", {}).get(active_session_id)
+        if not session:
+            return
+        session["branch_name"] = branch_name
+        session["updated_at"] = self._now()
+        chat_data["current_branch"] = branch_name
+        self.save(state)
 
     def get_chat_state(self, bot_id: str, chat_id: int) -> dict[str, Any]:
         state = self.load()
@@ -160,6 +193,8 @@ class SessionStore:
 
         chat_data["active_session_id"] = session_id
         chat_data["current_project_folder"] = session["project_folder"]
+        if session.get("branch_name"):
+            chat_data["current_branch"] = session["branch_name"]
         session["updated_at"] = self._now()
         self.save(state)
         return True

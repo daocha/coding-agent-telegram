@@ -123,6 +123,40 @@ Use the official model references before setting these values:
 - OpenAI Codex/OpenAI models: `https://developers.openai.com/codex/models`
 - GitHub Copilot supported models: `https://docs.github.com/en/copilot/reference/ai-models/supported-models`
 
+- `COPILOT_AUTOPILOT`
+  Default: `true`
+  Runs Copilot CLI in autopilot mode by default.
+
+- `COPILOT_NO_ASK_USER`
+  Default: `true`
+  Tells Copilot CLI not to stop and ask the user interactive follow-up questions.
+
+- `COPILOT_ALLOW_ALL`
+  Default: `true`
+  Passes `--allow-all`, which enables tools, paths, and URLs without confirmation.
+  This is the default here so Copilot CLI can continue non-interactively inside the Telegram bot flow.
+
+- `COPILOT_ALLOW_ALL_TOOLS`
+  If `true`, pass `--allow-all-tools` to Copilot CLI.
+  Use this only if you are comfortable letting Copilot run tools without approval prompts.
+
+- `COPILOT_ALLOW_TOOLS`
+  Comma-separated list of tools to allow without prompting.
+  Example: `COPILOT_ALLOW_TOOLS=shell(git),shell(npm)`
+
+- `COPILOT_DENY_TOOLS`
+  Comma-separated list of tools to explicitly deny.
+  Example: `COPILOT_DENY_TOOLS=shell(rm),shell(chmod)`
+
+- `COPILOT_AVAILABLE_TOOLS`
+  Optional comma-separated allowlist of tools Copilot may use at all.
+  Example: `COPILOT_AVAILABLE_TOOLS=shell,apply_patch`
+
+GitHub documents these Copilot CLI approval controls here:
+
+- `https://docs.github.com/en/copilot/concepts/about-github-copilot-cli`
+- `https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference`
+
 - `CODEX_APPROVAL_POLICY`
   Approval mode passed to Codex.
   Default: `never`
@@ -158,6 +192,13 @@ COPILOT_BIN=copilot
 
 CODEX_MODEL=gpt-5.4
 COPILOT_MODEL=claude-sonnet-4.6
+COPILOT_AUTOPILOT=true
+COPILOT_NO_ASK_USER=true
+COPILOT_ALLOW_ALL=true
+COPILOT_ALLOW_ALL_TOOLS=false
+COPILOT_ALLOW_TOOLS=shell(git),shell(npm)
+COPILOT_DENY_TOOLS=shell(rm)
+COPILOT_AVAILABLE_TOOLS=shell,apply_patch
 
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
@@ -174,6 +215,12 @@ LOG_DIR=./logs
 
 - `/new <session_name> [provider]`
   Create a new session for the current project.
+
+- `/branch <new_branch>`
+  Create a new branch from the repository default branch, after fetching and pulling first.
+
+- `/branch <origin_branch> <new_branch>`
+  Create a new branch from a specific base branch, after fetching and pulling first.
 
 - `/switch`
   Show the latest 10 sessions, newest first.
@@ -206,9 +253,28 @@ Each session stores:
 
 - session name
 - project folder
+- branch name
 - provider
 - timestamps
 - active session selection for that bot/chat scope
+
+## 🌿 Branch Workflow
+
+If the selected project is a Git repository, `/project` reports the current branch and reminds you that:
+
+- you can keep working on the current branch
+- or create a dedicated work branch with `/branch`
+
+When you run `/branch`, the app:
+
+- requires `/project` to be set first
+- detects the default branch if you do not specify one
+- runs `git fetch origin`
+- checks out the base branch
+- runs `git pull --ff-only origin <base-branch>`
+- creates and switches to the new branch
+
+The chosen branch is stored with the session, so switching sessions restores the expected branch before the agent continues work.
 
 ## 🔐 Git Trust Behavior
 
