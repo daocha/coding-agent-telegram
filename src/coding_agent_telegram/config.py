@@ -13,6 +13,7 @@ class AppConfig:
     state_file: Path
     state_backup_file: Path
     log_level: str
+    log_dir: Path
     telegram_bot_tokens: tuple[str, ...]
     allowed_chat_ids: set[int]
     codex_bin: str
@@ -76,6 +77,7 @@ def load_config() -> AppConfig:
         state_file=Path(os.getenv("STATE_FILE", "./state.json")),
         state_backup_file=Path(os.getenv("STATE_BACKUP_FILE", "./state.json.bak")),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
+        log_dir=Path(os.getenv("LOG_DIR", "./logs")),
         telegram_bot_tokens=tokens,
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),

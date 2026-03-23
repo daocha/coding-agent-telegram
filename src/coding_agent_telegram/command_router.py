@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -25,6 +26,9 @@ from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import send_code_block, send_text
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class RouterDeps:
     cfg: AppConfig
@@ -34,11 +38,55 @@ class RouterDeps:
 
 
 class CommandRouter:
+    SWITCH_PAGE_SIZE = 10
+
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
 
     def _should_skip_git_repo_check(self, project_folder: str) -> bool:
         return self.deps.cfg.codex_skip_git_repo_check or self.deps.store.is_project_trusted(project_folder)
+
+    def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
+        return sorted(
+            sessions.items(),
+            key=lambda item: (item[1].get("updated_at") or item[1].get("created_at") or "", item[0]),
+            reverse=True,
+        )
+
+    def _build_switch_page(
+        self,
+        sessions: dict[str, dict[str, str]],
+        active_session_id: Optional[str],
+        page: int,
+    ) -> str:
+        sorted_sessions = self._sorted_sessions(sessions)
+        total_sessions = len(sorted_sessions)
+        total_pages = max(1, (total_sessions + self.SWITCH_PAGE_SIZE - 1) // self.SWITCH_PAGE_SIZE)
+        page = min(max(page, 1), total_pages)
+
+        start = (page - 1) * self.SWITCH_PAGE_SIZE
+        page_items = sorted_sessions[start : start + self.SWITCH_PAGE_SIZE]
+
+        lines = [f"Available sessions (page {page}/{total_pages}):", ""]
+        for idx, (sid, data) in enumerate(page_items, start=start + 1):
+            status = "active" if sid == active_session_id else "idle"
+            lines.append(
+                f"{idx}. {data['name']} | {data['project_folder']} | {data.get('provider', 'codex')} | {status}"
+            )
+            lines.append(f"session_id: {sid}")
+            lines.append("")
+
+        lines.extend(
+            [
+                "Use:",
+                "/switch <session_id>",
+                f"/switch page {page}",
+            ]
+        )
+        if total_pages > 1:
+            lines.append(f"Pages: /switch page 1 ... /switch page {total_pages}")
+
+        return "\n".join(lines).strip()
 
     async def _run_with_typing(self, update: Update, context: ContextTypes.DEFAULT_TYPE, fn, *args, **kwargs):
         chat = update.effective_chat
@@ -95,8 +143,10 @@ class CommandRouter:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
             self.deps.store.trust_project(folder)
+            logger.info("Created project folder '%s' for chat %s.", folder, update.effective_chat.id)
 
         self.deps.store.set_current_project_folder(self.deps.bot_id, update.effective_chat.id, folder)
+        logger.info("Set current project to '%s' for chat %s.", folder, update.effective_chat.id)
         await send_text(update, context, f"Project set: {folder}")
 
     async def handle_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -140,6 +190,13 @@ class CommandRouter:
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        logger.info(
+            "Creating session '%s' for chat %s in project '%s' with provider '%s'.",
+            session_name,
+            chat_id,
+            project_folder,
+            provider,
+        )
         await send_text(update, context, "Creating session...")
         result = await self._run_with_typing(
             update,
@@ -163,6 +220,13 @@ class CommandRouter:
             project_folder,
             provider,
         )
+        logger.info(
+            "Created session '%s' (%s) for chat %s in project '%s'.",
+            session_name,
+            result.session_id,
+            chat_id,
+            project_folder,
+        )
         await send_text(
             update,
             context,
@@ -183,30 +247,39 @@ class CommandRouter:
             if not sessions:
                 await send_text(update, context, "No sessions found.")
                 return
-            lines = ["Available sessions:", ""]
-            for idx, (sid, data) in enumerate(sessions.items(), start=1):
-                status = "active" if sid == active else "idle"
-                lines.extend(
-                    [
-                        f"{idx}.",
-                        f"session_id: {sid}",
-                        f"name: {data['name']}",
-                        f"project: {data['project_folder']}",
-                        f"provider: {data.get('provider', 'codex')}",
-                        f"status: {status}",
-                        "",
-                    ]
-                )
-            lines.extend(["Use:", "/switch <session_id>"])
-            await send_text(update, context, "\n".join(lines).strip())
+            logger.info("Listed sessions page 1 for chat %s (%d sessions total).", chat_id, len(sessions))
+            await send_text(update, context, self._build_switch_page(sessions, active, 1))
             return
 
-        session_id = context.args[0]
+        if len(context.args) == 2 and context.args[0].lower() == "page":
+            if not sessions:
+                await send_text(update, context, "No sessions found.")
+                return
+            try:
+                page = int(context.args[1])
+            except ValueError:
+                await send_text(update, context, "Invalid page number.\nUse: /switch page <number>")
+                return
+            if page < 1:
+                await send_text(update, context, "Invalid page number.\nUse: /switch page <number>")
+                return
+            logger.info("Listed sessions page %d for chat %s (%d sessions total).", page, chat_id, len(sessions))
+            await send_text(update, context, self._build_switch_page(sessions, active, page))
+            return
+
+        session_id = " ".join(context.args).strip()
         if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):
             await send_text(update, context, "Session not found.\nRun /switch to list available sessions.")
             return
 
         session = self.deps.store.list_sessions(self.deps.bot_id, chat_id)[session_id]
+        logger.info(
+            "Switched chat %s to session '%s' (%s) in project '%s'.",
+            chat_id,
+            session["name"],
+            session_id,
+            session["project_folder"],
+        )
         await send_text(
             update,
             context,
@@ -231,6 +304,12 @@ class CommandRouter:
             await send_text(update, context, "No active session.\nPlease run /project and /new first.")
             return
 
+        logger.info(
+            "Reported current session '%s' (%s) for chat %s.",
+            session["name"],
+            active_id,
+            chat_id,
+        )
         await send_text(
             update,
             context,
@@ -261,6 +340,14 @@ class CommandRouter:
         project_folder = session["project_folder"]
         provider = session.get("provider", "codex")
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        logger.info(
+            "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'.",
+            chat_id,
+            session["name"],
+            active_id,
+            project_folder,
+            provider,
+        )
 
         before_snapshot = snapshot_project_files(project_path)
         before = set(changed_files(project_path))
@@ -277,6 +364,12 @@ class CommandRouter:
         )
 
         if (not result.success) and result.error_message and "resume" in result.error_message.lower():
+            logger.info(
+                "Session '%s' (%s) for chat %s could not be resumed; creating a replacement session.",
+                session["name"],
+                active_id,
+                chat_id,
+            )
             create_result = await self._run_with_typing(
                 update,
                 context,
@@ -296,6 +389,13 @@ class CommandRouter:
                     project_folder,
                     provider,
                 )
+                logger.info(
+                    "Replaced session '%s' for chat %s: old=%s new=%s.",
+                    session["name"],
+                    chat_id,
+                    active_id,
+                    create_result.session_id,
+                )
                 await send_text(
                     update,
                     context,
@@ -304,6 +404,13 @@ class CommandRouter:
                 result = create_result
 
         if not result.success:
+            logger.warning(
+                "Agent run failed for chat %s on session '%s' (%s): %s",
+                chat_id,
+                session["name"],
+                active_id,
+                result.error_message or "unknown error",
+            )
             await send_text(update, context, result.error_message or "Agent run failed.")
             return
 
@@ -335,6 +442,13 @@ class CommandRouter:
         for chunk in assistant_chunks:
             await send_text(update, context, chunk)
 
+        logger.info(
+            "Completed run for chat %s on session '%s' (%s); %d changed file(s).",
+            chat_id,
+            session["name"],
+            result.session_id or active_id,
+            len(files),
+        )
         await send_text(update, context, build_summary(session["name"], project_folder, files))
 
         for file_diff in diffs:

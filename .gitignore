@@ -8,3 +8,4 @@ state.json.lock
 state.json.tmp
 state.json.bak
 *.egg-info/
+logs/

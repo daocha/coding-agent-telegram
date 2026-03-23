@@ -34,9 +34,24 @@ Example use case:
 ## Run
 
 ```bash
-pip install .
-coding-agent-telegram
+./startup.sh
 ```
+
+The startup script will:
+
+- create `.env` from `.env.example` if missing
+- create `state.json` and `state.json.bak` if missing
+- set up `.venv`
+- install the package
+- start the Telegram server
+
+## Project Structure
+
+- `src/coding_agent_telegram/`: application code
+- `tests/`: test suite
+- `startup.sh`: local bootstrap and server startup script
+- `.env.example`: environment template
+- `pyproject.toml`: packaging and dependency configuration
 
 ## Environment
 

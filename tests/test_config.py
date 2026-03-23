@@ -16,6 +16,7 @@ def test_load_config_required(monkeypatch):
     assert cfg.codex_sandbox_mode == "workspace-write"
     assert cfg.codex_skip_git_repo_check is False
     assert cfg.default_agent_provider == "codex"
+    assert cfg.log_dir.name == "logs"
 
 
 def test_load_config_missing(monkeypatch):

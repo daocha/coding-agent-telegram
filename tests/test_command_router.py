@@ -240,3 +240,114 @@ def test_new_command_rejects_duplicate_session_name(tmp_path: Path):
 
     assert runner.create_calls == []
     assert "Session name already exists: my-session" in bot.messages[-1][1]
+
+
+def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = AppConfig(
+        workspace_root=tmp_path,
+        state_file=tmp_path / "state.json",
+        state_backup_file=tmp_path / "state.json.bak",
+        log_level="INFO",
+        telegram_bot_tokens=("x",),
+        allowed_chat_ids={123},
+        codex_bin="codex",
+        copilot_bin="copilot",
+        codex_approval_policy="never",
+        codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
+        max_telegram_message_length=3000,
+        enable_group_chats=False,
+        enable_sensitive_diff_filter=True,
+        default_agent_provider="codex",
+    )
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    for idx in range(12):
+        store.create_session("bot-a", 123, f"sess_{idx}", f"session-{idx}", "backend", "codex")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Available sessions (page 1/2):" in message
+    assert "session-11" in message
+    assert "session-2" in message
+    assert "session-1" not in message
+    assert "Pages: /switch page 1 ... /switch page 2" in message
+    assert "/switch <session_id>" in message
+
+
+def test_switch_lists_requested_page(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = AppConfig(
+        workspace_root=tmp_path,
+        state_file=tmp_path / "state.json",
+        state_backup_file=tmp_path / "state.json.bak",
+        log_level="INFO",
+        telegram_bot_tokens=("x",),
+        allowed_chat_ids={123},
+        codex_bin="codex",
+        copilot_bin="copilot",
+        codex_approval_policy="never",
+        codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
+        max_telegram_message_length=3000,
+        enable_group_chats=False,
+        enable_sensitive_diff_filter=True,
+        default_agent_provider="codex",
+    )
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    for idx in range(12):
+        store.create_session("bot-a", 123, f"sess_{idx}", f"session-{idx}", "backend", "codex")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["page", "2"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Available sessions (page 2/2):" in message
+    assert "session-1" in message
+    assert "session-0" in message
+    assert "session-11" not in message
+
+
+def test_switch_by_session_id_still_works(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = AppConfig(
+        workspace_root=tmp_path,
+        state_file=tmp_path / "state.json",
+        state_backup_file=tmp_path / "state.json.bak",
+        log_level="INFO",
+        telegram_bot_tokens=("x",),
+        allowed_chat_ids={123},
+        codex_bin="codex",
+        copilot_bin="copilot",
+        codex_approval_policy="never",
+        codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
+        max_telegram_message_length=3000,
+        enable_group_chats=False,
+        enable_sensitive_diff_filter=True,
+        default_agent_provider="codex",
+    )
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex")
+    store.create_session("bot-a", 123, "sess_b", "session-b", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess_a"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "Switched to session: session-a" in bot.messages[-1][1]
