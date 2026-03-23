@@ -7,7 +7,7 @@ name = "coding-agent-telegram"
 version = "0.2.0"
 description = "Telegram bot bridge for local coding agents (Codex/Copilot CLI)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Codex" }]
 dependencies = [

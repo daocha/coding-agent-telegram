@@ -13,12 +13,13 @@ class AppConfig:
     state_file: Path
     state_backup_file: Path
     log_level: str
-    telegram_bot_token: str
+    telegram_bot_tokens: tuple[str, ...]
     allowed_chat_ids: set[int]
     codex_bin: str
     copilot_bin: str
     codex_approval_policy: str
     codex_sandbox_mode: str
+    codex_skip_git_repo_check: bool
     max_telegram_message_length: int
     enable_group_chats: bool
     enable_sensitive_diff_filter: bool
@@ -31,15 +32,15 @@ def _parse_bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _parse_allowed_chat_ids() -> set[int]:
-    ids_raw = os.getenv("ALLOWED_CHAT_IDS", "").strip()
-    single = os.getenv("ALLOWED_CHAT_ID", "").strip()
+def _parse_csv_env(name: str) -> list[str]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
 
-    values: list[str] = []
-    if single:
-        values.append(single)
-    if ids_raw:
-        values.extend([s.strip() for s in ids_raw.split(",") if s.strip()])
+
+def _parse_allowed_chat_ids() -> set[int]:
+    values = _parse_csv_env("ALLOWED_CHAT_IDS")
 
     out: set[int] = set()
     for item in values:
@@ -47,20 +48,24 @@ def _parse_allowed_chat_ids() -> set[int]:
     return out
 
 
+def _parse_bot_tokens() -> tuple[str, ...]:
+    return tuple(_parse_csv_env("TELEGRAM_BOT_TOKENS"))
+
+
 def load_config() -> AppConfig:
     load_dotenv()
 
     workspace_root_raw = os.getenv("WORKSPACE_ROOT")
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    tokens = _parse_bot_tokens()
     allowed_ids = _parse_allowed_chat_ids()
     provider = os.getenv("DEFAULT_AGENT_PROVIDER", "codex").strip().lower()
 
     if not workspace_root_raw:
         raise ValueError("Missing required config: WORKSPACE_ROOT")
-    if not token:
-        raise ValueError("Missing required config: TELEGRAM_BOT_TOKEN")
+    if not tokens:
+        raise ValueError("Missing required config: TELEGRAM_BOT_TOKENS")
     if not allowed_ids:
-        raise ValueError("Missing required config: ALLOWED_CHAT_ID or ALLOWED_CHAT_IDS")
+        raise ValueError("Missing required config: ALLOWED_CHAT_IDS")
     if provider not in {"codex", "copilot"}:
         raise ValueError("DEFAULT_AGENT_PROVIDER must be either codex or copilot")
 
@@ -71,12 +76,13 @@ def load_config() -> AppConfig:
         state_file=Path(os.getenv("STATE_FILE", "./state.json")),
         state_backup_file=Path(os.getenv("STATE_BACKUP_FILE", "./state.json.bak")),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        telegram_bot_token=token,
+        telegram_bot_tokens=tokens,
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),
         copilot_bin=os.getenv("COPILOT_BIN", "copilot"),
         codex_approval_policy=os.getenv("CODEX_APPROVAL_POLICY", "never"),
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
+        codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),
         max_telegram_message_length=int(os.getenv("MAX_TELEGRAM_MESSAGE_LENGTH", "3000")),
         enable_group_chats=_parse_bool(os.getenv("ENABLE_GROUP_CHATS", "false")),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),

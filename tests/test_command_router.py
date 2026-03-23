@@ -9,7 +9,19 @@ from coding_agent_telegram.session_store import SessionStore
 
 
 class DummyRunner:
-    def create_session(self, provider, project_path, user_message):
+    def __init__(self):
+        self.create_calls = []
+        self.resume_calls = []
+
+    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False):
+        self.create_calls.append(
+            {
+                "provider": provider,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+            }
+        )
         return AgentRunResult(
             session_id="sess_abc123",
             success=True,
@@ -18,7 +30,16 @@ class DummyRunner:
             raw_events=[],
         )
 
-    def resume_session(self, provider, session_id, project_path, user_message):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+            }
+        )
         return AgentRunResult(
             session_id=session_id,
             success=True,
@@ -31,9 +52,13 @@ class DummyRunner:
 class FakeBot:
     def __init__(self):
         self.messages = []
+        self.actions = []
 
     async def send_message(self, chat_id, text):
         self.messages.append((chat_id, text))
+
+    async def send_chat_action(self, chat_id, action):
+        self.actions.append((chat_id, action))
 
 
 def make_update(chat_id=123, chat_type="private", text="hello"):
@@ -44,24 +69,26 @@ def make_update(chat_id=123, chat_type="private", text="hello"):
 
 
 def test_project_command_rejects_path(tmp_path: Path):
+    runner = DummyRunner()
     cfg = AppConfig(
         workspace_root=tmp_path,
         state_file=tmp_path / "state.json",
         state_backup_file=tmp_path / "state.json.bak",
         log_level="INFO",
-        telegram_bot_token="x",
+        telegram_bot_tokens=("x",),
         allowed_chat_ids={123},
         codex_bin="codex",
         copilot_bin="copilot",
         codex_approval_policy="never",
         codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
         max_telegram_message_length=3000,
         enable_group_chats=False,
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
     )
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
-    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner()))
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
 
     update = make_update()
     bot = FakeBot()
@@ -71,34 +98,145 @@ def test_project_command_rejects_path(tmp_path: Path):
     assert "Invalid project folder" in bot.messages[-1][1]
 
 
-def test_new_command_supports_copilot_provider(tmp_path: Path):
-    backend = tmp_path / "backend"
-    backend.mkdir()
+def test_project_command_creates_missing_folder(tmp_path: Path):
+    runner = DummyRunner()
     cfg = AppConfig(
         workspace_root=tmp_path,
         state_file=tmp_path / "state.json",
         state_backup_file=tmp_path / "state.json.bak",
         log_level="INFO",
-        telegram_bot_token="x",
+        telegram_bot_tokens=("x",),
         allowed_chat_ids={123},
         codex_bin="codex",
         copilot_bin="copilot",
         codex_approval_policy="never",
         codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
         max_telegram_message_length=3000,
         enable_group_chats=False,
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
     )
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
-    store.set_current_project_folder(123, "backend")
-    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner()))
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert (tmp_path / "backend").is_dir()
+    assert store.get_chat_state("bot-a", 123)["current_project_folder"] == "backend"
+    assert store.is_project_trusted("backend") is True
+    assert "Project set: backend" in bot.messages[-1][1]
+
+
+def test_new_command_supports_copilot_provider(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = AppConfig(
+        workspace_root=tmp_path,
+        state_file=tmp_path / "state.json",
+        state_backup_file=tmp_path / "state.json.bak",
+        log_level="INFO",
+        telegram_bot_tokens=("x",),
+        allowed_chat_ids={123},
+        codex_bin="codex",
+        copilot_bin="copilot",
+        codex_approval_policy="never",
+        codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
+        max_telegram_message_length=3000,
+        enable_group_chats=False,
+        enable_sensitive_diff_filter=True,
+        default_agent_provider="codex",
+    )
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
 
     update = make_update()
     bot = FakeBot()
     context = SimpleNamespace(args=["my-session", "copilot"], bot=bot)
 
     asyncio.run(router.handle_new(update, context))
-    state = store.get_chat_state(123)
+    state = store.get_chat_state("bot-a", 123)
     sess = state["sessions"][state["active_session_id"]]
     assert sess["provider"] == "copilot"
+    assert bot.messages[0][1] == "Creating session..."
+    assert "Session ID: sess_abc123" in bot.messages[-1][1]
+
+
+def test_new_command_skips_git_repo_check_for_trusted_project(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = AppConfig(
+        workspace_root=tmp_path,
+        state_file=tmp_path / "state.json",
+        state_backup_file=tmp_path / "state.json.bak",
+        log_level="INFO",
+        telegram_bot_tokens=("x",),
+        allowed_chat_ids={123},
+        codex_bin="codex",
+        copilot_bin="copilot",
+        codex_approval_policy="never",
+        codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
+        max_telegram_message_length=3000,
+        enable_group_chats=False,
+        enable_sensitive_diff_filter=True,
+        default_agent_provider="codex",
+    )
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.trust_project("backend")
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls[-1]["skip_git_repo_check"] is True
+    assert bot.messages[0][1] == "Creating session..."
+    assert "Session ID: sess_abc123" in bot.messages[-1][1]
+
+
+def test_new_command_rejects_duplicate_session_name(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = AppConfig(
+        workspace_root=tmp_path,
+        state_file=tmp_path / "state.json",
+        state_backup_file=tmp_path / "state.json.bak",
+        log_level="INFO",
+        telegram_bot_tokens=("x",),
+        allowed_chat_ids={123},
+        codex_bin="codex",
+        copilot_bin="copilot",
+        codex_approval_policy="never",
+        codex_sandbox_mode="workspace-write",
+        codex_skip_git_repo_check=False,
+        max_telegram_message_length=3000,
+        enable_group_chats=False,
+        enable_sensitive_diff_filter=True,
+        default_agent_provider="codex",
+    )
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.create_session("bot-a", 123, "sess_existing", "my-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls == []
+    assert "Session name already exists: my-session" in bot.messages[-1][1]

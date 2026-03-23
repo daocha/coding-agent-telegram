@@ -1,16 +1,28 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 from telegram import Update
+from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.config import AppConfig
-from coding_agent_telegram.diff_utils import build_summary, changed_files, chunk_fenced_diff, collect_diffs
+from coding_agent_telegram.diff_utils import (
+    build_summary,
+    changed_files,
+    changed_files_from_snapshots,
+    collect_snapshot_diffs,
+    chunk_fenced_diff,
+    chunk_plain_text,
+    collect_diffs,
+    snapshot_project_files,
+)
 from coding_agent_telegram.filters import is_sensitive_path, is_valid_project_folder, resolve_project_path
 from coding_agent_telegram.session_store import SessionStore
-from coding_agent_telegram.telegram_sender import send_text
+from coding_agent_telegram.telegram_sender import send_code_block, send_text
 
 
 @dataclass
@@ -18,13 +30,40 @@ class RouterDeps:
     cfg: AppConfig
     store: SessionStore
     agent_runner: MultiAgentRunner
+    bot_id: str
 
 
 class CommandRouter:
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
 
-    def _chat_allowed(self, update: Update) -> tuple[bool, str | None]:
+    def _should_skip_git_repo_check(self, project_folder: str) -> bool:
+        return self.deps.cfg.codex_skip_git_repo_check or self.deps.store.is_project_trusted(project_folder)
+
+    async def _run_with_typing(self, update: Update, context: ContextTypes.DEFAULT_TYPE, fn, *args, **kwargs):
+        chat = update.effective_chat
+        if chat is None:
+            return await asyncio.to_thread(fn, *args, **kwargs)
+
+        stop_event = asyncio.Event()
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+
+        async def typing_loop() -> None:
+            while not stop_event.is_set():
+                await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=4)
+                except asyncio.TimeoutError:
+                    continue
+
+        typing_task = asyncio.create_task(typing_loop())
+        try:
+            return await asyncio.to_thread(fn, *args, **kwargs)
+        finally:
+            stop_event.set()
+            await typing_task
+
+    def _chat_allowed(self, update: Update) -> Tuple[bool, Optional[str]]:
         chat = update.effective_chat
         if chat is None:
             return False, "Chat is not available."
@@ -50,11 +89,14 @@ class CommandRouter:
             return
 
         path = resolve_project_path(self.deps.cfg.workspace_root, folder)
-        if not path.exists() or not path.is_dir():
-            await send_text(update, context, f"Project not found: {folder}")
+        if path.exists() and not path.is_dir():
+            await send_text(update, context, f"Project path exists but is not a directory: {folder}")
             return
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+            self.deps.store.trust_project(folder)
 
-        self.deps.store.set_current_project_folder(update.effective_chat.id, folder)
+        self.deps.store.set_current_project_folder(self.deps.bot_id, update.effective_chat.id, folder)
         await send_text(update, context, f"Project set: {folder}")
 
     async def handle_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -68,7 +110,7 @@ class CommandRouter:
             return
 
         chat_id = update.effective_chat.id
-        chat_state = self.deps.store.get_chat_state(chat_id)
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
         if not project_folder:
             await send_text(
@@ -88,19 +130,43 @@ class CommandRouter:
         if not session_name:
             await send_text(update, context, "Session name cannot be empty.")
             return
+        existing_sessions = self.deps.store.list_sessions(self.deps.bot_id, chat_id)
+        if any(data.get("name", "").strip().lower() == session_name.lower() for data in existing_sessions.values()):
+            await send_text(
+                update,
+                context,
+                f"Session name already exists: {session_name}\nPlease use a different session name.",
+            )
+            return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
-        result = self.deps.agent_runner.create_session(provider, project_path, f"Create session: {session_name}")
+        await send_text(update, context, "Creating session...")
+        result = await self._run_with_typing(
+            update,
+            context,
+            self.deps.agent_runner.create_session,
+            provider,
+            project_path,
+            f"Create session: {session_name}",
+            skip_git_repo_check=self._should_skip_git_repo_check(project_folder),
+        )
 
         if not result.success or not result.session_id:
             await send_text(update, context, result.error_message or "Failed to create a session.")
             return
 
-        self.deps.store.create_session(chat_id, result.session_id, session_name, project_folder, provider)
+        self.deps.store.create_session(
+            self.deps.bot_id,
+            chat_id,
+            result.session_id,
+            session_name,
+            project_folder,
+            provider,
+        )
         await send_text(
             update,
             context,
-            f"Session created successfully: {session_name}\nProject: {project_folder}\nProvider: {provider}",
+            f"Session created successfully: {session_name}\nSession ID: {result.session_id}\nProject: {project_folder}\nProvider: {provider}",
         )
 
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -110,8 +176,8 @@ class CommandRouter:
             return
 
         chat_id = update.effective_chat.id
-        sessions = self.deps.store.list_sessions(chat_id)
-        active = self.deps.store.get_chat_state(chat_id).get("active_session_id")
+        sessions = self.deps.store.list_sessions(self.deps.bot_id, chat_id)
+        active = self.deps.store.get_chat_state(self.deps.bot_id, chat_id).get("active_session_id")
 
         if not context.args:
             if not sessions:
@@ -136,11 +202,11 @@ class CommandRouter:
             return
 
         session_id = context.args[0]
-        if not self.deps.store.switch_session(chat_id, session_id):
+        if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):
             await send_text(update, context, "Session not found.\nRun /switch to list available sessions.")
             return
 
-        session = self.deps.store.list_sessions(chat_id)[session_id]
+        session = self.deps.store.list_sessions(self.deps.bot_id, chat_id)[session_id]
         await send_text(
             update,
             context,
@@ -154,7 +220,7 @@ class CommandRouter:
             return
 
         chat_id = update.effective_chat.id
-        chat_state = self.deps.store.get_chat_state(chat_id)
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         active_id = chat_state.get("active_session_id")
         if not active_id:
             await send_text(update, context, "No active session.\nPlease run /project and /new first.")
@@ -181,7 +247,7 @@ class CommandRouter:
             return
 
         chat_id = update.effective_chat.id
-        chat_state = self.deps.store.get_chat_state(chat_id)
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         active_id = chat_state.get("active_session_id")
         if not active_id:
             await send_text(update, context, "No active session.\nPlease run /project and /new first.")
@@ -196,17 +262,44 @@ class CommandRouter:
         provider = session.get("provider", "codex")
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
 
+        before_snapshot = snapshot_project_files(project_path)
         before = set(changed_files(project_path))
-        result = self.deps.agent_runner.resume_session(provider, active_id, project_path, update.message.text)
+        await send_text(update, context, "Working on it...")
+        result = await self._run_with_typing(
+            update,
+            context,
+            self.deps.agent_runner.resume_session,
+            provider,
+            active_id,
+            project_path,
+            update.message.text,
+            skip_git_repo_check=self._should_skip_git_repo_check(project_folder),
+        )
 
         if (not result.success) and result.error_message and "resume" in result.error_message.lower():
-            create_result = self.deps.agent_runner.create_session(provider, project_path, update.message.text)
+            create_result = await self._run_with_typing(
+                update,
+                context,
+                self.deps.agent_runner.create_session,
+                provider,
+                project_path,
+                update.message.text,
+                skip_git_repo_check=self._should_skip_git_repo_check(project_folder),
+            )
             if create_result.success and create_result.session_id:
-                self.deps.store.create_session(chat_id, create_result.session_id, session["name"], project_folder, provider)
+                self.deps.store.replace_session(
+                    self.deps.bot_id,
+                    chat_id,
+                    active_id,
+                    create_result.session_id,
+                    session["name"],
+                    project_folder,
+                    provider,
+                )
                 await send_text(
                     update,
                     context,
-                    "The previous session is no longer valid.\nA new session was created and the task continued.",
+                    f"The previous session is no longer valid.\nA new session was created and the task continued.\nSession ID: {create_result.session_id}",
                 )
                 result = create_result
 
@@ -214,9 +307,33 @@ class CommandRouter:
             await send_text(update, context, result.error_message or "Agent run failed.")
             return
 
+        after_snapshot = snapshot_project_files(project_path)
         after = set(changed_files(project_path))
+        snapshot_files = changed_files_from_snapshots(before_snapshot, after_snapshot)
+        if not after and not before:
+            after = snapshot_files
         files = sorted(after.union(before))
         diffs = collect_diffs(project_path, files)
+        snapshot_diffs_by_path = {
+            file_diff.path: file_diff
+            for file_diff in collect_snapshot_diffs(before_snapshot, after_snapshot, files)
+        }
+        if files:
+            merged_diffs = []
+            for file_diff in diffs:
+                if file_diff.diff:
+                    merged_diffs.append(file_diff)
+                    continue
+                snapshot_diff = snapshot_diffs_by_path.get(file_diff.path)
+                if snapshot_diff is not None:
+                    merged_diffs.append(snapshot_diff)
+                else:
+                    merged_diffs.append(file_diff)
+            diffs = merged_diffs
+
+        assistant_chunks = chunk_plain_text("Codex output", result.assistant_text, self.deps.cfg.max_telegram_message_length)
+        for chunk in assistant_chunks:
+            await send_text(update, context, chunk)
 
         await send_text(update, context, build_summary(session["name"], project_folder, files))
 
@@ -230,4 +347,4 @@ class CommandRouter:
                 file_diff.diff,
                 self.deps.cfg.max_telegram_message_length,
             ):
-                await send_text(update, context, chunk)
+                await send_code_block(update, context, chunk.header, chunk.code, language=chunk.language)

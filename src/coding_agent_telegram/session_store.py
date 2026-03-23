@@ -4,7 +4,7 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import portalocker
 
@@ -20,7 +20,40 @@ class SessionStore:
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     def _default_state(self) -> dict[str, Any]:
-        return {"chats": {}}
+        return {"chats": {}, "trusted_projects": []}
+
+    def _chat_key(self, bot_id: str, chat_id: int) -> str:
+        return f"{bot_id}:{chat_id}"
+
+    def _get_chat_data(
+        self,
+        state: dict[str, Any],
+        bot_id: str,
+        chat_id: int,
+        *,
+        create: bool = False,
+    ) -> Optional[dict[str, Any]]:
+        chats = state.setdefault("chats", {})
+        scoped_key = self._chat_key(bot_id, chat_id)
+        chat_data = chats.get(scoped_key)
+        if chat_data is not None:
+            return chat_data
+
+        # Migrate legacy single-bot state to the first bot that touches it.
+        legacy_key = str(chat_id)
+        legacy_data = chats.get(legacy_key)
+        if legacy_data is not None:
+            chats[scoped_key] = legacy_data
+            del chats[legacy_key]
+            self.save(state)
+            return legacy_data
+
+        if create:
+            chat_data = {"sessions": {}}
+            chats[scoped_key] = chat_data
+            return chat_data
+
+        return None
 
     def load(self) -> dict[str, Any]:
         if not self.state_file.exists():
@@ -38,15 +71,36 @@ class SessionStore:
             self.temp_file.write_text(serialized + "\n", encoding="utf-8")
             self.temp_file.replace(self.state_file)
 
-    def set_current_project_folder(self, chat_id: int, project_folder: str) -> None:
+    def trust_project(self, project_folder: str) -> None:
         state = self.load()
-        chat_data = state["chats"].setdefault(str(chat_id), {"sessions": {}})
+        trusted_projects = state.setdefault("trusted_projects", [])
+        if project_folder not in trusted_projects:
+            trusted_projects.append(project_folder)
+            trusted_projects.sort()
+            self.save(state)
+
+    def is_project_trusted(self, project_folder: str) -> bool:
+        state = self.load()
+        trusted_projects = state.setdefault("trusted_projects", [])
+        return project_folder in trusted_projects
+
+    def set_current_project_folder(self, bot_id: str, chat_id: int, project_folder: str) -> None:
+        state = self.load()
+        chat_data = self._get_chat_data(state, bot_id, chat_id, create=True)
         chat_data["current_project_folder"] = project_folder
         self.save(state)
 
-    def create_session(self, chat_id: int, session_id: str, session_name: str, project_folder: str, provider: str) -> None:
+    def create_session(
+        self,
+        bot_id: str,
+        chat_id: int,
+        session_id: str,
+        session_name: str,
+        project_folder: str,
+        provider: str,
+    ) -> None:
         state = self.load()
-        chat_data = state["chats"].setdefault(str(chat_id), {"sessions": {}})
+        chat_data = self._get_chat_data(state, bot_id, chat_id, create=True)
         now = self._now()
         chat_data.setdefault("sessions", {})[session_id] = {
             "name": session_name,
@@ -59,15 +113,45 @@ class SessionStore:
         chat_data["current_project_folder"] = project_folder
         self.save(state)
 
-    def list_sessions(self, chat_id: int) -> dict[str, dict[str, str]]:
-        return self.load().get("chats", {}).get(str(chat_id), {}).get("sessions", {})
-
-    def get_chat_state(self, chat_id: int) -> dict[str, Any]:
-        return self.load().get("chats", {}).get(str(chat_id), {})
-
-    def switch_session(self, chat_id: int, session_id: str) -> bool:
+    def replace_session(
+        self,
+        bot_id: str,
+        chat_id: int,
+        old_session_id: str,
+        new_session_id: str,
+        session_name: str,
+        project_folder: str,
+        provider: str,
+    ) -> None:
         state = self.load()
-        chat_data = state.get("chats", {}).get(str(chat_id))
+        chat_data = self._get_chat_data(state, bot_id, chat_id, create=True)
+        sessions = chat_data.setdefault("sessions", {})
+        sessions.pop(old_session_id, None)
+        now = self._now()
+        sessions[new_session_id] = {
+            "name": session_name,
+            "project_folder": project_folder,
+            "provider": provider,
+            "created_at": now,
+            "updated_at": now,
+        }
+        chat_data["active_session_id"] = new_session_id
+        chat_data["current_project_folder"] = project_folder
+        self.save(state)
+
+    def list_sessions(self, bot_id: str, chat_id: int) -> dict[str, dict[str, str]]:
+        state = self.load()
+        chat_data = self._get_chat_data(state, bot_id, chat_id)
+        return {} if chat_data is None else chat_data.get("sessions", {})
+
+    def get_chat_state(self, bot_id: str, chat_id: int) -> dict[str, Any]:
+        state = self.load()
+        chat_data = self._get_chat_data(state, bot_id, chat_id)
+        return {} if chat_data is None else chat_data
+
+    def switch_session(self, bot_id: str, chat_id: int, session_id: str) -> bool:
+        state = self.load()
+        chat_data = self._get_chat_data(state, bot_id, chat_id)
         if not chat_data:
             return False
         session = chat_data.get("sessions", {}).get(session_id)

@@ -1,22 +1,30 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional, Tuple
 
 
 @dataclass
 class AgentRunResult:
-    session_id: str | None
+    session_id: Optional[str]
     success: bool
     assistant_text: str
-    error_message: str | None
+    error_message: Optional[str]
     raw_events: list[dict]
 
 
 class MultiAgentRunner:
     """Runs supported local agent CLIs while preserving session behavior."""
+
+    PROMPT_PREFIX = (
+        "Refresh the workspace state from disk before making changes. "
+        "Verify whether files currently exist in the project before claiming they do. "
+    )
 
     def __init__(self, codex_bin: str, copilot_bin: str, approval_policy: str, sandbox_mode: str) -> None:
         self.codex_bin = codex_bin
@@ -24,7 +32,41 @@ class MultiAgentRunner:
         self.approval_policy = approval_policy
         self.sandbox_mode = sandbox_mode
 
-    def _parse_jsonl(self, stdout: str) -> tuple[str | None, bool, str, str | None, list[dict]]:
+    def _extract_assistant_text(self, event: object) -> str:
+        if isinstance(event, str):
+            return event
+        if isinstance(event, list):
+            return "\n".join(filter(None, [self._extract_assistant_text(item) for item in event]))
+        if not isinstance(event, dict):
+            return ""
+
+        chunks: list[str] = []
+        if isinstance(event.get("assistant_text"), str):
+            chunks.append(event["assistant_text"])
+
+        role = event.get("role")
+        event_type = event.get("type")
+        if role == "assistant" or event_type in {"message", "assistant_message", "output_text", "text"}:
+            for key in ("text", "message", "content"):
+                value = event.get(key)
+                extracted = self._extract_assistant_text(value)
+                if extracted:
+                    chunks.append(extracted)
+
+        for item in event.values():
+            if isinstance(item, (dict, list)):
+                extracted = self._extract_assistant_text(item)
+                if extracted:
+                    chunks.append(extracted)
+
+        unique_chunks: list[str] = []
+        for chunk in chunks:
+            cleaned = chunk.strip()
+            if cleaned and cleaned not in unique_chunks:
+                unique_chunks.append(cleaned)
+        return "\n".join(unique_chunks)
+
+    def _parse_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
         events: list[dict] = []
         for line in stdout.splitlines():
             line = line.strip()
@@ -44,17 +86,20 @@ class MultiAgentRunner:
             for key in ("session_id", "thread_id"):
                 if isinstance(ev.get(key), str):
                     session_id = ev[key]
-            if isinstance(ev.get("assistant_text"), str):
-                assistant_text = ev["assistant_text"]
+            extracted_text = self._extract_assistant_text(ev)
+            if extracted_text:
+                assistant_text = extracted_text
             if isinstance(ev.get("error"), str):
                 error_message = ev["error"]
+            if isinstance(ev.get("message"), str) and ev.get("type") == "error":
+                error_message = ev["message"]
             if isinstance(ev.get("success"), bool):
                 success = ev["success"]
 
         return session_id, success, assistant_text, error_message, events
 
-    def _run(self, args: list[str]) -> AgentRunResult:
-        proc = subprocess.run(args, capture_output=True, text=True, check=False)
+    def _run(self, args: list[str], *, cwd: Optional[Path] = None) -> AgentRunResult:
+        proc = subprocess.run(args, capture_output=True, text=True, check=False, cwd=cwd)
         session_id, parsed_success, assistant_text, error_message, events = self._parse_jsonl(proc.stdout)
 
         success = proc.returncode == 0 and parsed_success
@@ -69,8 +114,29 @@ class MultiAgentRunner:
             raw_events=events,
         )
 
-    def _codex_base(self, project_path: Path, user_message: str) -> list[str]:
-        return [
+    def _run_with_output_file(self, args: list[str], *, cwd: Path, tail_args: int) -> AgentRunResult:
+        with tempfile.NamedTemporaryFile(prefix="coding-agent-telegram-", suffix=".txt", delete=False) as handle:
+            output_path = Path(handle.name)
+
+        try:
+            split_at = len(args) - tail_args
+            result = self._run(
+                [*args[:split_at], "--output-last-message", str(output_path), *args[split_at:]],
+                cwd=cwd,
+            )
+            if output_path.exists():
+                output_text = output_path.read_text(encoding="utf-8").strip()
+                if output_text:
+                    result.assistant_text = output_text
+            return result
+        finally:
+            try:
+                os.unlink(output_path)
+            except FileNotFoundError:
+                pass
+
+    def _codex_base(self, project_path: Path, user_message: str, skip_git_repo_check: bool) -> list[str]:
+        args = [
             "--json",
             "--cd",
             str(project_path),
@@ -78,8 +144,24 @@ class MultiAgentRunner:
             f"approval_policy={self.approval_policy}",
             "-c",
             f"sandbox_mode={self.sandbox_mode}",
-            user_message,
+            f"{self.PROMPT_PREFIX}{user_message}",
         ]
+        if skip_git_repo_check:
+            return ["--skip-git-repo-check", *args]
+        return args
+
+    def _codex_resume_base(self, user_message: str, skip_git_repo_check: bool) -> list[str]:
+        args = [
+            "-c",
+            f"approval_policy={self.approval_policy}",
+            "-c",
+            f"sandbox_mode={self.sandbox_mode}",
+            "--json",
+            f"{self.PROMPT_PREFIX}{user_message}",
+        ]
+        if skip_git_repo_check:
+            return ["--skip-git-repo-check", *args]
+        return args
 
     def _copilot_base(self, project_path: Path, user_message: str) -> list[str]:
         # Capability reservation for Copilot CLI. Mirrors secure constraints as a best-effort contract.
@@ -90,20 +172,38 @@ class MultiAgentRunner:
             user_message,
         ]
 
-    def create_session(self, provider: str, project_path: Path, user_message: str) -> AgentRunResult:
+    def create_session(
+        self,
+        provider: str,
+        project_path: Path,
+        user_message: str,
+        *,
+        skip_git_repo_check: bool = False,
+    ) -> AgentRunResult:
         if provider == "codex":
-            args = [self.codex_bin, "exec", *self._codex_base(project_path, user_message)]
+            args = [self.codex_bin, "exec", *self._codex_base(project_path, user_message, skip_git_repo_check)]
+            return self._run_with_output_file(args, cwd=project_path, tail_args=1)
         elif provider == "copilot":
             args = [self.copilot_bin, "exec", *self._copilot_base(project_path, user_message)]
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
-        return self._run(args)
+        return self._run(args, cwd=project_path)
 
-    def resume_session(self, provider: str, session_id: str, project_path: Path, user_message: str) -> AgentRunResult:
+    def resume_session(
+        self,
+        provider: str,
+        session_id: str,
+        project_path: Path,
+        user_message: str,
+        *,
+        skip_git_repo_check: bool = False,
+    ) -> AgentRunResult:
         if provider == "codex":
-            args = [self.codex_bin, "exec", "resume", session_id, *self._codex_base(project_path, user_message)]
+            args = [self.codex_bin, "exec", "resume"]
+            args.extend([*self._codex_resume_base(user_message, skip_git_repo_check)[:-1], session_id, user_message])
+            return self._run_with_output_file(args, cwd=project_path, tail_args=2)
         elif provider == "copilot":
-            args = [self.copilot_bin, "exec", "resume", session_id, *self._copilot_base(project_path, user_message)]
+            args = [self.copilot_bin, "exec", "resume", "--json", session_id, user_message]
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
-        return self._run(args)
+        return self._run(args, cwd=project_path)
