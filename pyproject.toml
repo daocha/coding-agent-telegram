@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coding-agent-telegram"
+version = "0.2.0"
+description = "Telegram bot bridge for local coding agents (Codex/Copilot CLI)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Codex" }]
+dependencies = [
+  "python-telegram-bot>=21.0,<22.0",
+  "python-dotenv>=1.0.0,<2.0.0",
+  "portalocker>=2.8.2,<3.0.0",
+]
+
+[project.scripts]
+coding-agent-telegram = "coding_agent_telegram.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
