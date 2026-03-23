@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -24,7 +25,7 @@ from coding_agent_telegram.diff_utils import (
 from coding_agent_telegram.filters import is_sensitive_path, is_valid_project_folder, resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager
 from coding_agent_telegram.session_store import SessionStore
-from coding_agent_telegram.telegram_sender import send_code_block, send_text
+from coding_agent_telegram.telegram_sender import send_code_block, send_html_text, send_text
 
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ class CommandRouter:
             status = "active" if sid == active_session_id else "idle"
             branch_name = data.get("branch_name") or "(current branch)"
             lines.append(
-                f"{idx}. {data['name']} | {data['project_folder']} | {branch_name} | {data.get('provider', 'codex')} | {status}"
+                f"{idx}. {html.escape(data['name'])} | <code>{html.escape(data['project_folder'])}</code> &lt;{html.escape(branch_name)}&gt; | {html.escape(data.get('provider', 'codex'))} | {status}"
             )
             lines.append(f"session_id: {sid}")
             lines.append("")
@@ -82,7 +83,7 @@ class CommandRouter:
         lines.extend(
             [
                 "Use:",
-                "/switch <session_id>",
+                "/switch &lt;session_id&gt;",
                 f"/switch page {page}",
             ]
         )
@@ -139,6 +140,13 @@ class CommandRouter:
             await send_text(update, context, "Invalid project folder. Folder name only is allowed.")
             return
 
+        chat_id = update.effective_chat.id
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        active_session_id = chat_state.get("active_session_id")
+        active_session = None
+        if active_session_id:
+            active_session = chat_state.get("sessions", {}).get(active_session_id)
+
         path = resolve_project_path(self.deps.cfg.workspace_root, folder)
         if path.exists() and not path.is_dir():
             await send_text(update, context, f"Project path exists but is not a directory: {folder}")
@@ -148,18 +156,43 @@ class CommandRouter:
             self.deps.store.trust_project(folder)
             logger.info("Created project folder '%s' for chat %s.", folder, update.effective_chat.id)
 
-        self.deps.store.set_current_project_folder(self.deps.bot_id, update.effective_chat.id, folder)
+        self.deps.store.set_current_project_folder(self.deps.bot_id, chat_id, folder)
         branch_name = self.git.current_branch(path) if self.git.is_git_repo(path) else None
-        self.deps.store.set_current_branch(self.deps.bot_id, update.effective_chat.id, branch_name)
-        logger.info("Set current project to '%s' for chat %s.", folder, update.effective_chat.id)
+        self.deps.store.set_current_branch(self.deps.bot_id, chat_id, branch_name)
+        logger.info("Set current project to '%s' for chat %s.", folder, chat_id)
+        warning_lines: list[str] = []
+        if active_session and active_session.get("project_folder") != folder:
+            warning_lines = [
+                "",
+                "",
+                "⚠️ <b>Active Session Mismatch</b>",
+                f"Current session: <b>{html.escape(active_session['name'])}</b>",
+                f"Session project: <code>{html.escape(active_session['project_folder'])}</code>",
+                "Start a new session with <code>/new</code> if you want to work in this newly selected project.",
+            ]
         if branch_name:
-            await send_text(
+            await send_html_text(
                 update,
                 context,
-                f"Project set: {folder}\nCurrent branch: {branch_name}\nUse /branch <new_branch> or /branch <origin_branch> <new_branch> if you want a dedicated work branch.\nIf you do not set one, the bot will work on the current branch: {branch_name}",
+                (
+                    f"✅ <b>Project Set</b>\n"
+                    f"Project: <code>{html.escape(folder)}</code>\n"
+                    f"Current branch: <code>{html.escape(branch_name)}</code>\n\n"
+                    f"Use <code>/branch &lt;new_branch&gt;</code> or "
+                    f"<code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code> "
+                    f"if you want a dedicated work branch.\n"
+                    f"If you do not set one, the bot will work on the current branch: "
+                    f"<code>{html.escape(branch_name)}</code>"
+                    f"{chr(10).join(warning_lines)}"
+                ),
             )
         else:
-            await send_text(update, context, f"Project set: {folder}")
+            suffix = f"\n{chr(10).join(warning_lines)}" if warning_lines else ""
+            await send_html_text(
+                update,
+                context,
+                f"✅ <b>Project Set</b>\nProject: <code>{html.escape(folder)}</code>{suffix}",
+            )
 
     async def handle_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
@@ -171,12 +204,12 @@ class CommandRouter:
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
         if not project_folder:
-            await send_text(update, context, "No project selected.\nPlease run /project <project_folder> first.")
+            await send_text(update, context, "⚠️ No project selected.\nPlease run /project <project_folder> first.")
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not self.git.is_git_repo(project_path):
-            await send_text(update, context, "Current project is not a git repository.")
+            await send_text(update, context, "⚠️ Current project is not a git repository.")
             return
 
         if not context.args:
@@ -188,7 +221,7 @@ class CommandRouter:
             default_branch = self.git.default_branch(project_path) or "(unknown)"
             branches = self.git.list_local_branches(project_path)
             lines = [
-                f"Project: {project_folder}",
+                f"Project: `{project_folder}`",
                 f"Current branch: {current_branch}",
                 f"Default branch: {default_branch}",
                 "",
@@ -342,7 +375,7 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Session created successfully: {session_name}\nSession ID: {result.session_id}\nProject: {project_folder}\nProvider: {provider}\nBranch: {branch_name or '(current branch)'}",
+            f"Session created successfully: {session_name}\nSession ID: {result.session_id}\nProject: `{project_folder}`\nProvider: {provider}\nBranch: {branch_name or '(current branch)'}",
         )
 
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -360,7 +393,7 @@ class CommandRouter:
                 await send_text(update, context, "No sessions found.")
                 return
             logger.info("Listed sessions page 1 for chat %s (%d sessions total).", chat_id, len(sessions))
-            await send_text(update, context, self._build_switch_page(sessions, active, 1))
+            await send_html_text(update, context, self._build_switch_page(sessions, active, 1))
             return
 
         if len(context.args) == 2 and context.args[0].lower() == "page":
@@ -376,22 +409,32 @@ class CommandRouter:
                 await send_text(update, context, "Invalid page number.\nUse: /switch page <number>")
                 return
             logger.info("Listed sessions page %d for chat %s (%d sessions total).", page, chat_id, len(sessions))
-            await send_text(update, context, self._build_switch_page(sessions, active, page))
+            await send_html_text(update, context, self._build_switch_page(sessions, active, page))
             return
 
         session_id = " ".join(context.args).strip()
-        if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):
-            await send_text(update, context, "Session not found.\nRun /switch to list available sessions.")
+        session = self.deps.store.get_session(self.deps.bot_id, chat_id, session_id)
+        if session is None:
+            await send_text(update, context, "⚠️ Session not found.\nRun /switch to list available sessions.")
             return
 
-        session = self.deps.store.list_sessions(self.deps.bot_id, chat_id)[session_id]
         branch_name = session.get("branch_name", "")
         project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
+        if not project_path.exists() or not project_path.is_dir():
+            await send_text(
+                update,
+                context,
+                f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+            )
+            return
         if branch_name and self.git.is_git_repo(project_path):
             checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
             if not checkout.success:
                 await send_text(update, context, checkout.message)
                 return
+        if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):
+            await send_text(update, context, "⚠️ Session not found.\nRun /switch to list available sessions.")
+            return
         logger.info(
             "Switched chat %s to session '%s' (%s) in project '%s'.",
             chat_id,
@@ -399,10 +442,10 @@ class CommandRouter:
             session_id,
             session["project_folder"],
         )
-        await send_text(
+        await send_html_text(
             update,
             context,
-            f"Switched to session: {session['name']}\nProject: {session['project_folder']}\nProvider: {session.get('provider', 'codex')}\nBranch: {branch_name or '(current branch)'}",
+            f"Switched to session: {html.escape(session['name'])}\nProject: <code>{html.escape(session['project_folder'])}</code>\nProvider: {html.escape(session.get('provider', 'codex'))}\nBranch: {html.escape(branch_name or '(current branch)')}",
         )
 
     async def handle_current(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -432,7 +475,7 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Current session: {session['name']}\nProject: {session['project_folder']}\nProvider: {session.get('provider', 'codex')}\nBranch: {session.get('branch_name') or '(current branch)'}",
+            f"Current session: {session['name']}\nProject: `{session['project_folder']}`\nProvider: {session.get('provider', 'codex')}\nBranch: {session.get('branch_name') or '(current branch)'}",
         )
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -544,9 +587,7 @@ class CommandRouter:
         after_snapshot = snapshot_project_files(project_path)
         after = set(changed_files(project_path))
         snapshot_files = changed_files_from_snapshots(before_snapshot, after_snapshot)
-        if not after and not before:
-            after = snapshot_files
-        files = sorted(after.union(before))
+        files = sorted((after - before).union(snapshot_files))
         diffs = collect_diffs(project_path, files)
         snapshot_diffs_by_path = {
             file_diff.path: file_diff

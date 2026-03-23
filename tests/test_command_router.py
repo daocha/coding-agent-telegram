@@ -191,6 +191,25 @@ def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "main"
 
 
+def test_project_command_warns_when_active_session_belongs_to_another_project(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "old-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["frontend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Warning: the current active session is bound to a different project." in message
+    assert "Session project: backend" in message
+    assert "Start a new session with /new" in message
+
+
 def test_branch_command_requires_project_first(tmp_path: Path):
     runner = DummyRunner()
     cfg = make_config(tmp_path)
@@ -429,3 +448,45 @@ def test_switch_by_session_id_still_works(tmp_path: Path):
     asyncio.run(router.handle_switch(update, context))
 
     assert "Switched to session: session-a" in bot.messages[-1][1]
+
+
+def test_switch_does_not_persist_if_branch_checkout_fails(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="missing-branch")
+    store.create_session("bot-a", 123, "sess_b", "session-b", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        checkout_result=SimpleNamespace(success=False, message="Failed to checkout branch: missing-branch"),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess_a"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "Failed to checkout branch: missing-branch" in bot.messages[-1][1]
+    assert store.get_chat_state("bot-a", 123)["active_session_id"] == "sess_b"
+
+
+def test_switch_rejects_missing_project_folder(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "deleted-project", "codex")
+    store.create_session("bot-a", 123, "sess_b", "session-b", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess_a"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "Project folder no longer exists for this session: deleted-project" in bot.messages[-1][1]
+    assert store.get_chat_state("bot-a", 123)["active_session_id"] == "sess_b"

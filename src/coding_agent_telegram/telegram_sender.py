@@ -14,6 +14,26 @@ async def send_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: st
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 
+async def send_markdown_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    if update.effective_chat is None:
+        return
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=text,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def send_html_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    if update.effective_chat is None:
+        return
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=text,
+        parse_mode=ParseMode.HTML,
+    )
+
+
 async def send_code_block(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,

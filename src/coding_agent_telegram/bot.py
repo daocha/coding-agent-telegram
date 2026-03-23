@@ -30,7 +30,7 @@ async def handle_error(update, context) -> None:
     if update is not None and getattr(update, "effective_chat", None) is not None:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="Command failed. Check the server log for details.",
+            text="⚠️ Command failed. Check the server log for details.",
         )
 
 

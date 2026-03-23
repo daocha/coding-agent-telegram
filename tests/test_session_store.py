@@ -26,6 +26,15 @@ def test_create_and_switch_session(tmp_path: Path):
     assert chat["current_branch"] == "feature-1"
 
 
+def test_load_empty_state_file_returns_default_state(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    state.touch()
+    store = SessionStore(state, backup)
+
+    assert store.load() == {"chats": {}, "trusted_projects": []}
+
+
 def test_sessions_are_isolated_per_bot(tmp_path: Path):
     state = tmp_path / "state.json"
     backup = tmp_path / "state.json.bak"
