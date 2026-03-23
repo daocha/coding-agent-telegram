@@ -26,11 +26,21 @@ class MultiAgentRunner:
         "Verify whether files currently exist in the project before claiming they do. "
     )
 
-    def __init__(self, codex_bin: str, copilot_bin: str, approval_policy: str, sandbox_mode: str) -> None:
+    def __init__(
+        self,
+        codex_bin: str,
+        copilot_bin: str,
+        approval_policy: str,
+        sandbox_mode: str,
+        codex_model: str = "",
+        copilot_model: str = "",
+    ) -> None:
         self.codex_bin = codex_bin
         self.copilot_bin = copilot_bin
         self.approval_policy = approval_policy
         self.sandbox_mode = sandbox_mode
+        self.codex_model = codex_model.strip()
+        self.copilot_model = copilot_model.strip()
 
     def _extract_assistant_text(self, event: object) -> str:
         if isinstance(event, str):
@@ -83,7 +93,7 @@ class MultiAgentRunner:
         error_message = None
 
         for ev in events:
-            for key in ("session_id", "thread_id"):
+            for key in ("session_id", "thread_id", "sessionId", "threadId"):
                 if isinstance(ev.get(key), str):
                     session_id = ev[key]
             extracted_text = self._extract_assistant_text(ev)
@@ -98,8 +108,8 @@ class MultiAgentRunner:
 
         return session_id, success, assistant_text, error_message, events
 
-    def _run(self, args: list[str], *, cwd: Optional[Path] = None) -> AgentRunResult:
-        proc = subprocess.run(args, capture_output=True, text=True, check=False, cwd=cwd)
+    def _run(self, args: list[str], *, cwd: Optional[Path] = None, env: Optional[dict[str, str]] = None) -> AgentRunResult:
+        proc = subprocess.run(args, capture_output=True, text=True, check=False, cwd=cwd, env=env)
         session_id, parsed_success, assistant_text, error_message, events = self._parse_jsonl(proc.stdout)
 
         success = proc.returncode == 0 and parsed_success
@@ -114,7 +124,14 @@ class MultiAgentRunner:
             raw_events=events,
         )
 
-    def _run_with_output_file(self, args: list[str], *, cwd: Path, tail_args: int) -> AgentRunResult:
+    def _run_with_output_file(
+        self,
+        args: list[str],
+        *,
+        cwd: Path,
+        tail_args: int,
+        env: Optional[dict[str, str]] = None,
+    ) -> AgentRunResult:
         with tempfile.NamedTemporaryFile(prefix="coding-agent-telegram-", suffix=".txt", delete=False) as handle:
             output_path = Path(handle.name)
 
@@ -123,6 +140,7 @@ class MultiAgentRunner:
             result = self._run(
                 [*args[:split_at], "--output-last-message", str(output_path), *args[split_at:]],
                 cwd=cwd,
+                env=env,
             )
             if output_path.exists():
                 output_text = output_path.read_text(encoding="utf-8").strip()
@@ -136,7 +154,11 @@ class MultiAgentRunner:
                 pass
 
     def _codex_base(self, project_path: Path, user_message: str, skip_git_repo_check: bool) -> list[str]:
-        args = [
+        args = []
+        if self.codex_model:
+            args.extend(["-m", self.codex_model])
+        args.extend(
+            [
             "--json",
             "--cd",
             str(project_path),
@@ -145,32 +167,49 @@ class MultiAgentRunner:
             "-c",
             f"sandbox_mode={self.sandbox_mode}",
             f"{self.PROMPT_PREFIX}{user_message}",
-        ]
+            ]
+        )
         if skip_git_repo_check:
             return ["--skip-git-repo-check", *args]
         return args
 
     def _codex_resume_base(self, user_message: str, skip_git_repo_check: bool) -> list[str]:
-        args = [
+        args = []
+        if self.codex_model:
+            args.extend(["-m", self.codex_model])
+        args.extend(
+            [
             "-c",
             f"approval_policy={self.approval_policy}",
             "-c",
             f"sandbox_mode={self.sandbox_mode}",
             "--json",
             f"{self.PROMPT_PREFIX}{user_message}",
-        ]
+            ]
+        )
         if skip_git_repo_check:
             return ["--skip-git-repo-check", *args]
         return args
 
-    def _copilot_base(self, project_path: Path, user_message: str) -> list[str]:
-        # Capability reservation for Copilot CLI. Mirrors secure constraints as a best-effort contract.
-        return [
-            "--json",
-            "--cd",
-            str(project_path),
-            user_message,
-        ]
+    def _copilot_env(self, project_path: Path, skip_git_repo_check: bool) -> dict[str, str]:
+        env = os.environ.copy()
+        if skip_git_repo_check:
+            env["COPILOT_HOME"] = str(project_path / ".copilot")
+            env["COPILOT_ALLOW_ALL"] = "true"
+        return env
+
+    def _copilot_base(self, user_message: str) -> list[str]:
+        args = []
+        if self.copilot_model:
+            args.extend(["--model", self.copilot_model])
+        args.extend(
+            [
+            "--output-format=json",
+            "--prompt",
+            f"{self.PROMPT_PREFIX}{user_message}",
+            ]
+        )
+        return args
 
     def create_session(
         self,
@@ -184,10 +223,10 @@ class MultiAgentRunner:
             args = [self.codex_bin, "exec", *self._codex_base(project_path, user_message, skip_git_repo_check)]
             return self._run_with_output_file(args, cwd=project_path, tail_args=1)
         elif provider == "copilot":
-            args = [self.copilot_bin, "exec", *self._copilot_base(project_path, user_message)]
+            args = [self.copilot_bin, *self._copilot_base(user_message)]
+            return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
-        return self._run(args, cwd=project_path)
 
     def resume_session(
         self,
@@ -203,7 +242,7 @@ class MultiAgentRunner:
             args.extend([*self._codex_resume_base(user_message, skip_git_repo_check)[:-1], session_id, user_message])
             return self._run_with_output_file(args, cwd=project_path, tail_args=2)
         elif provider == "copilot":
-            args = [self.copilot_bin, "exec", "resume", "--json", session_id, user_message]
+            args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message)]
+            return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
-        return self._run(args, cwd=project_path)

@@ -99,6 +99,8 @@ def main() -> None:
         copilot_bin=cfg.copilot_bin,
         approval_policy=cfg.codex_approval_policy,
         sandbox_mode=cfg.codex_sandbox_mode,
+        codex_model=cfg.codex_model,
+        copilot_model=cfg.copilot_model,
     )
     try:
         asyncio.run(_run(cfg, store, runner))

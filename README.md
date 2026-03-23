@@ -108,6 +108,21 @@ These are the main fields in `.env`.
   Command used to launch Copilot CLI.
   Default: `copilot`
 
+- `CODEX_MODEL`
+  Optional Codex model override.
+  Leave empty to use the Codex CLI default model.
+  Example: `CODEX_MODEL=gpt-5.4`
+
+- `COPILOT_MODEL`
+  Optional Copilot model override.
+  Leave empty to use the Copilot CLI default model.
+  Examples: `COPILOT_MODEL=gpt-5.4`, `COPILOT_MODEL=claude-sonnet-4.6`
+
+Use the official model references before setting these values:
+
+- OpenAI Codex/OpenAI models: `https://developers.openai.com/codex/models`
+- GitHub Copilot supported models: `https://docs.github.com/en/copilot/reference/ai-models/supported-models`
+
 - `CODEX_APPROVAL_POLICY`
   Approval mode passed to Codex.
   Default: `never`
@@ -130,6 +145,27 @@ These are the main fields in `.env`.
 
 - `ENABLE_SENSITIVE_DIFF_FILTER`
   Hide diffs for sensitive paths.
+
+### Example `.env` Snippet
+
+```env
+WORKSPACE_ROOT=~/git
+TELEGRAM_BOT_TOKENS=bot_token_one,bot_token_two
+ALLOWED_CHAT_IDS=123456789
+
+CODEX_BIN=codex
+COPILOT_BIN=copilot
+
+CODEX_MODEL=gpt-5.4
+COPILOT_MODEL=claude-sonnet-4.6
+
+CODEX_APPROVAL_POLICY=never
+CODEX_SANDBOX_MODE=workspace-write
+CODEX_SKIP_GIT_REPO_CHECK=false
+
+LOG_LEVEL=INFO
+LOG_DIR=./logs
+```
 
 ## 🤖 Telegram Commands
 

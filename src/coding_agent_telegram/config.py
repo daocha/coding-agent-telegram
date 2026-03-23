@@ -18,6 +18,8 @@ class AppConfig:
     allowed_chat_ids: set[int]
     codex_bin: str
     copilot_bin: str
+    codex_model: str
+    copilot_model: str
     codex_approval_policy: str
     codex_sandbox_mode: str
     codex_skip_git_repo_check: bool
@@ -82,6 +84,8 @@ def load_config() -> AppConfig:
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),
         copilot_bin=os.getenv("COPILOT_BIN", "copilot"),
+        codex_model=os.getenv("CODEX_MODEL", "").strip(),
+        copilot_model=os.getenv("COPILOT_MODEL", "").strip(),
         codex_approval_policy=os.getenv("CODEX_APPROVAL_POLICY", "never"),
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),

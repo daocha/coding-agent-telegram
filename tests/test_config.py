@@ -17,6 +17,8 @@ def test_load_config_required(monkeypatch):
     assert cfg.codex_skip_git_repo_check is False
     assert cfg.default_agent_provider == "codex"
     assert cfg.log_dir.name == "logs"
+    assert cfg.codex_model == ""
+    assert cfg.copilot_model == ""
 
 
 def test_load_config_missing(monkeypatch):
