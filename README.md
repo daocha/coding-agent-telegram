@@ -23,14 +23,16 @@ Before starting the server, make sure you have:
 
 ## 🚀 Quick Start
 
-### 1. Clone the repository
+### Option A: Run from a cloned repository
+
+#### 1. Clone the repository
 
 ```bash
 git clone <your-repo-url>
 cd coding-agent-telegram
 ```
 
-### 2. Start with the bootstrap script
+#### 2. Start with the bootstrap script
 
 ```bash
 ./startup.sh
@@ -44,7 +46,7 @@ What `startup.sh` does:
 - installs the package into the virtual environment
 - starts the Telegram bot server
 
-### 3. Update `.env`
+#### 3. Update `.env`
 
 On first run, update the required fields in `.env`:
 
@@ -56,6 +58,34 @@ Then run again:
 
 ```bash
 ./startup.sh
+```
+
+### Option B: Install from PyPI with `pip`
+
+```bash
+pip install coding-agent-telegram
+coding-agent-telegram
+```
+
+What happens on first run:
+
+- the command creates `.env` in your current working directory if missing
+- it tells you which required fields to update
+- after updating `.env`, run `coding-agent-telegram` again
+
+Recommended flow:
+
+```bash
+mkdir -p ~/my-coding-agent-bot
+cd ~/my-coding-agent-bot
+pip install coding-agent-telegram
+coding-agent-telegram
+```
+
+Then update `.env` and run:
+
+```bash
+coding-agent-telegram
 ```
 
 ## ⚙️ Environment Variables
