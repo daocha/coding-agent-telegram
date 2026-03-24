@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import os
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -160,7 +161,7 @@ class CommandRouter:
             return False, "Chat is not available."
         if chat.id not in self.deps.cfg.allowed_chat_ids:
             return False, "This chat is not allowed."
-        if not self.deps.cfg.enable_group_chats and chat.type != "private":
+        if chat.type != "private":
             return False, "Group chats are not supported."
         return True, None
 
@@ -252,6 +253,72 @@ class CommandRouter:
             valid.append(tokens[1:])
         return valid, ignored
 
+    @classmethod
+    def _extract_commit_path_args(cls, subcommand: str, args: list[str]) -> list[str]:
+        paths: list[str] = []
+        index = 0
+        after_double_dash = False
+
+        while index < len(args):
+            token = args[index]
+            if after_double_dash:
+                paths.append(token)
+                index += 1
+                continue
+            if token == "--":
+                after_double_dash = True
+                index += 1
+                continue
+            if subcommand == "commit":
+                if token in {"-m", "--message"}:
+                    index += 2
+                    continue
+                if token.startswith("--message=") or (token.startswith("-m") and token != "-m"):
+                    index += 1
+                    continue
+            if subcommand == "restore":
+                if token == "--source":
+                    index += 2
+                    continue
+                if token.startswith("--source="):
+                    index += 1
+                    continue
+            if token.startswith("-") and token != "-":
+                index += 1
+                continue
+            paths.append(token)
+            index += 1
+
+        return paths
+
+    @staticmethod
+    def _path_within_project(project_path: Path, token: str) -> bool:
+        if not token:
+            return False
+        if token.startswith(":(") or token.startswith(":/"):
+            return False
+
+        candidate = Path(token.replace("\\", "/"))
+        if candidate.is_absolute():
+            return False
+
+        normalized = Path(os.path.normpath(candidate.as_posix()))
+        if normalized == Path(".."):
+            return False
+        if any(part == ".." for part in normalized.parts):
+            return False
+        return True
+
+    @classmethod
+    def _commands_use_only_project_paths(cls, project_path: Path, commands: list[list[str]]) -> bool:
+        for args in commands:
+            if not args:
+                return False
+            for token in cls._extract_commit_path_args(args[0], args[1:]):
+                if not cls._path_within_project(project_path, token):
+                    return False
+        return True
+
     @staticmethod
     def _append_ignored_segments(lines: list[str], ignored: list[str]) -> None:
         if ignored:
@@ -272,7 +339,28 @@ class CommandRouter:
     @classmethod
     def _effective_git_args(cls, args: list[str]) -> list[str]:
         if args and args[0] == "commit":
-            return [*args, *cls.ENFORCED_COMMIT_ARGS]
+            insert_at = len(args)
+            index = 1
+            while index < len(args):
+                token = args[index]
+                if token == "--":
+                    insert_at = index
+                    break
+                if token in {"-m", "--message"}:
+                    index += 2
+                    continue
+                if token.startswith("--message="):
+                    index += 1
+                    continue
+                if token.startswith("-m") and token != "-m":
+                    index += 1
+                    continue
+                if token.startswith("-"):
+                    index += 1
+                    continue
+                insert_at = index
+                break
+            return [*args[:insert_at], *cls.ENFORCED_COMMIT_ARGS, *args[insert_at:]]
         return args
 
     @classmethod
@@ -756,11 +844,14 @@ class CommandRouter:
         if not commands:
             await send_text(update, context, "No valid git commit commands were found.")
             return
+        if not self._commands_use_only_project_paths(project_path, commands):
+            await send_text(update, context, "Unsafe path arguments are not allowed. Only files inside the current project may be used.")
+            return
 
         command_results: list[tuple[list[str], object]] = []
         for args in commands:
             executed_args = self._effective_git_args(args)
-            result = await asyncio.to_thread(self.git.run_git_command, project_path, executed_args)
+            result = await asyncio.to_thread(self.git.run_safe_commit_command, project_path, executed_args)
             command_results.append((executed_args, result))
             if not result.success:
                 await send_html_text(
@@ -852,7 +943,11 @@ class CommandRouter:
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
-        attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
+        try:
+            attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
+        except ValueError as exc:
+            await send_text(update, context, str(exc))
+            return
         prompt = self.photo_attachments.build_prompt(attachment_path, project_path, update.message.caption or "")
         await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
 

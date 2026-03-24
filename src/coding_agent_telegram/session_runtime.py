@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 class PhotoAttachmentStore:
     ATTACHMENTS_DIR = "telegram_attachments"
+    MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root
@@ -54,8 +55,14 @@ class PhotoAttachmentStore:
             raise ValueError("Photo message does not contain a photo.")
 
         telegram_photo = update.message.photo[-1]
+        declared_size = getattr(telegram_photo, "file_size", None)
+        if isinstance(declared_size, int) and declared_size > self.MAX_PHOTO_BYTES:
+            raise ValueError("Photo is too large. The maximum supported size is 5 MB.")
+
         telegram_file = await telegram_photo.get_file()
         content = bytes(await telegram_file.download_as_bytearray())
+        if len(content) > self.MAX_PHOTO_BYTES:
+            raise ValueError("Photo is too large. The maximum supported size is 5 MB.")
         suffix = Path(telegram_file.file_path or "image.jpg").suffix.lower() or ".jpg"
         if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
             suffix = ".jpg"
