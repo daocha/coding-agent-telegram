@@ -35,12 +35,28 @@ class RouterDeps:
 class CommandRouter:
     SWITCH_PAGE_SIZE = 10
     ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "restore", "rm", "status"}
-    BLOCKED_COMMIT_OPTIONS = {
-        "add": {"--pathspec-from-file"},
-        "commit": {"-F", "--file", "-t", "--template"},
-        "restore": {"--pathspec-from-file"},
-        "rm": {"--pathspec-from-file"},
-        "status": {"--pathspec-from-file"},
+    ENFORCED_COMMIT_ARGS = ["--no-verify", "--no-post-rewrite", "--no-gpg-sign"]
+    SAFE_COMMIT_OPTION_RULES = {
+        "add": {
+            "flags": {"-A", "--all", "-u", "--update"},
+            "value_options": set(),
+        },
+        "commit": {
+            "flags": {"-a", "--all", "--amend", "--no-edit"},
+            "value_options": {"-m", "--message"},
+        },
+        "restore": {
+            "flags": {"--staged", "--worktree"},
+            "value_options": {"--source"},
+        },
+        "rm": {
+            "flags": {"-f", "--force", "-r", "--recursive", "--cached", "--ignore-unmatch"},
+            "value_options": set(),
+        },
+        "status": {
+            "flags": {"-s", "--short", "-b", "--branch", "--porcelain"},
+            "value_options": set(),
+        },
     }
     DISALLOWED_NESTED_GIT_SUBCOMMANDS = ALLOWED_COMMIT_SUBCOMMANDS | {
         "branch",
@@ -230,7 +246,7 @@ class CommandRouter:
             if self._has_nested_git_subcommand(tokens):
                 ignored.append(segment)
                 continue
-            if self._has_blocked_commit_option(tokens[1], tokens[2:]):
+            if not self._has_only_safe_commit_args(tokens[1], tokens[2:]):
                 ignored.append(segment)
                 continue
             valid.append(tokens[1:])
@@ -254,6 +270,12 @@ class CommandRouter:
         return message if not getattr(result, "success", False) and message else "[Completed]"
 
     @classmethod
+    def _effective_git_args(cls, args: list[str]) -> list[str]:
+        if args and args[0] == "commit":
+            return [*args, *cls.ENFORCED_COMMIT_ARGS]
+        return args
+
+    @classmethod
     def _format_git_response(cls, commands: list[tuple[list[str], object]], ignored: list[str]) -> str:
         lines: list[str] = []
         for args, result in commands:
@@ -273,17 +295,56 @@ class CommandRouter:
         return False
 
     @classmethod
-    def _has_blocked_commit_option(cls, subcommand: str, args: list[str]) -> bool:
-        blocked = cls.BLOCKED_COMMIT_OPTIONS.get(subcommand, set())
-        for token in args:
-            for option in blocked:
-                if token == option:
-                    return True
-                if option.startswith("--") and token.startswith(f"{option}="):
-                    return True
-                if len(option) == 2 and option.startswith("-") and token.startswith(option) and token != option:
-                    return True
-        return False
+    def _has_only_safe_commit_args(cls, subcommand: str, args: list[str]) -> bool:
+        rules = cls.SAFE_COMMIT_OPTION_RULES.get(subcommand)
+        if rules is None:
+            return False
+
+        flags = rules["flags"]
+        value_options = rules["value_options"]
+        index = 0
+        after_double_dash = False
+        while index < len(args):
+            token = args[index]
+            if after_double_dash:
+                index += 1
+                continue
+            if token == "--":
+                after_double_dash = True
+                index += 1
+                continue
+            if not token.startswith("-") or token == "-":
+                index += 1
+                continue
+            if token in flags:
+                index += 1
+                continue
+            if token in value_options:
+                if index + 1 >= len(args):
+                    return False
+                index += 2
+                continue
+            if any(option.startswith("--") and token.startswith(f"{option}=") for option in value_options):
+                index += 1
+                continue
+            short_value_option = next(
+                (
+                    option
+                    for option in value_options
+                    if len(option) == 2 and option.startswith("-") and token.startswith(option) and token != option
+                ),
+                None,
+            )
+            if short_value_option is not None:
+                index += 1
+                continue
+            if token.startswith("-") and not token.startswith("--") and len(token) > 2:
+                short_flags = {option for option in flags if len(option) == 2 and option.startswith("-")}
+                if all(f"-{char}" in short_flags for char in token[1:]):
+                    index += 1
+                    continue
+            return False
+        return True
 
     async def _ensure_session_project_exists(
         self,
@@ -698,8 +759,9 @@ class CommandRouter:
 
         command_results: list[tuple[list[str], object]] = []
         for args in commands:
-            result = await asyncio.to_thread(self.git.run_git_command, project_path, args)
-            command_results.append((args, result))
+            executed_args = self._effective_git_args(args)
+            result = await asyncio.to_thread(self.git.run_git_command, project_path, executed_args)
+            command_results.append((executed_args, result))
             if not result.success:
                 await send_html_text(
                     update,
