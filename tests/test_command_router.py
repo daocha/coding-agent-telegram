@@ -748,32 +748,12 @@ def test_successful_resume_creates_new_session_and_switches_active_session(tmp_p
     assert "sess_rotated" in state["sessions"]
     assert "sess_original" in state["sessions"]
     assert state["sessions"]["sess_rotated"]["name"] == "rotating-session-1"
-    assert "Codex continued in a different session." in bot.messages[1][1]
+    assert "Resume succeeded, but the session ID changed." in bot.messages[1][1]
+    assert "New session ID: sess_rotated" in bot.messages[1][1]
+    assert "New session name: rotating-session-1" in bot.messages[1][1]
 
 
-def test_successful_resume_uses_next_available_suffix_for_new_session_name(tmp_path: Path):
-    backend = tmp_path / "backend"
-    backend.mkdir()
-    runner = SessionIdRotatingRunner()
-    cfg = make_config(tmp_path)
-    store = SessionStore(cfg.state_file, cfg.state_backup_file)
-    store.create_session("bot-a", 123, "sess_original", "rotating-session", "backend", "codex")
-    store.create_session("bot-a", 123, "sess_existing", "rotating-session-1", "backend", "codex")
-    store.switch_session("bot-a", 123, "sess_original")
-    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
-    router.git = FakeGitManager(is_git_repo=False)
-
-    update = make_update(text="keep going")
-    bot = FakeBot()
-    context = SimpleNamespace(args=[], bot=bot)
-
-    asyncio.run(router.handle_message(update, context))
-
-    state = store.get_chat_state("bot-a", 123)
-    assert state["sessions"]["sess_rotated"]["name"] == "rotating-session-2"
-
-
-def test_resume_replacement_does_not_trigger_second_rotation_flow(tmp_path: Path):
+def test_invalid_resume_recovery_creates_new_session_and_switches_active_session(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
     runner = ResumeReplacementRunner()
@@ -791,8 +771,34 @@ def test_resume_replacement_does_not_trigger_second_rotation_flow(tmp_path: Path
 
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_abc123"
-    assert state["sessions"]["sess_abc123"]["name"] == "recover-session"
-    assert all("Codex continued in a different session." not in message[1] for message in bot.messages)
+    assert "sess_original" in state["sessions"]
+    assert state["sessions"]["sess_abc123"]["name"] == "recover-session-1"
+    assert "Resume failed, so a new session was created." in bot.messages[1][1]
+    assert "New session ID: sess_abc123" in bot.messages[1][1]
+    assert "New session name: recover-session-1" in bot.messages[1][1]
+
+
+def test_invalid_resume_recovery_uses_next_available_suffix_for_new_session_name(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ResumeReplacementRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "codex")
+    store.create_session("bot-a", 123, "sess_existing", "recover-session-1", "backend", "codex")
+    store.switch_session("bot-a", 123, "sess_original")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert state["sessions"]["sess_abc123"]["name"] == "recover-session-2"
 
 
 def test_assistant_output_is_chunked_by_rendered_html_length(tmp_path: Path):

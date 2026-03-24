@@ -171,11 +171,13 @@ class SessionRuntime:
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
         )
-        result, active_id = await self._replace_invalid_session_if_needed(
+        session_name = session["name"]
+        result, active_id, session_name = await self._replace_invalid_session_if_needed(
             update,
             context,
             result=result,
             active_id=active_id,
+            session_name=session_name,
             session=session,
             chat_id=chat_id,
             project_folder=project_folder,
@@ -191,7 +193,7 @@ class SessionRuntime:
             logger.warning(
                 "Agent run failed for chat %s on session '%s' (%s): %s",
                 chat_id,
-                session["name"],
+                session_name,
                 active_id,
                 result.error_message or "unknown error",
             )
@@ -199,7 +201,7 @@ class SessionRuntime:
             return
 
         if result.session_id and result.session_id != active_id:
-            switched_session_name = self._next_rotated_session_name(chat_id, session["name"])
+            switched_session_name = self._next_rotated_session_name(chat_id, session_name)
             self.store.create_session(
                 self.bot_id,
                 chat_id,
@@ -212,7 +214,7 @@ class SessionRuntime:
             logger.info(
                 "Resume returned a different session id for chat %s; switched from '%s' (%s) to '%s' (%s).",
                 chat_id,
-                session["name"],
+                session_name,
                 active_id,
                 switched_session_name,
                 result.session_id,
@@ -221,15 +223,13 @@ class SessionRuntime:
                 update,
                 context,
                 (
-                    "Codex continued in a different session.\n"
-                    f"Switched to: {switched_session_name}\n"
-                    f"Session ID: {result.session_id}"
+                    "Resume succeeded, but the session ID changed.\n"
+                    f"New session ID: {result.session_id}\n"
+                    f"New session name: {switched_session_name}"
                 ),
             )
             session_name = switched_session_name
             active_id = result.session_id
-        else:
-            session_name = session["name"]
 
         await self._send_run_results(
             update,
@@ -263,6 +263,7 @@ class SessionRuntime:
         *,
         result,
         active_id: str,
+        session_name: str,
         session: dict[str, str],
         chat_id: int,
         project_folder: str,
@@ -273,7 +274,7 @@ class SessionRuntime:
         image_paths: Sequence[Path],
     ):
         if result.success or not result.error_message or "resume" not in result.error_message.lower():
-            return result, active_id
+            return result, active_id, session_name
 
         logger.info(
             "Session '%s' (%s) for chat %s could not be resumed; creating a replacement session.",
@@ -292,31 +293,36 @@ class SessionRuntime:
             image_paths=image_paths,
         )
         if not create_result.success or not create_result.session_id:
-            return create_result, active_id
+            return create_result, active_id, session_name
 
-        self.store.replace_session(
+        switched_session_name = self._next_rotated_session_name(chat_id, session_name)
+        self.store.create_session(
             self.bot_id,
             chat_id,
-            active_id,
             create_result.session_id,
-            session["name"],
+            switched_session_name,
             project_folder,
             provider,
             branch_name=branch_name,
         )
         logger.info(
-            "Replaced session '%s' for chat %s: old=%s new=%s.",
-            session["name"],
+            "Created a replacement session for chat %s after resume failure: old='%s' (%s) new='%s' (%s).",
             chat_id,
+            session_name,
             active_id,
+            switched_session_name,
             create_result.session_id,
         )
         await send_text(
             update,
             context,
-            f"The previous session is no longer valid.\nA new session was created and the task continued.\nSession ID: {create_result.session_id}",
+            (
+                "Resume failed, so a new session was created.\n"
+                f"New session ID: {create_result.session_id}\n"
+                f"New session name: {switched_session_name}"
+            ),
         )
-        return create_result, create_result.session_id
+        return create_result, create_result.session_id, switched_session_name
 
     async def _send_run_results(
         self,
