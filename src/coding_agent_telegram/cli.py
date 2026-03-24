@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
-from coding_agent_telegram.bot import build_application, initialize_bot_commands
+from coding_agent_telegram.bot import build_application, default_bot_commands, initialize_bot_commands
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
 from coding_agent_telegram.config import load_config
 from coding_agent_telegram.logging_utils import setup_logging
@@ -46,7 +46,11 @@ async def _run_polling_apps(apps: Sequence) -> None:
                 me.first_name,
             )
             await initialize_bot_commands(app)
-            logger.info("Registered Telegram commands for @%s", me.username or "unknown")
+            logger.info(
+                "Registered %d Telegram commands for @%s",
+                len(default_bot_commands()),
+                me.username or "unknown",
+            )
             await app.start()
             if app.updater is None:
                 raise RuntimeError("Telegram updater is not available.")
