@@ -114,6 +114,48 @@ class SessionIdRotatingRunner(DummyRunner):
         )
 
 
+class ResumeReplacementRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id=None,
+            success=False,
+            assistant_text="",
+            error_message="Failed to resume session.",
+            raw_events=[],
+        )
+
+
+class LongEscapedMarkdownRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="\n".join(["<tag> & value" for _ in range(40)]),
+            error_message=None,
+            raw_events=[],
+        )
+
+
 class FakeBot:
     def __init__(self):
         self.messages = []
@@ -613,7 +655,8 @@ def test_photo_message_is_saved_and_forwarded_to_codex(tmp_path: Path):
     image_paths = runner.resume_calls[-1]["image_paths"]
     assert len(image_paths) == 1
     assert image_paths[0].is_file()
-    assert ".coding-agent-telegram/telegram_attachments/" in image_paths[0].as_posix()
+    assert "/.coding-agent-telegram/telegram_attachments/backend/" in image_paths[0].as_posix()
+    assert runner.resume_calls[-1]["user_message"].startswith("An image is attached at ../.coding-agent-telegram/telegram_attachments/backend/")
     assert "Open and inspect that image before answering." in runner.resume_calls[-1]["user_message"]
     assert "what is shown here?" in runner.resume_calls[-1]["user_message"]
 
@@ -728,6 +771,48 @@ def test_successful_resume_uses_next_available_suffix_for_new_session_name(tmp_p
 
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_rotated"]["name"] == "rotating-session-2"
+
+
+def test_resume_replacement_does_not_trigger_second_rotation_flow(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ResumeReplacementRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert state["sessions"]["sess_abc123"]["name"] == "recover-session"
+    assert all("Codex continued in a different session." not in message[1] for message in bot.messages)
+
+
+def test_assistant_output_is_chunked_by_rendered_html_length(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = LongEscapedMarkdownRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "max_telegram_message_length": 160})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_html", "html-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="show long html")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert all(len(message[1]) <= cfg.max_telegram_message_length for message in bot.messages[1:])
 
 
 def test_unsupported_message_type_is_rejected(tmp_path: Path):

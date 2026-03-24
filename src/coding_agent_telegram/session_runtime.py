@@ -5,6 +5,7 @@ import hashlib
 import html
 import logging
 from pathlib import Path
+import os
 from typing import Awaitable, Callable, Sequence
 
 from telegram import Update
@@ -41,10 +42,14 @@ logger = logging.getLogger(__name__)
 class PhotoAttachmentStore:
     ATTACHMENTS_DIR = "telegram_attachments"
 
-    def attachments_root(self, project_path: Path) -> Path:
-        return project_path / INTERNAL_APP_DIR / self.ATTACHMENTS_DIR
+    def __init__(self, workspace_root: Path) -> None:
+        self.workspace_root = workspace_root
 
-    async def store_photo(self, update: Update, project_path: Path) -> Path:
+    def attachments_root(self, project_folder: str) -> Path:
+        safe_project_folder = Path(project_folder).name
+        return self.workspace_root / INTERNAL_APP_DIR / self.ATTACHMENTS_DIR / safe_project_folder
+
+    async def store_photo(self, update: Update, project_folder: str) -> Path:
         if update.message is None or not update.message.photo:
             raise ValueError("Photo message does not contain a photo.")
 
@@ -56,7 +61,7 @@ class PhotoAttachmentStore:
             suffix = ".jpg"
         digest = hashlib.sha256(content).hexdigest()
 
-        attachments_root = self.attachments_root(project_path)
+        attachments_root = self.attachments_root(project_folder)
         attachments_root.mkdir(parents=True, exist_ok=True)
         target = attachments_root / f"{digest}{suffix}"
         if not target.exists():
@@ -64,7 +69,7 @@ class PhotoAttachmentStore:
         return target
 
     def build_prompt(self, attachment_path: Path, project_path: Path, caption: str) -> str:
-        rel_path = attachment_path.relative_to(project_path).as_posix()
+        rel_path = os.path.relpath(attachment_path, start=project_path).replace(os.sep, "/")
         lines = [
             f"An image is attached at {rel_path}.",
             "Open and inspect that image before answering.",
@@ -166,7 +171,7 @@ class SessionRuntime:
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
         )
-        result = await self._replace_invalid_session_if_needed(
+        result, active_id = await self._replace_invalid_session_if_needed(
             update,
             context,
             result=result,
@@ -268,7 +273,7 @@ class SessionRuntime:
         image_paths: Sequence[Path],
     ):
         if result.success or not result.error_message or "resume" not in result.error_message.lower():
-            return result
+            return result, active_id
 
         logger.info(
             "Session '%s' (%s) for chat %s could not be resumed; creating a replacement session.",
@@ -287,7 +292,7 @@ class SessionRuntime:
             image_paths=image_paths,
         )
         if not create_result.success or not create_result.session_id:
-            return create_result
+            return create_result, active_id
 
         self.store.replace_session(
             self.bot_id,
@@ -311,7 +316,7 @@ class SessionRuntime:
             context,
             f"The previous session is no longer valid.\nA new session was created and the task continued.\nSession ID: {create_result.session_id}",
         )
-        return create_result
+        return create_result, create_result.session_id
 
     async def _send_run_results(
         self,
@@ -380,10 +385,51 @@ class SessionRuntime:
                 )
                 continue
 
-            title = "Codex output" if total == 1 else f"Codex output {index}/{total}"
-            for chunk in chunk_plain_text(title, segment.text, self.cfg.max_telegram_message_length):
-                title, body = (chunk.split("\n", 1) + [""])[:2]
-                await send_html_text(update, context, f"<b>{html.escape(title)}</b>\n{markdownish_to_html(body)}")
+            title_prefix = "Codex output" if total == 1 else f"Codex output {index}/{total}"
+            for message in self._chunk_assistant_prose(title_prefix, segment.text):
+                await send_html_text(update, context, message)
+
+    def _chunk_assistant_prose(self, title_prefix: str, text: str) -> list[str]:
+        normalized = text.strip()
+        if not normalized:
+            return []
+
+        bodies = [normalized]
+        while True:
+            total = len(bodies)
+            for idx, body in enumerate(bodies):
+                title = title_prefix if total == 1 else f"{title_prefix} ({idx + 1}/{total})"
+                rendered = f"<b>{html.escape(title)}</b>\n{markdownish_to_html(body)}"
+                if len(rendered) <= self.cfg.max_telegram_message_length:
+                    continue
+                left, right = self._split_assistant_body(body)
+                bodies = [*bodies[:idx], left, right, *bodies[idx + 1 :]]
+                break
+            else:
+                return [
+                    (
+                        f"<b>{html.escape(title_prefix if total == 1 else f'{title_prefix} ({idx + 1}/{total})')}</b>\n"
+                        f"{markdownish_to_html(body)}"
+                    )
+                    for idx, body in enumerate(bodies)
+                ]
+
+    def _split_assistant_body(self, body: str) -> tuple[str, str]:
+        lines = body.splitlines()
+        if len(lines) > 1:
+            midpoint = len(lines) // 2
+            left = "\n".join(lines[:midpoint]).strip()
+            right = "\n".join(lines[midpoint:]).strip()
+            if left and right:
+                return left, right
+
+        midpoint = max(1, len(body) // 2)
+        left = body[:midpoint].rstrip()
+        right = body[midpoint:].lstrip()
+        if not right:
+            right = body[-1:]
+            left = body[:-1].rstrip() or body[:1]
+        return left, right
 
     async def _send_diffs(self, update: Update, context: ContextTypes.DEFAULT_TYPE, diffs) -> None:
         for file_diff in diffs:

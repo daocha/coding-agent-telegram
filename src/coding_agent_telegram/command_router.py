@@ -36,7 +36,7 @@ class CommandRouter:
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
         self.git = GitWorkspaceManager()
-        self.photo_attachments = PhotoAttachmentStore()
+        self.photo_attachments = PhotoAttachmentStore(deps.cfg.workspace_root)
         self.runtime = SessionRuntime(
             cfg=deps.cfg,
             store=deps.store,
@@ -523,7 +523,7 @@ class CommandRouter:
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
-        attachment_path = await self.photo_attachments.store_photo(update, project_path)
+        attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
         prompt = self.photo_attachments.build_prompt(attachment_path, project_path, update.message.caption or "")
         await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
 
