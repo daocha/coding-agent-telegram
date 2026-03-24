@@ -36,13 +36,24 @@ async def handle_error(update, context) -> None:
 
 def build_application(token: str, router: CommandRouter) -> Application:
     app = Application.builder().token(token).build()
+    unsupported_media = (
+        tg_filters.ANIMATION
+        | tg_filters.AUDIO
+        | tg_filters.Document.ALL
+        | tg_filters.Sticker.ALL
+        | tg_filters.VIDEO
+        | tg_filters.VIDEO_NOTE
+        | tg_filters.VOICE
+    )
 
     app.add_handler(CommandHandler("project", router.handle_project))
     app.add_handler(CommandHandler("branch", router.handle_branch))
     app.add_handler(CommandHandler("new", router.handle_new))
     app.add_handler(CommandHandler("switch", router.handle_switch))
     app.add_handler(CommandHandler("current", router.handle_current))
+    app.add_handler(MessageHandler(tg_filters.PHOTO, router.handle_photo))
     app.add_handler(MessageHandler(tg_filters.TEXT & ~tg_filters.COMMAND, router.handle_message))
+    app.add_handler(MessageHandler(unsupported_media, router.handle_unsupported_message))
     app.add_error_handler(handle_error)
 
     return app

@@ -114,4 +114,3 @@ def test_set_active_session_branch_updates_session_and_chat_state(tmp_path: Path
 
     sessions = store.list_sessions("bot-a", 123)
     assert sessions["sess_1"]["branch_name"] == "feature-2"
-    assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-2"

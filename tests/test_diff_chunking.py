@@ -1,4 +1,12 @@
-from coding_agent_telegram.diff_utils import _parse_status_paths, chunk_fenced_diff, chunk_plain_text
+from pathlib import Path
+
+from coding_agent_telegram.diff_utils import (
+    _parse_status_paths,
+    chunk_fenced_diff,
+    chunk_plain_text,
+    is_runtime_artifact_path,
+    snapshot_project_files,
+)
 
 
 def test_chunk_fenced_diff_limits():
@@ -54,3 +62,27 @@ def test_modified_javascript_file_stays_diff_block():
     chunks = chunk_fenced_diff("src/app.js", diff, 3000)
     assert len(chunks) == 1
     assert chunks[0].language == "diff"
+
+
+def test_runtime_artifact_paths_are_ignored():
+    assert is_runtime_artifact_path("logs/coding-agent-telegram.log") is True
+    assert is_runtime_artifact_path("worker.out") is True
+    assert is_runtime_artifact_path("state.json") is False
+    assert is_runtime_artifact_path("logs/readme.md") is False
+    assert is_runtime_artifact_path("src/app.py") is False
+
+
+def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs" / "coding-agent-telegram.log").write_text("runtime log\n", encoding="utf-8")
+    (tmp_path / "logs" / "readme.md").write_text("keep me\n", encoding="utf-8")
+    (tmp_path / "state.json").write_text('{"active": true}\n', encoding="utf-8")
+
+    snapshots = snapshot_project_files(tmp_path)
+
+    assert "src/app.py" in snapshots
+    assert "logs/coding-agent-telegram.log" not in snapshots
+    assert "logs/readme.md" in snapshots
+    assert "state.json" in snapshots

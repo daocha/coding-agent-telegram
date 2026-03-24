@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 
 @dataclass
@@ -22,8 +22,8 @@ class MultiAgentRunner:
     """Runs supported local agent CLIs while preserving session behavior."""
 
     PROMPT_PREFIX = (
-        "Refresh the workspace state from disk before making changes. "
-        "Verify whether files currently exist in the project before claiming they do. "
+        "Treat the current on-disk workspace as the source of truth. "
+        "Re-read relevant files from disk before making claims or edits. "
     )
 
     def __init__(
@@ -167,19 +167,27 @@ class MultiAgentRunner:
             except FileNotFoundError:
                 pass
 
-    def _codex_base(self, project_path: Path, user_message: str, skip_git_repo_check: bool) -> list[str]:
+    def _codex_base(
+        self,
+        project_path: Path,
+        user_message: str,
+        skip_git_repo_check: bool,
+        image_paths: Sequence[Path] = (),
+    ) -> list[str]:
         args = []
         if self.codex_model:
             args.extend(["-m", self.codex_model])
+        for image_path in image_paths:
+            args.extend(["--image", str(image_path)])
         args.extend(
             [
-            "--json",
-            "--cd",
-            str(project_path),
             "-c",
             f"approval_policy={self.approval_policy}",
             "-c",
             f"sandbox_mode={self.sandbox_mode}",
+            "--json",
+            "--cd",
+            str(project_path),
             f"{self.PROMPT_PREFIX}{user_message}",
             ]
         )
@@ -187,23 +195,43 @@ class MultiAgentRunner:
             return ["--skip-git-repo-check", *args]
         return args
 
-    def _codex_resume_base(self, user_message: str, skip_git_repo_check: bool) -> list[str]:
+    def _codex_resume_base(
+        self,
+        user_message: str,
+        skip_git_repo_check: bool,
+        image_paths: Sequence[Path] = (),
+    ) -> list[str]:
         args = []
         if self.codex_model:
             args.extend(["-m", self.codex_model])
+        for image_path in image_paths:
+            args.extend(["--image", str(image_path)])
         args.extend(
             [
-            "-c",
-            f"approval_policy={self.approval_policy}",
-            "-c",
-            f"sandbox_mode={self.sandbox_mode}",
-            "--json",
-            f"{self.PROMPT_PREFIX}{user_message}",
+                "-c",
+                f"approval_policy={self.approval_policy}",
+                "-c",
+                f"sandbox_mode={self.sandbox_mode}",
+                "--json",
+                f"{self.PROMPT_PREFIX}{user_message}",
             ]
         )
         if skip_git_repo_check:
             return ["--skip-git-repo-check", *args]
         return args
+
+    def _codex_resume_args(
+        self,
+        session_id: str,
+        user_message: str,
+        skip_git_repo_check: bool,
+        image_paths: Sequence[Path] = (),
+    ) -> list[str]:
+        return [
+            *self._codex_resume_base(user_message, skip_git_repo_check, image_paths)[:-1],
+            session_id,
+            f"{self.PROMPT_PREFIX}{user_message}",
+        ]
 
     def _copilot_env(self, project_path: Path, skip_git_repo_check: bool) -> dict[str, str]:
         env = os.environ.copy()
@@ -245,11 +273,18 @@ class MultiAgentRunner:
         user_message: str,
         *,
         skip_git_repo_check: bool = False,
+        image_paths: Sequence[Path] = (),
     ) -> AgentRunResult:
         if provider == "codex":
-            args = [self.codex_bin, "exec", *self._codex_base(project_path, user_message, skip_git_repo_check)]
+            args = [
+                self.codex_bin,
+                "exec",
+                *self._codex_base(project_path, user_message, skip_git_repo_check, image_paths),
+            ]
             return self._run_with_output_file(args, cwd=project_path, tail_args=1)
         elif provider == "copilot":
+            if image_paths:
+                return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
             args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
         else:
@@ -263,12 +298,19 @@ class MultiAgentRunner:
         user_message: str,
         *,
         skip_git_repo_check: bool = False,
+        image_paths: Sequence[Path] = (),
     ) -> AgentRunResult:
         if provider == "codex":
-            args = [self.codex_bin, "exec", "resume"]
-            args.extend([*self._codex_resume_base(user_message, skip_git_repo_check)[:-1], session_id, user_message])
+            args = [
+                self.codex_bin,
+                "exec",
+                "resume",
+                *self._codex_resume_args(session_id, user_message, skip_git_repo_check, image_paths),
+            ]
             return self._run_with_output_file(args, cwd=project_path, tail_args=2)
         elif provider == "copilot":
+            if image_paths:
+                return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
             args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
         else:
