@@ -1,4 +1,6 @@
 import asyncio
+import html
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -885,7 +887,7 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
             is_git_repo=True,
             git_command_results=[
                 SimpleNamespace(success=True, message="git add completed."),
-                SimpleNamespace(success=True, message="git commit completed."),
+                SimpleNamespace(success=True, message="git commit completed.", stdout="[telegram-enhance 5b9a263] safe"),
             ],
         ),
     )
@@ -897,6 +899,11 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
         (backend, ["commit", "-m", "safe"]),
     ]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert f"${shlex.join(['git', 'add', '-u'])}" in bot.messages[-1][1]
+    assert f"${shlex.join(['git', 'commit', '-m', 'safe'])}" in bot.messages[-1][1]
+    assert "---------------" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+    assert "[telegram-enhance 5b9a263] safe" in bot.messages[-1][1]
     assert "Ignored non-git commands:" in bot.messages[-1][1]
     assert "- rm -rf /" in bot.messages[-1][1]
 
@@ -984,6 +991,9 @@ def test_commit_allows_adjacent_valid_git_commands_without_spaces(tmp_path: Path
         (backend, ["commit", "-m", "ok"]),
     ]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert f"${shlex.join(['git', 'status'])}" in bot.messages[-1][1]
+    assert f"${shlex.join(['git', 'commit', '-m', 'ok'])}" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
     assert "Ignored non-git commands:" not in bot.messages[-1][1]
 
 
@@ -1002,6 +1012,8 @@ def test_commit_allows_shell_like_text_inside_quoted_commit_message(tmp_path: Pa
         (backend, ["commit", "-m", "fix docs && keep | chars > literally"]),
     ]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert html.escape(f"${shlex.join(['git', 'commit', '-m', 'fix docs && keep | chars > literally'])}") in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
     assert "Ignored non-git commands:" not in bot.messages[-1][1]
 
 
@@ -1028,4 +1040,5 @@ def test_push_uses_current_session_branch(tmp_path: Path):
 
     assert router.git.push_calls == [(backend, "feature-1")]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
-    assert "Pushed branch &#x27;feature-1&#x27; to origin." in bot.messages[-1][1]
+    assert f"${shlex.join(['git', 'push', 'origin', 'feature-1'])}" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]

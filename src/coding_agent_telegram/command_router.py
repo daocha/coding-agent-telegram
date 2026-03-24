@@ -234,6 +234,26 @@ class CommandRouter:
     def _bash_block(text: str) -> str:
         return f'<pre><code class="language-bash">{html.escape(text)}</code></pre>'
 
+    @staticmethod
+    def _git_result_output(result) -> str:
+        parts = [part for part in (getattr(result, "stdout", ""), getattr(result, "stderr", "")) if part]
+        if parts:
+            return "\n".join(parts)
+        message = getattr(result, "message", "")
+        return message if not getattr(result, "success", False) and message else "[Completed]"
+
+    @classmethod
+    def _format_git_response(cls, commands: list[tuple[list[str], object]], ignored: list[str]) -> str:
+        lines: list[str] = []
+        for args, result in commands:
+            lines.append(f"${shlex.join(['git', *args])}")
+            lines.append("---------------")
+            lines.append(cls._git_result_output(result))
+            lines.append("")
+        if ignored:
+            lines.extend(["Ignored non-git commands:", *[f"- {segment}" for segment in ignored]])
+        return "\n".join(lines).rstrip()
+
     @classmethod
     def _has_nested_git_subcommand(cls, tokens: list[str]) -> bool:
         for index in range(2, len(tokens) - 1):
@@ -634,18 +654,19 @@ class CommandRouter:
             await send_text(update, context, "No valid git commit commands were found.")
             return
 
-        lines: list[str] = []
+        command_results: list[tuple[list[str], object]] = []
         for args in commands:
             result = await asyncio.to_thread(self.git.run_git_command, project_path, args)
-            lines.append(f"$ git {' '.join(args)}")
-            lines.append(result.message)
+            command_results.append((args, result))
             if not result.success:
-                self._append_ignored_segments(lines, ignored)
-                await send_html_text(update, context, self._bash_block("\n".join(lines)))
+                await send_html_text(
+                    update,
+                    context,
+                    self._bash_block(self._format_git_response(command_results, ignored)),
+                )
                 return
 
-        self._append_ignored_segments(lines, ignored)
-        await send_html_text(update, context, self._bash_block("\n".join(lines)))
+        await send_html_text(update, context, self._bash_block(self._format_git_response(command_results, ignored)))
 
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
@@ -675,11 +696,19 @@ class CommandRouter:
         if current_branch != branch_name:
             checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
             if not checkout.success:
-                await send_html_text(update, context, self._bash_block(checkout.message))
+                await send_html_text(
+                    update,
+                    context,
+                    self._bash_block(self._format_git_response([([ "checkout", branch_name], checkout)], [])),
+                )
                 return
 
         result = await asyncio.to_thread(self.git.push_branch, project_path, branch_name)
-        await send_html_text(update, context, self._bash_block(result.message))
+        await send_html_text(
+            update,
+            context,
+            self._bash_block(self._format_git_response([(["push", "origin", branch_name], result)], [])),
+        )
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
