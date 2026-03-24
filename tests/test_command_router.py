@@ -13,13 +13,14 @@ class DummyRunner:
         self.create_calls = []
         self.resume_calls = []
 
-    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False):
+    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
         self.create_calls.append(
             {
                 "provider": provider,
                 "project_path": project_path,
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
             }
         )
         return AgentRunResult(
@@ -30,7 +31,7 @@ class DummyRunner:
             raw_events=[],
         )
 
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -38,6 +39,7 @@ class DummyRunner:
                 "project_path": project_path,
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
             }
         )
         return AgentRunResult(
@@ -49,13 +51,118 @@ class DummyRunner:
         )
 
 
+class MarkdownRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="See [agent_runner.py](/tmp/agent_runner.py) and `config.py`.",
+            error_message=None,
+            raw_events=[],
+        )
+
+
+class CommandBlockRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="Run this command:\n```bash\ngit commit -m \"test\"\n```",
+            error_message=None,
+            raw_events=[],
+        )
+
+
+class SessionIdRotatingRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id="sess_rotated",
+            success=True,
+            assistant_text="rotated",
+            error_message=None,
+            raw_events=[],
+        )
+
+
+class ResumeReplacementRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id=None,
+            success=False,
+            assistant_text="",
+            error_message="Failed to resume session.",
+            raw_events=[],
+        )
+
+
+class LongEscapedMarkdownRunner(DummyRunner):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+            }
+        )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="\n".join(["<tag> & value" for _ in range(40)]),
+            error_message=None,
+            raw_events=[],
+        )
+
+
 class FakeBot:
     def __init__(self):
         self.messages = []
         self.actions = []
 
-    async def send_message(self, chat_id, text):
-        self.messages.append((chat_id, text))
+    async def send_message(self, chat_id, text, parse_mode=None):
+        self.messages.append((chat_id, text, parse_mode))
 
     async def send_chat_action(self, chat_id, action):
         self.actions.append((chat_id, action))
@@ -102,10 +209,27 @@ class FakeGitManager:
         return self.checkout_result
 
 
+class FakeTelegramFile:
+    def __init__(self, content: bytes, file_path: str):
+        self._content = content
+        self.file_path = file_path
+
+    async def download_as_bytearray(self):
+        return bytearray(self._content)
+
+
+class FakePhotoSize:
+    def __init__(self, telegram_file: FakeTelegramFile):
+        self.telegram_file = telegram_file
+
+    async def get_file(self):
+        return self.telegram_file
+
+
 def make_update(chat_id=123, chat_type="private", text="hello"):
     return SimpleNamespace(
         effective_chat=SimpleNamespace(id=chat_id, type=chat_type),
-        message=SimpleNamespace(text=text),
+        message=SimpleNamespace(text=text, photo=None, caption=None),
     )
 
 
@@ -490,3 +614,226 @@ def test_switch_rejects_missing_project_folder(tmp_path: Path):
 
     assert "Project folder no longer exists for this session: deleted-project" in bot.messages[-1][1]
     assert store.get_chat_state("bot-a", 123)["active_session_id"] == "sess_b"
+
+
+def test_send_text_uses_html_parse_mode(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert bot.messages[-1][2] == "HTML"
+
+
+def test_photo_message_is_saved_and_forwarded_to_codex(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="what is shown here?"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls
+    image_paths = runner.resume_calls[-1]["image_paths"]
+    assert len(image_paths) == 1
+    assert image_paths[0].is_file()
+    assert "/.coding-agent-telegram/telegram_attachments/backend/" in image_paths[0].as_posix()
+    assert runner.resume_calls[-1]["user_message"].startswith("An image is attached at ../.coding-agent-telegram/telegram_attachments/backend/")
+    assert "Open and inspect that image before answering." in runner.resume_calls[-1]["user_message"]
+    assert "what is shown here?" in runner.resume_calls[-1]["user_message"]
+
+
+def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "copilot")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="look"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls == []
+    assert "Photo attachments are currently supported only for codex sessions." in bot.messages[-1][1]
+
+
+def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = MarkdownRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    codex_message = bot.messages[1]
+    assert codex_message[2] == "HTML"
+    assert "[agent_runner.py](" not in codex_message[1]
+    assert "<code>agent_runner.py</code>" in codex_message[1]
+    assert "<code>config.py</code>" in codex_message[1]
+
+
+def test_assistant_command_block_is_sent_separately(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = CommandBlockRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_cmd", "command-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="give me the command")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert any(message[1] == "Command (2/2)" for message in bot.messages)
+    assert any("git commit -m &quot;test&quot;" in message[1] for message in bot.messages)
+
+
+def test_successful_resume_creates_new_session_and_switches_active_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = SessionIdRotatingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "rotating-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_rotated"
+    assert "sess_rotated" in state["sessions"]
+    assert "sess_original" in state["sessions"]
+    assert state["sessions"]["sess_rotated"]["name"] == "rotating-session-1"
+    assert "Resume succeeded, but the session ID changed." in bot.messages[1][1]
+    assert "New session ID: sess_rotated" in bot.messages[1][1]
+    assert "New session name: rotating-session-1" in bot.messages[1][1]
+
+
+def test_invalid_resume_recovery_creates_new_session_and_switches_active_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ResumeReplacementRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert "sess_original" in state["sessions"]
+    assert state["sessions"]["sess_abc123"]["name"] == "recover-session-1"
+    assert "Resume failed, so a new session was created." in bot.messages[1][1]
+    assert "New session ID: sess_abc123" in bot.messages[1][1]
+    assert "New session name: recover-session-1" in bot.messages[1][1]
+
+
+def test_invalid_resume_recovery_uses_next_available_suffix_for_new_session_name(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ResumeReplacementRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "codex")
+    store.create_session("bot-a", 123, "sess_existing", "recover-session-1", "backend", "codex")
+    store.switch_session("bot-a", 123, "sess_original")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert state["sessions"]["sess_abc123"]["name"] == "recover-session-2"
+
+
+def test_assistant_output_is_chunked_by_rendered_html_length(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = LongEscapedMarkdownRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "max_telegram_message_length": 160})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_html", "html-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="show long html")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert all(len(message[1]) <= cfg.max_telegram_message_length for message in bot.messages[1:])
+
+
+def test_unsupported_message_type_is_rejected(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, video=object()),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_unsupported_message(update, context))
+
+    assert "This bot currently accepts only text messages and photos." in bot.messages[-1][1]

@@ -192,6 +192,35 @@ class SessionStore:
 
         self._mutate_state(mutate)
 
+    def rebind_session(
+        self,
+        bot_id: str,
+        chat_id: int,
+        old_session_id: str,
+        new_session_id: str,
+    ) -> bool:
+        def mutate(state: dict[str, Any]) -> bool:
+            chat_data, _ = self._get_chat_data(state, bot_id, chat_id)
+            if not chat_data:
+                return False
+            sessions = chat_data.setdefault("sessions", {})
+            session = sessions.get(old_session_id)
+            if session is None:
+                return False
+            if old_session_id == new_session_id:
+                session["updated_at"] = self._now()
+                return True
+
+            rebound = dict(session)
+            rebound["updated_at"] = self._now()
+            sessions.pop(old_session_id, None)
+            sessions[new_session_id] = rebound
+            if chat_data.get("active_session_id") == old_session_id:
+                chat_data["active_session_id"] = new_session_id
+            return True
+
+        return self._mutate_state(mutate)
+
     def list_sessions(self, bot_id: str, chat_id: int) -> dict[str, dict[str, str]]:
         self._ensure_paths()
         with portalocker.Lock(str(self.lock_file), timeout=5):
