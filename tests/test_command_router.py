@@ -896,6 +896,7 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
         (backend, ["add", "-u"]),
         (backend, ["commit", "-m", "safe"]),
     ]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert "Ignored non-git commands:" in bot.messages[-1][1]
     assert "- rm -rf /" in bot.messages[-1][1]
 
@@ -982,6 +983,7 @@ def test_commit_allows_adjacent_valid_git_commands_without_spaces(tmp_path: Path
         (backend, ["status"]),
         (backend, ["commit", "-m", "ok"]),
     ]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert "Ignored non-git commands:" not in bot.messages[-1][1]
 
 
@@ -999,6 +1001,7 @@ def test_commit_allows_shell_like_text_inside_quoted_commit_message(tmp_path: Pa
     assert router.git.git_commands == [
         (backend, ["commit", "-m", "fix docs && keep | chars > literally"]),
     ]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert "Ignored non-git commands:" not in bot.messages[-1][1]
 
 
@@ -1024,4 +1027,5 @@ def test_push_uses_current_session_branch(tmp_path: Path):
     asyncio.run(router.handle_push(update, context))
 
     assert router.git.push_calls == [(backend, "feature-1")]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert "Pushed branch &#x27;feature-1&#x27; to origin." in bot.messages[-1][1]

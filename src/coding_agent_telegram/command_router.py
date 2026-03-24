@@ -230,6 +230,10 @@ class CommandRouter:
         if ignored:
             lines.extend(["", "Ignored non-git commands:", *[f"- {segment}" for segment in ignored]])
 
+    @staticmethod
+    def _bash_block(text: str) -> str:
+        return f'<pre><code class="language-bash">{html.escape(text)}</code></pre>'
+
     @classmethod
     def _has_nested_git_subcommand(cls, tokens: list[str]) -> bool:
         for index in range(2, len(tokens) - 1):
@@ -637,11 +641,11 @@ class CommandRouter:
             lines.append(result.message)
             if not result.success:
                 self._append_ignored_segments(lines, ignored)
-                await send_text(update, context, "\n".join(lines))
+                await send_html_text(update, context, self._bash_block("\n".join(lines)))
                 return
 
         self._append_ignored_segments(lines, ignored)
-        await send_text(update, context, "\n".join(lines))
+        await send_html_text(update, context, self._bash_block("\n".join(lines)))
 
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
@@ -671,11 +675,11 @@ class CommandRouter:
         if current_branch != branch_name:
             checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
             if not checkout.success:
-                await send_text(update, context, checkout.message)
+                await send_html_text(update, context, self._bash_block(checkout.message))
                 return
 
         result = await asyncio.to_thread(self.git.push_branch, project_path, branch_name)
-        await send_text(update, context, result.message)
+        await send_html_text(update, context, self._bash_block(result.message))
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
