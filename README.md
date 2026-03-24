@@ -315,7 +315,7 @@ LOG_DIR=./logs
   Show the active session for the current bot and chat.
 
 - `/commit <git commands>`
-  Run validated git commit-related commands inside the active session project. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message.
+  Run validated git commit-related commands inside the active session project. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message. Mutating git commands such as `add`, `restore`, and `rm` require the project to be trusted.
 
 - `/push`
   Push `origin <branch>` for the current active session. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
@@ -367,6 +367,7 @@ The chosen branch is stored with the session, so switching sessions restores the
 - Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
 - Folders created through `/project <name>` are marked as trusted by this app
 - That means newly created project folders can be used immediately
+- Mutating `/commit` operations are allowed only for trusted projects
 
 ## 🪵 Logs
 

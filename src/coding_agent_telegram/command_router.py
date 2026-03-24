@@ -36,6 +36,7 @@ class RouterDeps:
 class CommandRouter:
     SWITCH_PAGE_SIZE = 10
     ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "restore", "rm", "status"}
+    TRUST_REQUIRED_COMMIT_SUBCOMMANDS = {"add", "restore", "rm"}
     ENFORCED_COMMIT_ARGS = ["--no-verify", "--no-post-rewrite", "--no-gpg-sign"]
     SAFE_COMMIT_OPTION_RULES = {
         "add": {
@@ -318,6 +319,10 @@ class CommandRouter:
                 if not cls._path_within_project(project_path, token):
                     return False
         return True
+
+    @classmethod
+    def _requires_trusted_project(cls, commands: list[list[str]]) -> bool:
+        return any(args and args[0] in cls.TRUST_REQUIRED_COMMIT_SUBCOMMANDS for args in commands)
 
     @staticmethod
     def _append_ignored_segments(lines: list[str], ignored: list[str]) -> None:
@@ -843,6 +848,13 @@ class CommandRouter:
         commands, ignored = self._validated_commit_commands(raw)
         if not commands:
             await send_text(update, context, "No valid git commit commands were found.")
+            return
+        if self._requires_trusted_project(commands) and not self.deps.store.is_project_trusted(session["project_folder"]):
+            await send_text(
+                update,
+                context,
+                "This project is not trusted for mutating git operations. Use a project created by /project or mark it trusted first.",
+            )
             return
         if not self._commands_use_only_project_paths(project_path, commands):
             await send_text(update, context, "Unsafe path arguments are not allowed. Only files inside the current project may be used.")

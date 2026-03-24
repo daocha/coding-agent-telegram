@@ -916,13 +916,15 @@ def test_unsupported_message_type_is_rejected(tmp_path: Path):
     assert "This bot currently accepts only text messages and photos." in bot.messages[-1][1]
 
 
-def _make_commit_router(tmp_path: Path, *, git_manager=None) -> tuple[CommandRouter, Path]:
+def _make_commit_router(tmp_path: Path, *, git_manager=None, trusted: bool = True) -> tuple[CommandRouter, Path]:
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.create_session("bot-a", 123, "sess_commit", "commit-session", "backend", "codex")
+    if trusted:
+        store.trust_project("backend")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = git_manager or FakeGitManager(is_git_repo=True)
     router.runtime.git = router.git
@@ -1202,6 +1204,33 @@ def test_commit_rejects_pathspec_magic(tmp_path: Path):
 
     assert router.git.safe_git_commands == []
     assert "Unsafe path arguments are not allowed." in bot.messages[-1][1]
+
+
+def test_commit_rejects_mutating_git_commands_for_untrusted_project(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True), trusted=False)
+
+    bot = _run_commit_command(router, "/commit git add -u && git commit -m safe")
+
+    assert router.git.safe_git_commands == []
+    assert "This project is not trusted for mutating git operations." in bot.messages[-1][1]
+
+
+def test_commit_allows_status_for_untrusted_project(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=True, message="git status completed.")],
+        ),
+        trusted=False,
+    )
+
+    bot = _run_commit_command(router, "/commit git status")
+
+    assert router.git.safe_git_commands == [
+        (backend, ["status"]),
+    ]
+    assert "[Completed]" in bot.messages[-1][1]
 
 
 def test_push_uses_current_session_branch(tmp_path: Path):
