@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import shlex
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 
 from telegram import Update
@@ -32,6 +34,21 @@ class RouterDeps:
 
 class CommandRouter:
     SWITCH_PAGE_SIZE = 10
+    ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "diff", "restore", "rm", "status"}
+    DISALLOWED_NESTED_GIT_SUBCOMMANDS = ALLOWED_COMMIT_SUBCOMMANDS | {
+        "branch",
+        "checkout",
+        "cherry-pick",
+        "clone",
+        "fetch",
+        "merge",
+        "pull",
+        "push",
+        "rebase",
+        "reset",
+        "switch",
+        "tag",
+    }
 
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
@@ -122,6 +139,103 @@ class CommandRouter:
         if not self.deps.cfg.enable_group_chats and chat.type != "private":
             return False, "Group chats are not supported."
         return True, None
+
+    def _active_session_context(self, chat_id: int) -> tuple[Optional[str], Optional[dict[str, str]], Optional[Path]]:
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        active_id = chat_state.get("active_session_id")
+        if not active_id:
+            return None, None, None
+        session = chat_state.get("sessions", {}).get(active_id)
+        if not session:
+            return active_id, None, None
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
+        return active_id, session, project_path
+
+    def _split_shell_commands(self, raw: str) -> list[str]:
+        commands: list[str] = []
+        current: list[str] = []
+        quote: Optional[str] = None
+        escape = False
+        index = 0
+        while index < len(raw):
+            char = raw[index]
+            if escape:
+                current.append(char)
+                escape = False
+                index += 1
+                continue
+            if char == "\\":
+                current.append(char)
+                escape = True
+                index += 1
+                continue
+            if quote:
+                current.append(char)
+                if char == quote:
+                    quote = None
+                index += 1
+                continue
+            if char in {"'", '"'}:
+                quote = char
+                current.append(char)
+                index += 1
+                continue
+            if raw.startswith("&&", index) or raw.startswith("||", index):
+                segment = "".join(current).strip()
+                if segment:
+                    commands.append(segment)
+                current = []
+                index += 2
+                continue
+            if char in {";", "\n", "|", "&", "<", ">"}:
+                segment = "".join(current).strip()
+                if segment:
+                    commands.append(segment)
+                current = []
+                while index + 1 < len(raw) and raw[index + 1] == char:
+                    index += 1
+                index += 1
+                continue
+            current.append(char)
+            index += 1
+
+        segment = "".join(current).strip()
+        if segment:
+            commands.append(segment)
+        return commands
+
+    def _validated_commit_commands(self, raw: str) -> tuple[list[list[str]], list[str]]:
+        valid: list[list[str]] = []
+        ignored: list[str] = []
+        for segment in self._split_shell_commands(raw):
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                ignored.append(segment)
+                continue
+            if len(tokens) < 2 or tokens[0] != "git":
+                ignored.append(segment)
+                continue
+            if tokens[1].startswith("-") or tokens[1] not in self.ALLOWED_COMMIT_SUBCOMMANDS:
+                ignored.append(segment)
+                continue
+            if self._has_nested_git_subcommand(tokens):
+                ignored.append(segment)
+                continue
+            valid.append(tokens[1:])
+        return valid, ignored
+
+    @staticmethod
+    def _append_ignored_segments(lines: list[str], ignored: list[str]) -> None:
+        if ignored:
+            lines.extend(["", "Ignored non-git commands:", *[f"- {segment}" for segment in ignored]])
+
+    @classmethod
+    def _has_nested_git_subcommand(cls, tokens: list[str]) -> bool:
+        for index in range(2, len(tokens) - 1):
+            if tokens[index] == "git" and tokens[index + 1] in cls.DISALLOWED_NESTED_GIT_SUBCOMMANDS:
+                return True
+        return False
 
     async def handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
@@ -486,6 +600,82 @@ class CommandRouter:
                 f"Branch: {session.get('branch_name') or '(current branch)'}"
             ),
         )
+
+    async def handle_commit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        allowed, reason = self._chat_allowed(update)
+        if not allowed:
+            await send_text(update, context, reason)
+            return
+
+        if update.message is None or not update.message.text:
+            await send_text(update, context, "Usage: /commit git add ... && git commit ...")
+            return
+
+        raw = update.message.text.partition(" ")[2].strip()
+        if not raw:
+            await send_text(update, context, "Usage: /commit git add ... && git commit ...")
+            return
+
+        chat_id = update.effective_chat.id
+        _, session, project_path = self._active_session_context(chat_id)
+        if session is None or project_path is None:
+            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
+            return
+        if not self.git.is_git_repo(project_path):
+            await send_text(update, context, "⚠️ Current project is not a git repository.")
+            return
+
+        commands, ignored = self._validated_commit_commands(raw)
+        if not commands:
+            await send_text(update, context, "No valid git commit commands were found.")
+            return
+
+        lines: list[str] = []
+        for args in commands:
+            result = await asyncio.to_thread(self.git.run_git_command, project_path, args)
+            lines.append(f"$ git {' '.join(args)}")
+            lines.append(result.message)
+            if not result.success:
+                self._append_ignored_segments(lines, ignored)
+                await send_text(update, context, "\n".join(lines))
+                return
+
+        self._append_ignored_segments(lines, ignored)
+        await send_text(update, context, "\n".join(lines))
+
+    async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        allowed, reason = self._chat_allowed(update)
+        if not allowed:
+            await send_text(update, context, reason)
+            return
+
+        if context.args:
+            await send_text(update, context, "Usage: /push")
+            return
+
+        chat_id = update.effective_chat.id
+        _, session, project_path = self._active_session_context(chat_id)
+        if session is None or project_path is None:
+            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
+            return
+        if not self.git.is_git_repo(project_path):
+            await send_text(update, context, "⚠️ Current project is not a git repository.")
+            return
+
+        branch_name = session.get("branch_name") or self.git.current_branch(project_path)
+        if not branch_name:
+            await send_text(update, context, "⚠️ Could not determine the branch for the current session.")
+            return
+
+        current_branch = self.git.current_branch(project_path)
+        if current_branch != branch_name:
+            checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
+            if not checkout.success:
+                await send_text(update, context, checkout.message)
+                return
+
+        result = await asyncio.to_thread(self.git.push_branch, project_path, branch_name)
+        await send_text(update, context, result.message)
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)

