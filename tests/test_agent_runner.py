@@ -68,7 +68,20 @@ def test_codex_runner_resume_uses_resume_subcommand_shape(monkeypatch):
 
     runner.resume_session("codex", "sess_1", Path("/tmp/project"), "hello again", skip_git_repo_check=True)
 
-    assert calls[0][0] == ["codex", "exec", "resume", "--skip-git-repo-check", "--json", "sess_1", "hello again"]
+    args = calls[0][0]
+    assert args[:9] == [
+        "codex",
+        "exec",
+        "resume",
+        "--skip-git-repo-check",
+        "-c",
+        "approval_policy=never",
+        "-c",
+        "sandbox_mode=workspace-write",
+        "--json",
+    ]
+    assert args[9] == "--output-last-message"
+    assert args[11:] == ["sess_1", runner.PROMPT_PREFIX + "hello again"]
 
 
 def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
@@ -131,6 +144,47 @@ def test_copilot_runner_resume_uses_resume_flag(monkeypatch):
         runner.PROMPT_PREFIX + "hello again",
     ]
     assert result.session_id == "sess_copilot"
+
+
+def test_codex_runner_attaches_images_for_create_and_resume(monkeypatch):
+    calls = []
+
+    def fake_run(args, capture_output, text, check, cwd=None, env=None):
+        calls.append((args, cwd, env))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    image_path = Path("/tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg")
+    runner.create_session("codex", Path("/tmp/project"), "hello", image_paths=(image_path,))
+    runner.resume_session("codex", "sess_1", Path("/tmp/project"), "hello again", image_paths=(image_path,))
+
+    assert "--image" in calls[0][0]
+    assert str(image_path) in calls[0][0]
+    assert "--image" in calls[1][0]
+    assert str(image_path) in calls[1][0]
+
+
+def test_copilot_runner_rejects_image_attachments():
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    image_path = Path("/tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg")
+    result = runner.create_session("copilot", Path("/tmp/project"), "hello", image_paths=(image_path,))
+
+    assert result.success is False
+    assert result.error_message == "Image attachments are not supported for Copilot sessions."
 
 
 def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):

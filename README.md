@@ -9,6 +9,7 @@ A Telegram bot bridge for local coding agents such as Codex CLI and Copilot CLI.
 - Bind each session to one project folder and one provider.
 - Run local coding agents inside your workspace.
 - Show Codex output and file changes back in Telegram.
+- Accept text messages and photos as task input.
 - Auto-create missing project folders with `/project <folder>`.
 
 ## ✅ Requirements
@@ -20,6 +21,39 @@ Before starting the server, make sure you have:
 - Your Telegram chat ID
 - Codex CLI and/or Copilot CLI installed locally
 - A workspace directory that contains your projects
+
+## 🔑 Telegram Setup
+
+### Get a Bot Token
+
+1. Open Telegram and start a chat with `@BotFather`.
+2. Send `/newbot`.
+3. Follow the prompts to choose:
+   - a display name
+   - a bot username ending in `bot`
+4. BotFather will return an HTTP API token.
+5. Put that token into `TELEGRAM_BOT_TOKENS` in your `.env`.
+
+### Get Your Chat ID
+
+The most reliable way is to use Telegram's `getUpdates` API with your own bot token.
+
+1. Start a chat with your bot and send it a message such as `/start`.
+2. Open this URL in your browser, replacing `<BOT_TOKEN>`:
+
+```text
+https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
+```
+
+3. Find the `chat` object in the JSON response.
+4. Copy the numeric `id` field from that object.
+5. Put that value into `ALLOWED_CHAT_IDS` in your `.env`.
+
+Notes:
+
+- For private chats, the chat ID is usually a positive integer.
+- For group chats, the chat ID is usually a negative integer.
+- If `getUpdates` returns an empty result, send another message to the bot and try again.
 
 ## 🚀 Quick Start
 
@@ -87,6 +121,24 @@ Then update `.env` and run:
 ```bash
 coding-agent-telegram
 ```
+
+## 📨 Supported Message Types
+
+The bot currently accepts:
+
+- plain text messages
+- photos
+
+Current media behavior:
+
+- photos are supported for Codex sessions
+- videos are not supported
+- video notes are not supported
+- animations are not supported
+- audio and voice messages are not supported
+- documents and stickers are not supported
+
+If an unsupported message type is sent, the bot replies with a short error instead of silently ignoring it.
 
 ## ⚙️ Environment Variables
 

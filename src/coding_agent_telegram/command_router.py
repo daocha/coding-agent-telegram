@@ -12,20 +12,11 @@ from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.config import AppConfig
-from coding_agent_telegram.diff_utils import (
-    build_summary,
-    changed_files,
-    changed_files_from_snapshots,
-    collect_snapshot_diffs,
-    chunk_fenced_diff,
-    chunk_plain_text,
-    collect_diffs,
-    snapshot_project_files,
-)
-from coding_agent_telegram.filters import is_sensitive_path, is_valid_project_folder, resolve_project_path
+from coding_agent_telegram.filters import is_valid_project_folder, resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager
 from coding_agent_telegram.session_store import SessionStore
-from coding_agent_telegram.telegram_sender import send_code_block, send_html_text, send_text
+from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
+from coding_agent_telegram.telegram_sender import send_html_text, send_text
 
 
 logger = logging.getLogger(__name__)
@@ -45,9 +36,15 @@ class CommandRouter:
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
         self.git = GitWorkspaceManager()
-
-    def _should_skip_git_repo_check(self, project_folder: str) -> bool:
-        return self.deps.cfg.codex_skip_git_repo_check or self.deps.store.is_project_trusted(project_folder)
+        self.photo_attachments = PhotoAttachmentStore()
+        self.runtime = SessionRuntime(
+            cfg=deps.cfg,
+            store=deps.store,
+            agent_runner=deps.agent_runner,
+            bot_id=deps.bot_id,
+            git=self.git,
+            run_with_typing=self._run_with_typing,
+        )
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         return sorted(
@@ -114,6 +111,7 @@ class CommandRouter:
         finally:
             stop_event.set()
             await typing_task
+
 
     def _chat_allowed(self, update: Update) -> Tuple[bool, Optional[str]]:
         chat = update.effective_chat
@@ -221,7 +219,7 @@ class CommandRouter:
             default_branch = self.git.default_branch(project_path) or "(unknown)"
             branches = self.git.list_local_branches(project_path)
             lines = [
-                f"Project: `{project_folder}`",
+                f"Project: {project_folder}",
                 f"Current branch: {current_branch}",
                 f"Default branch: {default_branch}",
                 "",
@@ -349,7 +347,7 @@ class CommandRouter:
             provider,
             project_path,
             f"Create session: {session_name}",
-            skip_git_repo_check=self._should_skip_git_repo_check(project_folder),
+            skip_git_repo_check=self.runtime.should_skip_git_repo_check(project_folder),
         )
 
         if not result.success or not result.session_id:
@@ -375,7 +373,13 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Session created successfully: {session_name}\nSession ID: {result.session_id}\nProject: `{project_folder}`\nProvider: {provider}\nBranch: {branch_name or '(current branch)'}",
+            (
+                f"Session created successfully: {session_name}\n"
+                f"Session ID: {result.session_id}\n"
+                f"Project: {project_folder}\n"
+                f"Provider: {provider}\n"
+                f"Branch: {branch_name or '(current branch)'}"
+            ),
         )
 
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -475,7 +479,12 @@ class CommandRouter:
         await send_text(
             update,
             context,
-            f"Current session: {session['name']}\nProject: `{session['project_folder']}`\nProvider: {session.get('provider', 'codex')}\nBranch: {session.get('branch_name') or '(current branch)'}",
+            (
+                f"Current session: {session['name']}\n"
+                f"Project: {session['project_folder']}\n"
+                f"Provider: {session.get('provider', 'codex')}\n"
+                f"Branch: {session.get('branch_name') or '(current branch)'}"
+            ),
         )
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -485,6 +494,16 @@ class CommandRouter:
             return
 
         if update.message is None or not update.message.text:
+            return
+        await self.runtime.run_active_session(update, context, user_message=update.message.text)
+
+    async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        allowed, reason = self._chat_allowed(update)
+        if not allowed:
+            await send_text(update, context, reason)
+            return
+
+        if update.message is None or not update.message.photo:
             return
 
         chat_id = update.effective_chat.id
@@ -499,134 +518,23 @@ class CommandRouter:
             await send_text(update, context, "No active session.\nPlease run /project and /new first.")
             return
 
-        project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
-        project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
-        branch_name = session.get("branch_name", "")
-        logger.info(
-            "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'.",
-            chat_id,
-            session["name"],
-            active_id,
-            project_folder,
-            provider,
-        )
-
-        if branch_name and self.git.is_git_repo(project_path):
-            checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
-            if not checkout.success:
-                await send_text(update, context, checkout.message)
-                return
-
-        before_snapshot = snapshot_project_files(project_path)
-        before = set(changed_files(project_path))
-        await send_text(update, context, "Working on it...")
-        result = await self._run_with_typing(
-            update,
-            context,
-            self.deps.agent_runner.resume_session,
-            provider,
-            active_id,
-            project_path,
-            update.message.text,
-            skip_git_repo_check=self._should_skip_git_repo_check(project_folder),
-        )
-
-        if (not result.success) and result.error_message and "resume" in result.error_message.lower():
-            logger.info(
-                "Session '%s' (%s) for chat %s could not be resumed; creating a replacement session.",
-                session["name"],
-                active_id,
-                chat_id,
-            )
-            create_result = await self._run_with_typing(
-                update,
-                context,
-                self.deps.agent_runner.create_session,
-                provider,
-                project_path,
-                update.message.text,
-                skip_git_repo_check=self._should_skip_git_repo_check(project_folder),
-            )
-            if create_result.success and create_result.session_id:
-                self.deps.store.replace_session(
-                    self.deps.bot_id,
-                    chat_id,
-                    active_id,
-                    create_result.session_id,
-                    session["name"],
-                    project_folder,
-                    provider,
-                    branch_name=branch_name,
-                )
-                logger.info(
-                    "Replaced session '%s' for chat %s: old=%s new=%s.",
-                    session["name"],
-                    chat_id,
-                    active_id,
-                    create_result.session_id,
-                )
-                await send_text(
-                    update,
-                    context,
-                    f"The previous session is no longer valid.\nA new session was created and the task continued.\nSession ID: {create_result.session_id}",
-                )
-                result = create_result
-
-        if not result.success:
-            logger.warning(
-                "Agent run failed for chat %s on session '%s' (%s): %s",
-                chat_id,
-                session["name"],
-                active_id,
-                result.error_message or "unknown error",
-            )
-            await send_text(update, context, result.error_message or "Agent run failed.")
+        if session.get("provider", "codex") != "codex":
+            await send_text(update, context, "Photo attachments are currently supported only for codex sessions.")
             return
 
-        after_snapshot = snapshot_project_files(project_path)
-        after = set(changed_files(project_path))
-        snapshot_files = changed_files_from_snapshots(before_snapshot, after_snapshot)
-        files = sorted((after - before).union(snapshot_files))
-        diffs = collect_diffs(project_path, files)
-        snapshot_diffs_by_path = {
-            file_diff.path: file_diff
-            for file_diff in collect_snapshot_diffs(before_snapshot, after_snapshot, files)
-        }
-        if files:
-            merged_diffs = []
-            for file_diff in diffs:
-                if file_diff.diff:
-                    merged_diffs.append(file_diff)
-                    continue
-                snapshot_diff = snapshot_diffs_by_path.get(file_diff.path)
-                if snapshot_diff is not None:
-                    merged_diffs.append(snapshot_diff)
-                else:
-                    merged_diffs.append(file_diff)
-            diffs = merged_diffs
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
+        attachment_path = await self.photo_attachments.store_photo(update, project_path)
+        prompt = self.photo_attachments.build_prompt(attachment_path, project_path, update.message.caption or "")
+        await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
 
-        assistant_chunks = chunk_plain_text("Codex output", result.assistant_text, self.deps.cfg.max_telegram_message_length)
-        for chunk in assistant_chunks:
-            await send_text(update, context, chunk)
+    async def handle_unsupported_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        allowed, reason = self._chat_allowed(update)
+        if not allowed:
+            await send_text(update, context, reason)
+            return
 
-        logger.info(
-            "Completed run for chat %s on session '%s' (%s); %d changed file(s).",
-            chat_id,
-            session["name"],
-            result.session_id or active_id,
-            len(files),
+        await send_text(
+            update,
+            context,
+            "Unsupported message type.\nThis bot currently accepts only text messages and photos.",
         )
-        await send_text(update, context, build_summary(session["name"], project_folder, files))
-
-        for file_diff in diffs:
-            if self.deps.cfg.enable_sensitive_diff_filter and is_sensitive_path(file_diff.path):
-                await send_text(update, context, f"{file_diff.path}\nThis file contains sensitive content and was omitted.")
-                continue
-
-            for chunk in chunk_fenced_diff(
-                file_diff.path,
-                file_diff.diff,
-                self.deps.cfg.max_telegram_message_length,
-            ):
-                await send_code_block(update, context, chunk.header, chunk.code, language=chunk.language)
