@@ -316,6 +316,12 @@ LOG_DIR=./logs
 - `/current`
   Show the active session for the current bot and chat.
 
+- `/commit <git commands>`
+  Run validated git commit-related commands inside the active session project. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message.
+
+- `/push`
+  Push `origin <branch>` for the current active session. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
+
 ## 🧠 Session Model
 
 Sessions are scoped by:
