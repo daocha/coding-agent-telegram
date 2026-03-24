@@ -31,7 +31,6 @@ class AppConfig:
     codex_sandbox_mode: str
     codex_skip_git_repo_check: bool
     max_telegram_message_length: int
-    enable_group_chats: bool
     enable_sensitive_diff_filter: bool
     default_agent_provider: str
 
@@ -104,7 +103,6 @@ def load_config() -> AppConfig:
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),
         max_telegram_message_length=int(os.getenv("MAX_TELEGRAM_MESSAGE_LENGTH", "3000")),
-        enable_group_chats=_parse_bool(os.getenv("ENABLE_GROUP_CHATS", "false")),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),
         default_agent_provider=provider,
     )

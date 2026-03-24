@@ -18,6 +18,8 @@ def default_bot_commands() -> list[BotCommand]:
         BotCommand("new", "Create a new session"),
         BotCommand("switch", "List sessions or switch to one"),
         BotCommand("current", "Show the active session"),
+        BotCommand("commit", "Run validated git commit commands"),
+        BotCommand("push", "Push the current session branch"),
     ]
 
 
@@ -51,6 +53,8 @@ def build_application(token: str, router: CommandRouter) -> Application:
     app.add_handler(CommandHandler("new", router.handle_new))
     app.add_handler(CommandHandler("switch", router.handle_switch))
     app.add_handler(CommandHandler("current", router.handle_current))
+    app.add_handler(CommandHandler("commit", router.handle_commit))
+    app.add_handler(CommandHandler("push", router.handle_push))
     app.add_handler(MessageHandler(tg_filters.PHOTO, router.handle_photo))
     app.add_handler(MessageHandler(tg_filters.TEXT & ~tg_filters.COMMAND, router.handle_message))
     app.add_handler(MessageHandler(unsupported_media, router.handle_unsupported_message))
