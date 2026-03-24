@@ -2,6 +2,8 @@
 
 A Telegram bot bridge for local coding agents such as Codex CLI and Copilot CLI. It lets you manage multiple project sessions from Telegram while keeping execution on your own machine.
 
+The bot accepts private chats only.
+
 ## ✨ What It Does
 
 - Connect one Telegram account to multiple Telegram bots.
@@ -52,7 +54,6 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 Notes:
 
 - For private chats, the chat ID is usually a positive integer.
-- For group chats, the chat ID is usually a negative integer.
 - If `getUpdates` returns an empty result, send another message to the bot and try again.
 
 ## 🚀 Quick Start
@@ -155,7 +156,7 @@ These are the main fields in `.env`.
   Example: `TELEGRAM_BOT_TOKENS=token_one,token_two`
 
 - `ALLOWED_CHAT_IDS`
-  Comma-separated Telegram chat IDs allowed to use the bot.
+  Comma-separated Telegram private chat IDs allowed to use the bot.
   Example: `ALLOWED_CHAT_IDS=123456789,987654321`
 
 ### State and Logging
@@ -256,9 +257,6 @@ GitHub documents these Copilot CLI approval controls here:
 - `MAX_TELEGRAM_MESSAGE_LENGTH`
   Max message size used before the app splits responses.
 
-- `ENABLE_GROUP_CHATS`
-  Allow or block use in group chats.
-
 - `ENABLE_SENSITIVE_DIFF_FILTER`
   Hide diffs for sensitive paths.
 
@@ -316,6 +314,12 @@ LOG_DIR=./logs
 - `/current`
   Show the active session for the current bot and chat.
 
+- `/commit <git commands>`
+  Run validated git commit-related commands inside the active session project. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message. Mutating git commands such as `add`, `restore`, and `rm` require the project to be trusted.
+
+- `/push`
+  Push `origin <branch>` for the current active session. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
+
 ## 🧠 Session Model
 
 Sessions are scoped by:
@@ -363,6 +367,7 @@ The chosen branch is stored with the session, so switching sessions restores the
 - Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
 - Folders created through `/project <name>` are marked as trusted by this app
 - That means newly created project folders can be used immediately
+- Mutating `/commit` operations are allowed only for trusted projects
 
 ## 🪵 Logs
 

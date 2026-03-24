@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+
+@dataclass
+class GitCommandResult:
+    success: bool
+    message: str
+    stdout: str = ""
+    stderr: str = ""
 
 
 @dataclass
@@ -16,13 +26,25 @@ class BranchOperationResult:
 
 
 class GitWorkspaceManager:
-    def _run(self, project_path: Path, *args: str) -> subprocess.CompletedProcess:
+    SAFE_COMMIT_CONFIG = (
+        "-c",
+        f"core.hooksPath={os.devnull}",
+        "-c",
+        "filter.lfs.process=",
+        "-c",
+        "filter.lfs.smudge=",
+        "-c",
+        "filter.lfs.clean=",
+    )
+
+    def _run(self, project_path: Path, *args: str, env: Optional[dict[str, str]] = None) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git", *args],
             cwd=project_path,
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
 
     def is_git_repo(self, project_path: Path) -> bool:
@@ -130,3 +152,39 @@ class GitWorkspaceManager:
             current_branch=new_branch,
             default_branch=default_branch,
         )
+
+    def run_git_command(self, project_path: Path, args: list[str]) -> GitCommandResult:
+        result = self._run(project_path, *args)
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        if result.returncode != 0:
+            return GitCommandResult(False, stderr or f"git {' '.join(args)} failed.", stdout=stdout, stderr=stderr)
+        message = stdout or stderr or f"git {' '.join(args)} completed."
+        return GitCommandResult(True, message, stdout=stdout, stderr=stderr)
+
+    def run_safe_commit_command(self, project_path: Path, args: list[str]) -> GitCommandResult:
+        with tempfile.TemporaryDirectory(prefix="coding-agent-telegram-git-") as temp_home:
+            env = os.environ.copy()
+            env.update(
+                {
+                    "GIT_CONFIG_NOSYSTEM": "1",
+                    "GIT_TERMINAL_PROMPT": "0",
+                    "HOME": temp_home,
+                    "XDG_CONFIG_HOME": temp_home,
+                }
+            )
+            result = self._run(project_path, *self.SAFE_COMMIT_CONFIG, *args, env=env)
+
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        if result.returncode != 0:
+            return GitCommandResult(False, stderr or f"git {' '.join(args)} failed.", stdout=stdout, stderr=stderr)
+        message = stdout or stderr or f"git {' '.join(args)} completed."
+        return GitCommandResult(True, message, stdout=stdout, stderr=stderr)
+
+    def push_branch(self, project_path: Path, branch_name: str) -> BranchOperationResult:
+        result = self._run(project_path, "push", "origin", branch_name)
+        if result.returncode != 0:
+            return BranchOperationResult(False, result.stderr.strip() or f"Failed to push branch: {branch_name}")
+        message = result.stdout.strip() or f"Pushed branch '{branch_name}' to origin."
+        return BranchOperationResult(True, message, current_branch=branch_name)
