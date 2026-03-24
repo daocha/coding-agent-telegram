@@ -971,6 +971,10 @@ def test_commit_rejects_malformed_or_prefixed_non_git_commands(tmp_path: Path):
         '/commit git status git commit -m "oops"',
         '/commit git status git diff -- README.md',
         '/commit git status git push origin main',
+        '/commit git add --pathspec-from-file /etc/hosts',
+        '/commit git add --pathspec-from-file=/etc/hosts',
+        '/commit git commit -F /etc/hosts',
+        '/commit git commit --file=/etc/hosts',
         '/commit git diff -- README.md',
         '/commit git diff --no-index /etc/passwd /dev/null',
     ]

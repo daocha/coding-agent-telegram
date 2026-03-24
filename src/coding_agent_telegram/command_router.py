@@ -35,6 +35,13 @@ class RouterDeps:
 class CommandRouter:
     SWITCH_PAGE_SIZE = 10
     ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "restore", "rm", "status"}
+    BLOCKED_COMMIT_OPTIONS = {
+        "add": {"--pathspec-from-file"},
+        "commit": {"-F", "--file", "-t", "--template"},
+        "restore": {"--pathspec-from-file"},
+        "rm": {"--pathspec-from-file"},
+        "status": {"--pathspec-from-file"},
+    }
     DISALLOWED_NESTED_GIT_SUBCOMMANDS = ALLOWED_COMMIT_SUBCOMMANDS | {
         "branch",
         "checkout",
@@ -223,6 +230,9 @@ class CommandRouter:
             if self._has_nested_git_subcommand(tokens):
                 ignored.append(segment)
                 continue
+            if self._has_blocked_commit_option(tokens[1], tokens[2:]):
+                ignored.append(segment)
+                continue
             valid.append(tokens[1:])
         return valid, ignored
 
@@ -260,6 +270,19 @@ class CommandRouter:
         for index in range(2, len(tokens) - 1):
             if tokens[index] == "git" and tokens[index + 1] in cls.DISALLOWED_NESTED_GIT_SUBCOMMANDS:
                 return True
+        return False
+
+    @classmethod
+    def _has_blocked_commit_option(cls, subcommand: str, args: list[str]) -> bool:
+        blocked = cls.BLOCKED_COMMIT_OPTIONS.get(subcommand, set())
+        for token in args:
+            for option in blocked:
+                if token == option:
+                    return True
+                if option.startswith("--") and token.startswith(f"{option}="):
+                    return True
+                if len(option) == 2 and option.startswith("-") and token.startswith(option) and token != option:
+                    return True
         return False
 
     async def _ensure_session_project_exists(
