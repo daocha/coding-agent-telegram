@@ -34,11 +34,12 @@ class RouterDeps:
 
 class CommandRouter:
     SWITCH_PAGE_SIZE = 10
-    ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "diff", "restore", "rm", "status"}
+    ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "restore", "rm", "status"}
     DISALLOWED_NESTED_GIT_SUBCOMMANDS = ALLOWED_COMMIT_SUBCOMMANDS | {
         "branch",
         "checkout",
         "cherry-pick",
+        "diff",
         "clone",
         "fetch",
         "merge",
@@ -259,6 +260,22 @@ class CommandRouter:
         for index in range(2, len(tokens) - 1):
             if tokens[index] == "git" and tokens[index + 1] in cls.DISALLOWED_NESTED_GIT_SUBCOMMANDS:
                 return True
+        return False
+
+    async def _ensure_session_project_exists(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: dict[str, str],
+        project_path: Path,
+    ) -> bool:
+        if project_path.exists() and project_path.is_dir():
+            return True
+        await send_text(
+            update,
+            context,
+            f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+        )
         return False
 
     async def handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -645,6 +662,8 @@ class CommandRouter:
         if session is None or project_path is None:
             await send_text(update, context, "No active session.\nPlease run /project and /new first.")
             return
+        if not await self._ensure_session_project_exists(update, context, session, project_path):
+            return
         if not self.git.is_git_repo(project_path):
             await send_text(update, context, "⚠️ Current project is not a git repository.")
             return
@@ -683,6 +702,8 @@ class CommandRouter:
         if session is None or project_path is None:
             await send_text(update, context, "No active session.\nPlease run /project and /new first.")
             return
+        if not await self._ensure_session_project_exists(update, context, session, project_path):
+            return
         if not self.git.is_git_repo(project_path):
             await send_text(update, context, "⚠️ Current project is not a git repository.")
             return
@@ -699,7 +720,7 @@ class CommandRouter:
                 await send_html_text(
                     update,
                     context,
-                    self._bash_block(self._format_git_response([([ "checkout", branch_name], checkout)], [])),
+                    self._bash_block(self._format_git_response([(["checkout", branch_name], checkout)], [])),
                 )
                 return
 

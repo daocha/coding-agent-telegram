@@ -880,6 +880,14 @@ def _run_commit_command(router: CommandRouter, raw: str) -> FakeBot:
     return bot
 
 
+def _run_push_command(router: CommandRouter) -> FakeBot:
+    update = make_update(text="/push")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_push(update, context))
+    return bot
+
+
 def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tmp_path: Path):
     router, backend = _make_commit_router(
         tmp_path,
@@ -961,7 +969,10 @@ def test_commit_rejects_malformed_or_prefixed_non_git_commands(tmp_path: Path):
         '/commit "unterminated',
         '/commit env VAR=1 git status',
         '/commit git status git commit -m "oops"',
+        '/commit git status git diff -- README.md',
         '/commit git status git push origin main',
+        '/commit git diff -- README.md',
+        '/commit git diff --no-index /etc/passwd /dev/null',
     ]
     router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
 
@@ -1017,6 +1028,16 @@ def test_commit_allows_shell_like_text_inside_quoted_commit_message(tmp_path: Pa
     assert "Ignored non-git commands:" not in bot.messages[-1][1]
 
 
+def test_commit_reports_missing_project_folder_before_git_calls(tmp_path: Path):
+    router, backend = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+    backend.rmdir()
+
+    bot = _run_commit_command(router, "/commit git status")
+
+    assert router.git.git_commands == []
+    assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
+
+
 def test_push_uses_current_session_branch(tmp_path: Path):
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
@@ -1032,13 +1053,27 @@ def test_push_uses_current_session_branch(tmp_path: Path):
     )
     router.runtime.git = router.git
 
-    update = make_update(text="/push")
-    bot = FakeBot()
-    context = SimpleNamespace(args=[], bot=bot)
-
-    asyncio.run(router.handle_push(update, context))
+    bot = _run_push_command(router)
 
     assert router.git.push_calls == [(backend, "feature-1")]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert f"${shlex.join(['git', 'push', 'origin', 'feature-1'])}" in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    backend.rmdir()
+
+    bot = _run_push_command(router)
+
+    assert router.git.push_calls == []
+    assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
