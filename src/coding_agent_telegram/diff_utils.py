@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+INTERNAL_APP_DIR = ".coding-agent-telegram"
+
 
 @dataclass
 class FileDiff:
@@ -19,6 +21,13 @@ class CodeChunk:
     header: str
     code: str
     language: Optional[str]
+
+
+def is_runtime_artifact_path(path: str) -> bool:
+    normalized = path.strip().lstrip("./")
+    if not normalized:
+        return False
+    return Path(normalized).suffix.lower() in {".log", ".out"}
 
 
 def _read_snapshot_text(file_path: Path) -> Optional[str]:
@@ -39,11 +48,17 @@ def _read_snapshot_text(file_path: Path) -> Optional[str]:
 def snapshot_project_files(project_path: Path) -> dict[str, Optional[str]]:
     snapshots: dict[str, Optional[str]] = {}
     for root, dirs, files in os.walk(project_path):
-        dirs[:] = [name for name in dirs if name != ".git"]
+        dirs[:] = [
+            name
+            for name in dirs
+            if name not in {".git", INTERNAL_APP_DIR} and not is_runtime_artifact_path(name)
+        ]
         root_path = Path(root)
         for file_name in files:
             file_path = root_path / file_name
             rel_path = file_path.relative_to(project_path).as_posix()
+            if is_runtime_artifact_path(rel_path):
+                continue
             snapshots[rel_path] = _read_snapshot_text(file_path)
     return snapshots
 
@@ -108,7 +123,11 @@ def _parse_status_paths(output: str) -> list[str]:
 
 def changed_files(project_path: Path) -> list[str]:
     output = _git(project_path, ["status", "--short", "--untracked-files=all"])
-    return _parse_status_paths(output)
+    return [
+        path
+        for path in _parse_status_paths(output)
+        if not path.startswith(f"{INTERNAL_APP_DIR}/") and not is_runtime_artifact_path(path)
+    ]
 
 
 def _collect_diff_for_file(project_path: Path, path: str) -> str:
