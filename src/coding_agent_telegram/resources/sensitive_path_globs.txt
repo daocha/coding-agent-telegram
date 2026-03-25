@@ -1,0 +1,15 @@
+# Environment and secrets
+.env
+.env.*
+secrets.*
+credentials.*
+
+# Private keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Common credential folders
+.ssh/*
+.aws/*

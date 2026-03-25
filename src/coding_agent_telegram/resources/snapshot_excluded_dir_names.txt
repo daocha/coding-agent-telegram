@@ -1,0 +1,15 @@
+.git
+.gradle
+.next
+.nox
+.nuxt
+.pnpm-store
+.svelte-kit
+.tox
+.turbo
+.venv
+.yarn
+__pycache__
+node_modules
+venv
+.coding-agent-telegram

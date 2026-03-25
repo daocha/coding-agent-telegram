@@ -23,7 +23,13 @@ coding-agent-telegram = "coding_agent_telegram.cli:main"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-coding_agent_telegram = ["resources/.env.example"]
+coding_agent_telegram = [
+  "resources/.env.example",
+  "resources/sensitive_path_globs.txt",
+  "resources/snapshot_excluded_dir_names.txt",
+  "resources/snapshot_excluded_dir_globs.txt",
+  "resources/snapshot_excluded_file_globs.txt",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 import fnmatch
+import importlib.resources
 import re
+from functools import lru_cache
 from pathlib import Path
 
 PROJECT_FOLDER_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
-SENSITIVE_PATTERNS = [
-    ".env",
-    ".env.*",
-    "*.pem",
-    "*.key",
-    "id_rsa",
-    "id_ed25519",
-    "secrets.*",
-    "credentials.*",
-    ".ssh/*",
-    ".aws/*",
-]
+
+@lru_cache(maxsize=1)
+def _sensitive_patterns() -> tuple[str, ...]:
+    resource = importlib.resources.files("coding_agent_telegram").joinpath("resources/sensitive_path_globs.txt")
+    return tuple(
+        line.strip()
+        for line in resource.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
 
 
 def is_valid_project_folder(folder: str) -> bool:
@@ -37,7 +36,7 @@ def resolve_project_path(workspace_root: Path, project_folder: str) -> Path:
 def is_sensitive_path(path: str) -> bool:
     normalized = path.replace("\\", "/")
     name = normalized.split("/")[-1]
-    for pattern in SENSITIVE_PATTERNS:
+    for pattern in _sensitive_patterns():
         if fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(name, pattern):
             return True
     return False

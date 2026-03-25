@@ -361,11 +361,20 @@ Snapshot notes:
 
 - the app walks the project directory before and after the run
 - for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
-- `.git` and the app's internal runtime directory are skipped
+- hidden files and hidden directories are skipped by the snapshot walker by default
+- common dependency, cache, and runtime directories are also skipped
 - binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
 - for huge projects, this extra scan can add noticeable I/O and memory overhead
 - if the snapshot cannot represent a file as text, the app falls back to git diff when possible
 - for large or non-text files, the diff may still be omitted and replaced with a short unavailable message
+
+Snapshot exclusion rules live in package resource files:
+
+- `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
+- `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
+- `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
+
+If you want the snapshot diff to include hidden files or hidden directories, remove the `.*` rule from the relevant snapshot exclusion file and restart the bot.
 
 ## 🌿 Branch Workflow
 

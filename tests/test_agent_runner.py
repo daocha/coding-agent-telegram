@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from typing import Optional
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 
@@ -17,7 +18,7 @@ class FakePopen:
 
 
 def make_fake_popen(
-    calls: list[tuple[list[str], Path | None, dict | None]],
+    calls: list[tuple[list[str], Optional[Path], Optional[dict]]],
     *,
     process_stdout: str = "",
     process_stderr: str = "",
