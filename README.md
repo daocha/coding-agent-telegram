@@ -362,7 +362,6 @@ _During each agent run, the bot also takes a lightweight before/after project sn
 
 - the app walks the project directory before and after the run
 - for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
-- `hidden files` and `hidden directories` are skipped by the snapshot walker by default, git-head diff will be used instead
 - common dependency, cache, and runtime directories are also skipped
 - binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
 - for huge projects, this extra scan can add noticeable I/O and memory overhead
@@ -375,7 +374,18 @@ Snapshot exclusion rules live in package resource files:
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
 
-If you want the snapshot diff to include hidden files or hidden directories, remove the `.*` rule from the relevant snapshot exclusion file and restart the bot.
+You can override those defaults in `.env` without editing the installed package:
+
+- `SNAPSHOT_INCLUDE_PATH_GLOBS`
+  Force-include matching paths in diffs.
+  Example: `.github/*,.profile.test,.profile.prod`
+
+- `SNAPSHOT_EXCLUDE_PATH_GLOBS`
+  Add extra diff exclusions on top of the packaged defaults.
+  Example: `.*,personal/*,sensitive*.txt`
+  Note: `.*` matches hidden paths, including files inside hidden directories.
+
+If both include and exclude rules match, the include rule wins.
 
 ## 🌿 Branch Workflow
 

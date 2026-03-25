@@ -1,6 +1,3 @@
-# Hidden directories are excluded from snapshot diffs by default.
-.*
-
 # Generic cache and metadata directories.
 .*cache*
 *.egg-info

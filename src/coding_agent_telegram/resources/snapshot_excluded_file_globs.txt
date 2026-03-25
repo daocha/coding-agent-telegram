@@ -1,4 +1,2 @@
-# Hidden files are excluded from snapshot diffs by default.
-.*
 *.log
 *.out
