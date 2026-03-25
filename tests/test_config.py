@@ -15,6 +15,8 @@ def test_load_config_required(monkeypatch):
     assert cfg.codex_approval_policy == "never"
     assert cfg.codex_sandbox_mode == "workspace-write"
     assert cfg.codex_skip_git_repo_check is False
+    assert cfg.enable_commit_command is False
+    assert cfg.snapshot_text_file_max_bytes == 200000
     assert cfg.default_agent_provider == "codex"
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
@@ -35,3 +37,25 @@ def test_load_config_missing(monkeypatch):
 
     with pytest.raises(ValueError):
         load_config()
+
+
+def test_load_config_commit_command_enabled(monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("ENABLE_COMMIT_COMMAND", "true")
+
+    cfg = load_config()
+
+    assert cfg.enable_commit_command is True
+
+
+def test_load_config_snapshot_limit_override(monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("SNAPSHOT_TEXT_FILE_MAX_BYTES", "4096")
+
+    cfg = load_config()
+
+    assert cfg.snapshot_text_file_max_bytes == 4096

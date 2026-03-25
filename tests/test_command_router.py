@@ -4,7 +4,7 @@ import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
-from coding_agent_telegram.agent_runner import AgentRunResult
+from coding_agent_telegram.agent_runner import AgentRunResult, AgentStallInfo
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.session_store import SessionStore
@@ -15,7 +15,7 @@ class DummyRunner:
         self.create_calls = []
         self.resume_calls = []
 
-    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.create_calls.append(
             {
                 "provider": provider,
@@ -23,6 +23,7 @@ class DummyRunner:
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -33,7 +34,7 @@ class DummyRunner:
             raw_events=[],
         )
 
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -42,6 +43,7 @@ class DummyRunner:
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -54,7 +56,7 @@ class DummyRunner:
 
 
 class MarkdownRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -63,6 +65,7 @@ class MarkdownRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -75,7 +78,7 @@ class MarkdownRunner(DummyRunner):
 
 
 class CommandBlockRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -84,6 +87,7 @@ class CommandBlockRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -96,7 +100,7 @@ class CommandBlockRunner(DummyRunner):
 
 
 class SessionIdRotatingRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -105,6 +109,7 @@ class SessionIdRotatingRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -117,7 +122,7 @@ class SessionIdRotatingRunner(DummyRunner):
 
 
 class ResumeReplacementRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -126,6 +131,7 @@ class ResumeReplacementRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -138,7 +144,7 @@ class ResumeReplacementRunner(DummyRunner):
 
 
 class LongEscapedMarkdownRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=()):
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -147,6 +153,7 @@ class LongEscapedMarkdownRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "on_stall": on_stall,
             }
         )
         return AgentRunResult(
@@ -163,8 +170,8 @@ class FakeBot:
         self.messages = []
         self.actions = []
 
-    async def send_message(self, chat_id, text, parse_mode=None):
-        self.messages.append((chat_id, text, parse_mode))
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+        self.messages.append((chat_id, text, parse_mode, reply_markup))
 
     async def send_chat_action(self, chat_id, action):
         self.actions.append((chat_id, action))
@@ -284,6 +291,8 @@ def make_config(tmp_path: Path) -> AppConfig:
         codex_approval_policy="never",
         codex_sandbox_mode="workspace-write",
         codex_skip_git_repo_check=False,
+        enable_commit_command=False,
+        snapshot_text_file_max_bytes=200000,
         max_telegram_message_length=3000,
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
@@ -304,6 +313,36 @@ def test_project_command_rejects_path(tmp_path: Path):
     assert "Invalid project folder" in bot.messages[-1][1]
 
 
+def test_unauthorized_chat_is_ignored_silently(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(chat_id=999)
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert bot.messages == []
+
+
+def test_group_chat_is_ignored_silently(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(chat_type="group")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert bot.messages == []
+
+
 def test_project_command_creates_missing_folder(tmp_path: Path):
     runner = DummyRunner()
     cfg = make_config(tmp_path)
@@ -322,6 +361,25 @@ def test_project_command_creates_missing_folder(tmp_path: Path):
     assert "Project set: backend" in bot.messages[-1][1]
 
 
+def test_project_command_warns_when_existing_project_is_untrusted(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert bot.messages[-1][1] == "Do you trust this project?\nProject: <code>backend</code>"
+    assert bot.messages[-1][3] is not None
+    assert store.is_project_trusted("backend") is False
+
+
 def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -338,6 +396,7 @@ def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
     asyncio.run(router.handle_project(update, context))
 
     assert "Current branch: main" in bot.messages[-1][1]
+    assert "If <origin_branch> is not specified, the bot uses the default branch: main." in bot.messages[-1][1]
     assert "If you do not set one, the bot will work on the current branch: main" in bot.messages[-1][1]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "main"
 
@@ -359,6 +418,46 @@ def test_project_command_warns_when_active_session_belongs_to_another_project(tm
     assert "Warning: the current active session is bound to a different project." in message
     assert "Session project: backend" in message
     assert "Start a new session with /new" in message
+
+
+def test_trust_project_callback_marks_project_trusted(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    answers = []
+    edited = []
+    query = SimpleNamespace(
+        data="trustproject:yes:backend",
+        answer=lambda: answers.append("answered"),
+        edit_message_text=lambda text: edited.append(text),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="trustproject:yes:backend",
+            answer=(lambda: None),
+            edit_message_text=(lambda text: None),
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        answers.append("answered")
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert store.is_project_trusted("backend") is True
+    assert edited[-1] == "Project trusted: backend"
 
 
 def test_branch_command_requires_project_first(tmp_path: Path):
@@ -408,8 +507,8 @@ def test_branch_command_lists_branches_when_project_is_set(tmp_path: Path):
     assert "Project: backend" in message
     assert "Current branch: feature-1" in message
     assert "Default branch: main" in message
-    assert "* feature-1" in message
-    assert "- main" in message
+    assert "* feature-1 (current branch)" in message
+    assert "- main (default)" in message
     assert "/branch <new_branch>" in message
 
 
@@ -444,8 +543,8 @@ def test_branch_command_lists_branches_even_when_refresh_warns(tmp_path: Path):
     message = bot.messages[-1][1]
     assert "Refresh warnings:" in message
     assert "git pull failed for branch: feature-deleted-remote" in message
-    assert "* feature-deleted-remote" in message
-    assert "- main" in message
+    assert "* feature-deleted-remote (current branch)" in message
+    assert "- main (default)" in message
 
 
 def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: Path):
@@ -474,6 +573,80 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     assert "Created branch 'feature-1' from 'main'." in bot.messages[-1][1]
     assert "Current branch: feature-1" in bot.messages[-1][1]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
+
+
+def test_branch_command_switches_to_existing_branch(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.create_session("bot-a", 123, "sess_branch", "branch-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        prepare_result=SimpleNamespace(
+            success=True,
+            message="Switched to existing branch 'main'.",
+            current_branch="main",
+            default_branch="main",
+        )
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["main"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert "Switched to existing branch 'main'." in bot.messages[-1][1]
+    assert "Current branch: main" in bot.messages[-1][1]
+    state = store.get_chat_state("bot-a", 123)
+    assert state["current_branch"] == "main"
+    assert state["sessions"]["sess_branch"]["branch_name"] == "main"
+
+
+class StallingRunner(DummyRunner):
+    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+        if on_stall is not None:
+            on_stall(
+                AgentStallInfo(
+                    command=("codex", "exec"),
+                    elapsed_seconds=18.0,
+                    idle_seconds=18.0,
+                    seen_output=False,
+                    last_stderr="",
+                )
+            )
+        return super().create_session(
+            provider,
+            project_path,
+            user_message,
+            skip_git_repo_check=skip_git_repo_check,
+            image_paths=image_paths,
+            on_stall=on_stall,
+        )
+
+    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+        if on_stall is not None:
+            on_stall(
+                AgentStallInfo(
+                    command=("codex", "exec", "resume"),
+                    elapsed_seconds=18.0,
+                    idle_seconds=18.0,
+                    seen_output=False,
+                    last_stderr="",
+                )
+            )
+        return super().resume_session(
+            provider,
+            session_id,
+            project_path,
+            user_message,
+            skip_git_repo_check=skip_git_repo_check,
+            image_paths=image_paths,
+            on_stall=on_stall,
+        )
 
 
 def test_new_command_supports_copilot_provider(tmp_path: Path):
@@ -536,6 +709,25 @@ def test_new_command_rejects_duplicate_session_name(tmp_path: Path):
 
     assert runner.create_calls == []
     assert "Session name already exists: my-session" in bot.messages[-1][1]
+
+
+def test_new_command_reports_stalled_agent_process(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = StallingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert any("Session creation appears stuck." in message[1] for message in bot.messages)
+    assert any("hidden permission dialog" in message[1] for message in bot.messages)
 
 
 def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
@@ -878,6 +1070,26 @@ def test_invalid_resume_recovery_uses_next_available_suffix_for_new_session_name
     assert state["sessions"]["sess_abc123"]["name"] == "recover-session-2"
 
 
+def test_active_session_reports_stalled_agent_process(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = StallingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_stall", "stall-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="continue")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert any("The current agent run appears stuck." in message[1] for message in bot.messages)
+    assert any("hidden permission dialog" in message[1] for message in bot.messages)
+
+
 def test_assistant_output_is_chunked_by_rendered_html_length(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -921,6 +1133,7 @@ def _make_commit_router(tmp_path: Path, *, git_manager=None, trusted: bool = Tru
     backend.mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "enable_commit_command": True})
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.create_session("bot-a", 123, "sess_commit", "commit-session", "backend", "codex")
     if trusted:
@@ -976,6 +1189,22 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
     assert "[telegram-enhance 5b9a263] safe" in bot.messages[-1][1]
     assert "Ignored non-git commands:" in bot.messages[-1][1]
     assert "- rm -rf /" in bot.messages[-1][1]
+
+
+def test_commit_is_rejected_when_disabled(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_commit", "commit-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    bot = _run_commit_command(router, "/commit git status")
+
+    assert "/commit is disabled." in bot.messages[-1][1]
+    assert router.git.safe_git_commands == []
 
 
 def test_commit_rejects_git_global_option_prefix(tmp_path: Path):

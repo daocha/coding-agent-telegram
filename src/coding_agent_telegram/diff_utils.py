@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 INTERNAL_APP_DIR = ".coding-agent-telegram"
+TEXTUAL_DIFF_UNAVAILABLE = "Binary or large file changed; textual diff unavailable."
 
 
 @dataclass
@@ -30,12 +31,12 @@ def is_runtime_artifact_path(path: str) -> bool:
     return Path(normalized).suffix.lower() in {".log", ".out"}
 
 
-def _read_snapshot_text(file_path: Path) -> Optional[str]:
+def _read_snapshot_text(file_path: Path, *, max_text_file_bytes: int) -> Optional[str]:
     try:
         data = file_path.read_bytes()
     except OSError:
         return None
-    if len(data) > 200_000:
+    if len(data) > max_text_file_bytes:
         return None
     if b"\x00" in data:
         return None
@@ -45,7 +46,7 @@ def _read_snapshot_text(file_path: Path) -> Optional[str]:
         return None
 
 
-def snapshot_project_files(project_path: Path) -> dict[str, Optional[str]]:
+def snapshot_project_files(project_path: Path, *, max_text_file_bytes: int = 200_000) -> dict[str, Optional[str]]:
     snapshots: dict[str, Optional[str]] = {}
     for root, dirs, files in os.walk(project_path):
         dirs[:] = [
@@ -59,7 +60,7 @@ def snapshot_project_files(project_path: Path) -> dict[str, Optional[str]]:
             rel_path = file_path.relative_to(project_path).as_posix()
             if is_runtime_artifact_path(rel_path):
                 continue
-            snapshots[rel_path] = _read_snapshot_text(file_path)
+            snapshots[rel_path] = _read_snapshot_text(file_path, max_text_file_bytes=max_text_file_bytes)
     return snapshots
 
 
@@ -81,7 +82,7 @@ def collect_snapshot_diffs(
             continue
 
         if before_text is None and after_text is None:
-            results.append(FileDiff(path=path, diff="Binary or large file changed; textual diff unavailable."))
+            results.append(FileDiff(path=path, diff=TEXTUAL_DIFF_UNAVAILABLE))
             continue
 
         before_lines = [] if before_text is None else before_text.splitlines()
@@ -98,7 +99,7 @@ def collect_snapshot_diffs(
             )
         )
         if not diff:
-            diff = "Binary or large file changed; textual diff unavailable."
+            diff = TEXTUAL_DIFF_UNAVAILABLE
         results.append(FileDiff(path=path, diff=diff))
     return results
 

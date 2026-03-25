@@ -86,3 +86,11 @@ def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     assert "logs/coding-agent-telegram.log" not in snapshots
     assert "logs/readme.md" in snapshots
     assert "state.json" in snapshots
+
+
+def test_snapshot_project_files_respects_max_text_file_bytes(tmp_path: Path):
+    (tmp_path / "big.txt").write_text("x" * 20, encoding="utf-8")
+
+    snapshots = snapshot_project_files(tmp_path, max_text_file_bytes=10)
+
+    assert snapshots["big.txt"] is None

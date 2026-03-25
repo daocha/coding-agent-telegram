@@ -15,6 +15,7 @@ from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.diff_utils import (
     INTERNAL_APP_DIR,
+    TEXTUAL_DIFF_UNAVAILABLE,
     build_summary,
     changed_files,
     changed_files_from_snapshots,
@@ -164,7 +165,10 @@ class SessionRuntime:
             if not checkout:
                 return
 
-        before_snapshot = snapshot_project_files(project_path)
+        before_snapshot = snapshot_project_files(
+            project_path,
+            max_text_file_bytes=self.cfg.snapshot_text_file_max_bytes,
+        )
         before = set(changed_files(project_path))
         await send_text(update, context, "Working on it...")
         result = await self.run_with_typing(
@@ -177,6 +181,11 @@ class SessionRuntime:
             user_message,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
+            stall_message=(
+                "The current agent run appears stuck.\n"
+                "The local agent process is still running but has not produced output.\n"
+                "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+            ),
         )
         session_name = session["name"]
         result, active_id, session_name = await self._replace_invalid_session_if_needed(
@@ -298,6 +307,11 @@ class SessionRuntime:
             user_message,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
+            stall_message=(
+                "Replacement session creation appears stuck.\n"
+                "The local agent process is still running but has not produced output.\n"
+                "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+            ),
         )
         if not create_result.success or not create_result.session_id:
             return create_result, active_id, session_name
@@ -344,7 +358,10 @@ class SessionRuntime:
         before_snapshot: dict[str, str | None],
         before: set[str],
     ) -> None:
-        after_snapshot = snapshot_project_files(project_path)
+        after_snapshot = snapshot_project_files(
+            project_path,
+            max_text_file_bytes=self.cfg.snapshot_text_file_max_bytes,
+        )
         after = set(changed_files(project_path))
         snapshot_files = changed_files_from_snapshots(before_snapshot, after_snapshot)
         files = sorted((after - before).union(snapshot_files))
@@ -371,10 +388,13 @@ class SessionRuntime:
             return diffs
         merged_diffs = []
         for file_diff in diffs:
+            snapshot_diff = snapshot_diffs_by_path.get(file_diff.path)
+            if snapshot_diff is not None and snapshot_diff.diff != TEXTUAL_DIFF_UNAVAILABLE:
+                merged_diffs.append(snapshot_diff)
+                continue
             if file_diff.diff:
                 merged_diffs.append(file_diff)
                 continue
-            snapshot_diff = snapshot_diffs_by_path.get(file_diff.path)
             if snapshot_diff is not None:
                 merged_diffs.append(snapshot_diff)
             else:
