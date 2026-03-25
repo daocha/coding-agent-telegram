@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 
 import coding_agent_telegram.config as config_module
-from coding_agent_telegram.config import load_config
+from coding_agent_telegram.config import (
+    DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
+    DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
+    load_config,
+)
 
 
 def _isolate_env(monkeypatch, tmp_path):
