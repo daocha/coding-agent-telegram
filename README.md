@@ -252,7 +252,15 @@ GitHub documents these Copilot CLI approval controls here:
   If `true`, always bypass Codex's trusted-repo check.
   If `false`, existing third-party folders stay protected unless trusted by this app.
 
+- `ENABLE_COMMIT_COMMAND`
+  If `true`, enable the `/commit` Telegram command.
+  Default: `false`
+
 ### Telegram Behavior
+
+- `SNAPSHOT_TEXT_FILE_MAX_BYTES`
+  Maximum file size the bot will read as text when building the before/after snapshot for per-run diffs.
+  Default: `200000` bytes, about 200 KB
 
 - `MAX_TELEGRAM_MESSAGE_LENGTH`
   Max message size used before the app splits responses.
@@ -284,6 +292,9 @@ CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
 CODEX_SKIP_GIT_REPO_CHECK=false
 
+ENABLE_COMMIT_COMMAND=false
+
+SNAPSHOT_TEXT_FILE_MAX_BYTES=200000
 LOG_LEVEL=INFO
 LOG_DIR=./logs
 ```
@@ -291,7 +302,7 @@ LOG_DIR=./logs
 ## 🤖 Telegram Commands
 
 - `/project <project_folder>`
-  Set the current project folder. If the folder does not exist, the app creates it.
+  Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If the folder already exists and is still untrusted, the app reminds you to trust it explicitly.
 
 - `/new <session_name> [provider]`
   Create a new session for the current project.
@@ -315,7 +326,7 @@ LOG_DIR=./logs
   Show the active session for the current bot and chat.
 
 - `/commit <git commands>`
-  Run validated git commit-related commands inside the active session project. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message. Mutating git commands such as `add`, `restore`, and `rm` require the project to be trusted.
+  Run validated git commit-related commands inside the active session project. This command is available only when `ENABLE_COMMIT_COMMAND=true`. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message. Mutating git commands such as `add`, `restore`, and `rm` require the project to be trusted.
 
 - `/push`
   Push `origin <branch>` for the current active session. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
@@ -344,6 +355,18 @@ Each session stores:
 - timestamps
 - active session selection for that bot/chat scope
 
+During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot.
+
+Snapshot notes:
+
+- the app walks the project directory before and after the run
+- for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
+- `.git` and the app's internal runtime directory are skipped
+- binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
+- for huge projects, this extra scan can add noticeable I/O and memory overhead
+- if the snapshot cannot represent a file as text, the app falls back to git diff when possible
+- for large or non-text files, the diff may still be omitted and replaced with a short unavailable message
+
 ## 🌿 Branch Workflow
 
 If the selected project is a Git repository, `/project` reports the current branch and reminds you that:
@@ -366,7 +389,9 @@ The chosen branch is stored with the session, so switching sessions restores the
 
 - Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
 - Folders created through `/project <name>` are marked as trusted by this app
+- Existing folders selected through `/project <name>` remain untrusted until you confirm trust in the Telegram prompt
 - That means newly created project folders can be used immediately
+- `/commit` can be disabled entirely with `ENABLE_COMMIT_COMMAND`
 - Mutating `/commit` operations are allowed only for trusted projects
 
 ## 🪵 Logs

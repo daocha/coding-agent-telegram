@@ -1,17 +1,36 @@
+import io
 from pathlib import Path
-from types import SimpleNamespace
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 
 
+class FakePopen:
+    def __init__(self, stdout: str = "", stderr: str = "", returncode: int = 0):
+        self.stdout = io.StringIO(stdout)
+        self.stderr = io.StringIO(stderr)
+        self.returncode = returncode
+
+    def poll(self):
+        return self.returncode
+
+
+def make_fake_popen(
+    calls: list[tuple[list[str], Path | None, dict | None]],
+    *,
+    process_stdout: str = "",
+    process_stderr: str = "",
+    returncode: int = 0,
+):
+    def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None):
+        calls.append((args, cwd, env))
+        return FakePopen(stdout=process_stdout, stderr=process_stderr, returncode=returncode)
+
+    return fake_popen
+
+
 def test_codex_runner_skips_git_repo_check(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -31,12 +50,7 @@ def test_codex_runner_skips_git_repo_check(monkeypatch):
 
 def test_codex_runner_respects_git_repo_check_setting(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -52,12 +66,7 @@ def test_codex_runner_respects_git_repo_check_setting(monkeypatch):
 
 def test_codex_runner_resume_uses_resume_subcommand_shape(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -86,12 +95,10 @@ def test_codex_runner_resume_uses_resume_subcommand_shape(monkeypatch):
 
 def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout='{"sessionId":"sess_copilot"}\n', stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"sessionId":"sess_copilot"}\n'),
+    )
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -117,12 +124,10 @@ def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
 
 def test_copilot_runner_resume_uses_resume_flag(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout='{"threadId":"sess_copilot"}\n', stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"threadId":"sess_copilot"}\n'),
+    )
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -148,12 +153,7 @@ def test_copilot_runner_resume_uses_resume_flag(monkeypatch):
 
 def test_codex_runner_attaches_images_for_create_and_resume(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -189,12 +189,7 @@ def test_copilot_runner_rejects_image_attachments():
 
 def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -211,12 +206,7 @@ def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
 
 def test_codex_runner_passes_model_when_configured(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -233,12 +223,7 @@ def test_codex_runner_passes_model_when_configured(monkeypatch):
 
 def test_copilot_runner_passes_model_when_configured(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -264,12 +249,7 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
 
 def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
     calls = []
-
-    def fake_run(args, capture_output, text, check, cwd=None, env=None):
-        calls.append((args, cwd, env))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
         codex_bin="codex",

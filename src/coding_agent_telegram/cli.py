@@ -45,10 +45,17 @@ async def _run_polling_apps(apps: Sequence) -> None:
                 me.id,
                 me.first_name,
             )
-            await initialize_bot_commands(app)
+            enable_commit_command = bool(app.bot_data.get("enable_commit_command", False))
+            allowed_chat_ids = set(app.bot_data.get("allowed_chat_ids", set()))
+            await initialize_bot_commands(
+                app,
+                enable_commit_command=enable_commit_command,
+                allowed_chat_ids=allowed_chat_ids,
+            )
             logger.info(
-                "Registered %d Telegram commands for @%s",
-                len(default_bot_commands()),
+                "Registered %d Telegram commands for %d allowed chat(s) on @%s",
+                len(default_bot_commands(enable_commit_command=enable_commit_command)),
+                len(allowed_chat_ids),
                 me.username or "unknown",
             )
             await app.start()
@@ -72,7 +79,10 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
     apps = []
     for token in cfg.telegram_bot_tokens:
         router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id=_bot_id_from_token(token)))
-        apps.append(build_application(token, router))
+        app = build_application(token, router, allowed_chat_ids=cfg.allowed_chat_ids)
+        app.bot_data["enable_commit_command"] = cfg.enable_commit_command
+        app.bot_data["allowed_chat_ids"] = set(cfg.allowed_chat_ids)
+        apps.append(app)
 
     await _run_polling_apps(apps)
 

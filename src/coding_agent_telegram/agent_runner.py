@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import tempfile
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -18,9 +24,20 @@ class AgentRunResult:
     raw_events: list[dict]
 
 
+@dataclass(frozen=True)
+class AgentStallInfo:
+    command: tuple[str, ...]
+    elapsed_seconds: float
+    idle_seconds: float
+    seen_output: bool
+    last_stderr: str
+
+
 class MultiAgentRunner:
     """Runs supported local agent CLIs while preserving session behavior."""
 
+    STALL_WARNING_AFTER_SECONDS = 60.0
+    STALL_POLL_INTERVAL_SECONDS = 0.5
     PROMPT_PREFIX = (
         "Treat the current on-disk workspace as the source of truth. "
         "Re-read relevant files from disk before making claims or edits. "
@@ -122,13 +139,101 @@ class MultiAgentRunner:
 
         return session_id, success, assistant_text, error_message, events
 
-    def _run(self, args: list[str], *, cwd: Optional[Path] = None, env: Optional[dict[str, str]] = None) -> AgentRunResult:
-        proc = subprocess.run(args, capture_output=True, text=True, check=False, cwd=cwd, env=env)
-        session_id, parsed_success, assistant_text, error_message, events = self._parse_jsonl(proc.stdout)
+    def _run(
+        self,
+        args: list[str],
+        *,
+        cwd: Optional[Path] = None,
+        env: Optional[dict[str, str]] = None,
+        on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
+    ) -> AgentRunResult:
+        proc = subprocess.Popen(
+            args,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        stdout_chunks: list[str] = []
+        stderr_chunks: list[str] = []
+        state_lock = threading.Lock()
+        start_time = time.monotonic()
+        last_activity = start_time
+        seen_output = False
+        last_stderr = ""
+
+        def record_activity(chunk: str, *, is_stderr: bool) -> None:
+            nonlocal last_activity, seen_output, last_stderr
+            if not chunk:
+                return
+            with state_lock:
+                last_activity = time.monotonic()
+                seen_output = True
+                if is_stderr and chunk.strip():
+                    last_stderr = chunk.strip()
+
+        def read_stream(stream, chunks: list[str], *, is_stderr: bool) -> None:
+            try:
+                for line in iter(stream.readline, ""):
+                    chunks.append(line)
+                    record_activity(line, is_stderr=is_stderr)
+            finally:
+                stream.close()
+
+        stdout_thread = threading.Thread(
+            target=read_stream,
+            args=(proc.stdout, stdout_chunks),
+            kwargs={"is_stderr": False},
+            daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=read_stream,
+            args=(proc.stderr, stderr_chunks),
+            kwargs={"is_stderr": True},
+            daemon=True,
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+
+        stall_reported = False
+        while proc.poll() is None:
+            if on_stall and not stall_reported:
+                now = time.monotonic()
+                with state_lock:
+                    idle_seconds = now - last_activity
+                    seen_output_snapshot = seen_output
+                    last_stderr_snapshot = last_stderr
+                if idle_seconds >= self.STALL_WARNING_AFTER_SECONDS:
+                    stall_reported = True
+                    info = AgentStallInfo(
+                        command=tuple(args),
+                        elapsed_seconds=now - start_time,
+                        idle_seconds=idle_seconds,
+                        seen_output=seen_output_snapshot,
+                        last_stderr=last_stderr_snapshot,
+                    )
+                    logger.warning(
+                        "Agent command appears stalled after %.1fs without output: %s",
+                        info.idle_seconds,
+                        " ".join(args[:3]),
+                    )
+                    try:
+                        on_stall(info)
+                    except Exception:
+                        logger.exception("Agent stall callback failed.")
+            time.sleep(self.STALL_POLL_INTERVAL_SECONDS)
+
+        stdout_thread.join()
+        stderr_thread.join()
+        stdout = "".join(stdout_chunks)
+        stderr = "".join(stderr_chunks)
+        session_id, parsed_success, assistant_text, error_message, events = self._parse_jsonl(stdout)
 
         success = proc.returncode == 0 and parsed_success
         if not success and not error_message:
-            error_message = proc.stderr.strip() or "Agent command failed."
+            error_message = stderr.strip() or "Agent command failed."
 
         return AgentRunResult(
             session_id=session_id,
@@ -145,6 +250,7 @@ class MultiAgentRunner:
         cwd: Path,
         tail_args: int,
         env: Optional[dict[str, str]] = None,
+        on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
     ) -> AgentRunResult:
         with tempfile.NamedTemporaryFile(prefix="coding-agent-telegram-", suffix=".txt", delete=False) as handle:
             output_path = Path(handle.name)
@@ -155,6 +261,7 @@ class MultiAgentRunner:
                 [*args[:split_at], "--output-last-message", str(output_path), *args[split_at:]],
                 cwd=cwd,
                 env=env,
+                on_stall=on_stall,
             )
             if output_path.exists():
                 output_text = output_path.read_text(encoding="utf-8").strip()
@@ -274,6 +381,7 @@ class MultiAgentRunner:
         *,
         skip_git_repo_check: bool = False,
         image_paths: Sequence[Path] = (),
+        on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
     ) -> AgentRunResult:
         if provider == "codex":
             args = [
@@ -281,12 +389,17 @@ class MultiAgentRunner:
                 "exec",
                 *self._codex_base(project_path, user_message, skip_git_repo_check, image_paths),
             ]
-            return self._run_with_output_file(args, cwd=project_path, tail_args=1)
+            return self._run_with_output_file(args, cwd=project_path, tail_args=1, on_stall=on_stall)
         elif provider == "copilot":
             if image_paths:
                 return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
             args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check)]
-            return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
+            return self._run(
+                args,
+                cwd=project_path,
+                env=self._copilot_env(project_path, skip_git_repo_check),
+                on_stall=on_stall,
+            )
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
 
@@ -299,6 +412,7 @@ class MultiAgentRunner:
         *,
         skip_git_repo_check: bool = False,
         image_paths: Sequence[Path] = (),
+        on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
     ) -> AgentRunResult:
         if provider == "codex":
             args = [
@@ -307,11 +421,16 @@ class MultiAgentRunner:
                 "resume",
                 *self._codex_resume_args(session_id, user_message, skip_git_repo_check, image_paths),
             ]
-            return self._run_with_output_file(args, cwd=project_path, tail_args=2)
+            return self._run_with_output_file(args, cwd=project_path, tail_args=2, on_stall=on_stall)
         elif provider == "copilot":
             if image_paths:
                 return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
             args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message, skip_git_repo_check)]
-            return self._run(args, cwd=project_path, env=self._copilot_env(project_path, skip_git_repo_check))
+            return self._run(
+                args,
+                cwd=project_path,
+                env=self._copilot_env(project_path, skip_git_repo_check),
+                on_stall=on_stall,
+            )
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
