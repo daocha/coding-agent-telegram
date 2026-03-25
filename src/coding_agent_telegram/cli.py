@@ -17,6 +17,7 @@ from coding_agent_telegram.session_store import SessionStore
 
 
 logger = logging.getLogger(__name__)
+BOT_ID_HASH_PREFIX_LENGTH = 12
 
 
 def _ensure_env_file() -> Path:
@@ -30,7 +31,7 @@ def _ensure_env_file() -> Path:
 
 
 def _bot_id_from_token(token: str) -> str:
-    return f"bot-{hashlib.sha256(token.encode('utf-8')).hexdigest()[:12]}"
+    return f"bot-{hashlib.sha256(token.encode('utf-8')).hexdigest()[:BOT_ID_HASH_PREFIX_LENGTH]}"
 
 
 async def _run_polling_apps(apps: Sequence) -> None:
