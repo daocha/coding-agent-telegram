@@ -9,10 +9,12 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 
 logger = logging.getLogger(__name__)
+
+AssistantEvent = Union[dict[str, Any], list[Any], str]
 
 
 @dataclass
@@ -73,7 +75,7 @@ class MultiAgentRunner:
         self.copilot_deny_tools = tuple(tool.strip() for tool in copilot_deny_tools if tool.strip())
         self.copilot_available_tools = tuple(tool.strip() for tool in copilot_available_tools if tool.strip())
 
-    def _extract_assistant_text(self, event: object) -> str:
+    def _extract_assistant_text(self, event: AssistantEvent) -> str:
         if isinstance(event, str):
             return event
         if isinstance(event, list):

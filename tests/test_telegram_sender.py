@@ -32,7 +32,7 @@ def test_send_html_text_falls_back_to_plain_text_on_parse_error():
         async def send_message(self, chat_id, text, parse_mode=None):
             calls.append((chat_id, text, parse_mode))
             if len(calls) == 1:
-                raise BadRequest('Can\\'t parse entities: can\\'t find end tag corresponding to start tag "code"')
+                raise BadRequest("Can't parse entities: can't find end tag corresponding to start tag \"code\"")
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
     context = SimpleNamespace(bot=FakeBot())

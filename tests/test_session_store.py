@@ -114,3 +114,19 @@ def test_set_active_session_branch_updates_session_and_chat_state(tmp_path: Path
 
     sessions = store.list_sessions("bot-a", 123)
     assert sessions["sess_1"]["branch_name"] == "feature-2"
+
+
+def test_switch_session_returns_false_when_chat_state_is_missing(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    assert store.switch_session("bot-a", 123, "missing") is False
+
+
+def test_rebind_session_returns_false_when_chat_state_is_missing(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    assert store.rebind_session("bot-a", 123, "old", "new") is False

@@ -1,12 +1,36 @@
+from pathlib import Path
+
 import pytest
 
-from coding_agent_telegram.config import load_config
+from coding_agent_telegram.config import (
+    DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
+    DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
+    load_config,
+)
 
 
-def test_load_config_required(monkeypatch):
+def test_load_config_required(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
     monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a, token-b")
     monkeypatch.setenv("ALLOWED_CHAT_IDS", "123,456")
+    monkeypatch.setenv("CODEX_APPROVAL_POLICY", "never")
+    monkeypatch.setenv("CODEX_SANDBOX_MODE", "workspace-write")
+    monkeypatch.setenv("CODEX_SKIP_GIT_REPO_CHECK", "false")
+    monkeypatch.setenv("ENABLE_COMMIT_COMMAND", "false")
+    monkeypatch.setenv("SNAPSHOT_TEXT_FILE_MAX_BYTES", str(DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES))
+    monkeypatch.setenv("MAX_TELEGRAM_MESSAGE_LENGTH", str(DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH))
+    monkeypatch.setenv("DEFAULT_AGENT_PROVIDER", "codex")
+    monkeypatch.setenv("LOG_DIR", "./logs")
+    monkeypatch.setenv("CODEX_MODEL", "")
+    monkeypatch.setenv("COPILOT_MODEL", "")
+    monkeypatch.setenv("COPILOT_AUTOPILOT", "true")
+    monkeypatch.setenv("COPILOT_NO_ASK_USER", "true")
+    monkeypatch.setenv("COPILOT_ALLOW_ALL", "true")
+    monkeypatch.setenv("COPILOT_ALLOW_ALL_TOOLS", "false")
+    monkeypatch.setenv("COPILOT_ALLOW_TOOLS", "")
+    monkeypatch.setenv("COPILOT_DENY_TOOLS", "")
+    monkeypatch.setenv("COPILOT_AVAILABLE_TOOLS", "")
 
     cfg = load_config()
     assert cfg.workspace_root.name == "git"
@@ -16,7 +40,8 @@ def test_load_config_required(monkeypatch):
     assert cfg.codex_sandbox_mode == "workspace-write"
     assert cfg.codex_skip_git_repo_check is False
     assert cfg.enable_commit_command is False
-    assert cfg.snapshot_text_file_max_bytes == 200000
+    assert cfg.snapshot_text_file_max_bytes == DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
+    assert cfg.max_telegram_message_length == DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH
     assert cfg.default_agent_provider == "codex"
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
@@ -30,16 +55,18 @@ def test_load_config_required(monkeypatch):
     assert cfg.copilot_available_tools == ()
 
 
-def test_load_config_missing(monkeypatch):
-    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    monkeypatch.delenv("TELEGRAM_BOT_TOKENS", raising=False)
-    monkeypatch.delenv("ALLOWED_CHAT_IDS", raising=False)
+def test_load_config_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "")
 
     with pytest.raises(ValueError):
         load_config()
 
 
-def test_load_config_commit_command_enabled(monkeypatch):
+def test_load_config_commit_command_enabled(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
     monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
     monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
@@ -50,7 +77,8 @@ def test_load_config_commit_command_enabled(monkeypatch):
     assert cfg.enable_commit_command is True
 
 
-def test_load_config_snapshot_limit_override(monkeypatch):
+def test_load_config_snapshot_limit_override(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
     monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
     monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
