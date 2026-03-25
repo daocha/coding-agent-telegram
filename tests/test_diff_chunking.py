@@ -1,10 +1,15 @@
 from pathlib import Path
+import subprocess
 
 from coding_agent_telegram.diff_utils import (
     _parse_status_paths,
+    changed_files,
+    changed_files_from_snapshots,
     chunk_fenced_diff,
     chunk_plain_text,
-    is_runtime_artifact_path,
+    collect_diffs,
+    collect_snapshot_diffs,
+    is_snapshot_excluded_path,
     snapshot_project_files,
 )
 
@@ -64,12 +69,13 @@ def test_modified_javascript_file_uses_file_language():
     assert chunks[0].language == "javascript"
 
 
-def test_runtime_artifact_paths_are_ignored():
-    assert is_runtime_artifact_path("logs/coding-agent-telegram.log") is True
-    assert is_runtime_artifact_path("worker.out") is True
-    assert is_runtime_artifact_path("state.json") is False
-    assert is_runtime_artifact_path("logs/readme.md") is False
-    assert is_runtime_artifact_path("src/app.py") is False
+def test_snapshot_excluded_path_matches_generated_dirs_hidden_files_and_runtime_outputs():
+    assert is_snapshot_excluded_path("build/lib/pkg.py") is True
+    assert is_snapshot_excluded_path("node_modules/left-pad.js") is True
+    assert is_snapshot_excluded_path(".env") is True
+    assert is_snapshot_excluded_path("logs/coding-agent-telegram.log") is True
+    assert is_snapshot_excluded_path("worker.out") is True
+    assert is_snapshot_excluded_path("src/app.py") is False
 
 
 def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
@@ -112,6 +118,77 @@ def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     assert ".cache-loader/entry.js" not in snapshots
     assert "package.egg-info/PKG-INFO" not in snapshots
     assert "state.json" in snapshots
+
+
+def test_changed_files_excludes_snapshot_ignored_paths(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "artifact.txt").write_text("generated\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+
+    files = changed_files(tmp_path)
+
+    assert "src/app.py" in files
+    assert "build/artifact.txt" not in files
+    assert ".env" not in files
+
+
+def test_changed_files_from_snapshots_excludes_snapshot_ignored_paths():
+    before = {
+        "src/app.py": "print('before')\n",
+        "build/artifact.txt": None,
+        ".env": None,
+    }
+    after = {
+        "src/app.py": "print('after')\n",
+        "build/artifact.txt": "generated\n",
+        ".env": "SECRET=1\n",
+    }
+
+    files = changed_files_from_snapshots(before, after)
+
+    assert files == {"src/app.py"}
+
+
+def test_collect_snapshot_diffs_excludes_snapshot_ignored_paths():
+    before = {
+        "src/app.py": "print('before')\n",
+        "build/artifact.txt": None,
+        ".env": None,
+    }
+    after = {
+        "src/app.py": "print('after')\n",
+        "build/artifact.txt": "generated\n",
+        ".env": "SECRET=1\n",
+    }
+
+    diffs = collect_snapshot_diffs(before, after, ["src/app.py", "build/artifact.txt", ".env"])
+
+    assert [diff.path for diff in diffs] == ["src/app.py"]
+
+
+def test_collect_diffs_excludes_snapshot_ignored_paths(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('before')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "src/app.py"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    (tmp_path / "src" / "app.py").write_text("print('after')\n", encoding="utf-8")
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "artifact.txt").write_text("generated\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+
+    diffs = collect_diffs(tmp_path, ["src/app.py", "build/artifact.txt", ".env"])
+
+    assert [diff.path for diff in diffs] == ["src/app.py"]
 
 
 def test_snapshot_project_files_respects_max_text_file_bytes(tmp_path: Path):
