@@ -30,6 +30,8 @@ class AppConfig:
     codex_approval_policy: str
     codex_sandbox_mode: str
     codex_skip_git_repo_check: bool
+    enable_commit_command: bool
+    snapshot_text_file_max_bytes: int
     max_telegram_message_length: int
     enable_sensitive_diff_filter: bool
     default_agent_provider: str
@@ -102,6 +104,8 @@ def load_config() -> AppConfig:
         codex_approval_policy=os.getenv("CODEX_APPROVAL_POLICY", "never"),
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),
+        enable_commit_command=_parse_bool(os.getenv("ENABLE_COMMIT_COMMAND", "false")),
+        snapshot_text_file_max_bytes=int(os.getenv("SNAPSHOT_TEXT_FILE_MAX_BYTES", "200000")),
         max_telegram_message_length=int(os.getenv("MAX_TELEGRAM_MESSAGE_LENGTH", "3000")),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),
         default_agent_provider=provider,

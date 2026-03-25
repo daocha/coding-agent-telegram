@@ -130,6 +130,35 @@ class GitWorkspaceManager:
         if fetch.returncode != 0:
             return BranchOperationResult(False, fetch.stderr.strip() or "git fetch origin failed.")
 
+        existing = self._run(project_path, "show-ref", "--verify", f"refs/heads/{new_branch}")
+        if existing.returncode == 0:
+            checkout_existing = self._run(project_path, "checkout", new_branch)
+            if checkout_existing.returncode != 0:
+                return BranchOperationResult(
+                    False,
+                    checkout_existing.stderr.strip() or f"Failed to checkout branch: {new_branch}",
+                )
+
+            if new_branch == base_branch:
+                pull_existing = self._run(project_path, "pull", "--ff-only", "origin", new_branch)
+                if pull_existing.returncode != 0:
+                    return BranchOperationResult(
+                        False,
+                        pull_existing.stderr.strip() or f"git pull failed for branch: {new_branch}",
+                    )
+
+            message = (
+                f"Already on branch '{new_branch}'."
+                if current_branch == new_branch
+                else f"Switched to existing branch '{new_branch}'."
+            )
+            return BranchOperationResult(
+                True,
+                message,
+                current_branch=new_branch,
+                default_branch=default_branch,
+            )
+
         checkout_base = self._run(project_path, "checkout", base_branch)
         if checkout_base.returncode != 0:
             return BranchOperationResult(False, checkout_base.stderr.strip() or f"Failed to checkout base branch: {base_branch}")
@@ -137,10 +166,6 @@ class GitWorkspaceManager:
         pull = self._run(project_path, "pull", "--ff-only", "origin", base_branch)
         if pull.returncode != 0:
             return BranchOperationResult(False, pull.stderr.strip() or f"git pull failed for branch: {base_branch}")
-
-        existing = self._run(project_path, "show-ref", "--verify", f"refs/heads/{new_branch}")
-        if existing.returncode == 0:
-            return BranchOperationResult(False, f"Branch already exists: {new_branch}")
 
         create = self._run(project_path, "checkout", "-b", new_branch)
         if create.returncode != 0:

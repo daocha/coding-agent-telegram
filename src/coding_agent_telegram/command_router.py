@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -137,6 +137,10 @@ class CommandRouter:
         if chat is None:
             return await asyncio.to_thread(fn, *args, **kwargs)
 
+        stall_message = kwargs.pop("stall_message", None)
+        if stall_message:
+            kwargs["on_stall"] = self._make_stall_notifier(update, context, stall_message)
+
         stop_event = asyncio.Event()
         await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
 
@@ -155,15 +159,26 @@ class CommandRouter:
             stop_event.set()
             await typing_task
 
+    def _make_stall_notifier(self, update: Update, context: ContextTypes.DEFAULT_TYPE, message: str):
+        loop = asyncio.get_running_loop()
+
+        def notify(_info) -> None:
+            future = asyncio.run_coroutine_threadsafe(send_text(update, context, message), loop)
+            future.result(timeout=5)
+
+        return notify
+
 
     def _chat_allowed(self, update: Update) -> Tuple[bool, Optional[str]]:
         chat = update.effective_chat
         if chat is None:
             return False, "Chat is not available."
         if chat.id not in self.deps.cfg.allowed_chat_ids:
-            return False, "This chat is not allowed."
+            logger.info("Ignoring unauthorized chat %s of type '%s'.", chat.id, chat.type)
+            return False, None
         if chat.type != "private":
-            return False, "Group chats are not supported."
+            logger.info("Ignoring non-private chat %s of type '%s'.", chat.id, chat.type)
+            return False, None
         return True, None
 
     def _active_session_context(self, chat_id: int) -> tuple[Optional[str], Optional[dict[str, str]], Optional[Path]]:
@@ -458,7 +473,8 @@ class CommandRouter:
     async def handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         if len(context.args) != 1:
@@ -481,15 +497,19 @@ class CommandRouter:
         if path.exists() and not path.is_dir():
             await send_text(update, context, f"Project path exists but is not a directory: {folder}")
             return
+        project_created = False
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
             self.deps.store.trust_project(folder)
+            project_created = True
             logger.info("Created project folder '%s' for chat %s.", folder, update.effective_chat.id)
 
         self.deps.store.set_current_project_folder(self.deps.bot_id, chat_id, folder)
         branch_name = self.git.current_branch(path) if self.git.is_git_repo(path) else None
+        default_branch = self.git.default_branch(path) if self.git.is_git_repo(path) else None
         self.deps.store.set_current_branch(self.deps.bot_id, chat_id, branch_name)
         logger.info("Set current project to '%s' for chat %s.", folder, chat_id)
+        should_prompt_trust = not project_created and not self.deps.store.is_project_trusted(folder)
         warning_lines: list[str] = []
         if active_session and active_session.get("project_folder") != folder:
             warning_lines = [
@@ -499,6 +519,7 @@ class CommandRouter:
                 f"Current session: <b>{html.escape(active_session['name'])}</b>",
                 f"Session project: <code>{html.escape(active_session['project_folder'])}</code>",
                 "Start a new session with <code>/new</code> if you want to work in this newly selected project.",
+                *warning_lines,
             ]
         if branch_name:
             await send_html_text(
@@ -511,6 +532,8 @@ class CommandRouter:
                     f"Use <code>/branch &lt;new_branch&gt;</code> or "
                     f"<code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code> "
                     f"if you want a dedicated work branch.\n"
+                    f"If <code>&lt;origin_branch&gt;</code> is not specified, the bot uses the default branch: "
+                    f"<code>{html.escape(default_branch or branch_name)}</code>.\n"
                     f"If you do not set one, the bot will work on the current branch: "
                     f"<code>{html.escape(branch_name)}</code>"
                     f"{chr(10).join(warning_lines)}"
@@ -523,11 +546,63 @@ class CommandRouter:
                 context,
                 f"✅ <b>Project Set</b>\nProject: <code>{html.escape(folder)}</code>{suffix}",
             )
+        if should_prompt_trust and update.effective_chat is not None:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Yes", callback_data=f"trustproject:yes:{folder}"),
+                        InlineKeyboardButton("No", callback_data=f"trustproject:no:{folder}"),
+                    ]
+                ]
+            )
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"Do you trust this project?\nProject: <code>{html.escape(folder)}</code>",
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+
+    async def handle_trust_project_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        allowed, reason = self._chat_allowed(update)
+        query = update.callback_query
+        if query is None:
+            return
+        if not allowed:
+            await query.answer()
+            return
+
+        await query.answer()
+        payload = (query.data or "").split(":", 2)
+        if len(payload) != 3:
+            await query.edit_message_text("Invalid trust decision.")
+            return
+        _, decision, folder = payload
+        if decision not in {"yes", "no"} or not is_valid_project_folder(folder):
+            await query.edit_message_text("Invalid trust decision.")
+            return
+
+        chat_id = update.effective_chat.id
+        path = resolve_project_path(self.deps.cfg.workspace_root, folder)
+        if not path.exists() or not path.is_dir():
+            await query.edit_message_text(f"Project folder does not exist: {folder}")
+            return
+
+        if decision == "no":
+            await query.edit_message_text(f"Project left untrusted: {folder}")
+            return
+
+        if self.deps.store.is_project_trusted(folder):
+            await query.edit_message_text(f"Project is already trusted: {folder}")
+            return
+        self.deps.store.trust_project(folder)
+        logger.info("Trusted existing project folder '%s' for chat %s via inline confirmation.", folder, chat_id)
+        await query.edit_message_text(f"Project trusted: {folder}")
 
     async def handle_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         chat_id = update.effective_chat.id
@@ -569,7 +644,13 @@ class CommandRouter:
             if branches:
                 for branch in branches[:20]:
                     marker = "*" if branch == current_branch else "-"
-                    lines.append(f"{marker} {branch}")
+                    annotations: list[str] = []
+                    if branch == default_branch:
+                        annotations.append("default")
+                    if branch == current_branch:
+                        annotations.append("current branch")
+                    suffix = f" ({', '.join(annotations)})" if annotations else ""
+                    lines.append(f"{marker} {branch}{suffix}")
             else:
                 lines.append("- (none)")
             lines.extend(
@@ -625,7 +706,8 @@ class CommandRouter:
     async def handle_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         if len(context.args) < 1:
@@ -680,6 +762,11 @@ class CommandRouter:
             project_path,
             f"Create session: {session_name}",
             skip_git_repo_check=self.runtime.should_skip_git_repo_check(project_folder),
+            stall_message=(
+                "Session creation appears stuck.\n"
+                "The local agent process is still running but has not produced output.\n"
+                "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+            ),
         )
 
         if not result.success or not result.session_id:
@@ -717,7 +804,8 @@ class CommandRouter:
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         chat_id = update.effective_chat.id
@@ -787,7 +875,8 @@ class CommandRouter:
     async def handle_current(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         chat_id = update.effective_chat.id
@@ -822,7 +911,15 @@ class CommandRouter:
     async def handle_commit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
+            return
+        if not self.deps.cfg.enable_commit_command:
+            await send_text(
+                update,
+                context,
+                "/commit is disabled.\nSet ENABLE_COMMIT_COMMAND=true in the bot environment to enable it.",
+            )
             return
 
         if update.message is None or not update.message.text:
@@ -878,7 +975,8 @@ class CommandRouter:
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         if context.args:
@@ -922,7 +1020,8 @@ class CommandRouter:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         if update.message is None or not update.message.text:
@@ -932,7 +1031,8 @@ class CommandRouter:
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         if update.message is None or not update.message.photo:
@@ -966,7 +1066,8 @@ class CommandRouter:
     async def handle_unsupported_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         allowed, reason = self._chat_allowed(update)
         if not allowed:
-            await send_text(update, context, reason)
+            if reason:
+                await send_text(update, context, reason)
             return
 
         await send_text(
