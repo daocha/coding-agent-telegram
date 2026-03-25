@@ -1,5 +1,8 @@
+import coding_agent_telegram.diff_utils as diff_utils_module
 from pathlib import Path
 import subprocess
+
+import pytest
 
 from coding_agent_telegram.diff_utils import (
     _parse_status_paths,
@@ -12,6 +15,17 @@ from coding_agent_telegram.diff_utils import (
     is_snapshot_excluded_path,
     snapshot_project_files,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_snapshot_override_env(monkeypatch):
+    monkeypatch.delenv("SNAPSHOT_INCLUDE_PATH_GLOBS", raising=False)
+    monkeypatch.delenv("SNAPSHOT_EXCLUDE_PATH_GLOBS", raising=False)
+    diff_utils_module._snapshot_include_path_globs_from_env.cache_clear()
+    diff_utils_module._snapshot_exclude_path_globs_from_env.cache_clear()
+    yield
+    diff_utils_module._snapshot_include_path_globs_from_env.cache_clear()
+    diff_utils_module._snapshot_exclude_path_globs_from_env.cache_clear()
 
 
 def test_chunk_fenced_diff_limits():
@@ -69,12 +83,13 @@ def test_modified_javascript_file_uses_file_language():
     assert chunks[0].language == "javascript"
 
 
-def test_snapshot_excluded_path_matches_generated_dirs_hidden_files_and_runtime_outputs():
+def test_snapshot_excluded_path_matches_generated_dirs_and_runtime_outputs():
     assert is_snapshot_excluded_path("build/lib/pkg.py") is True
     assert is_snapshot_excluded_path("node_modules/left-pad.js") is True
-    assert is_snapshot_excluded_path(".env") is True
     assert is_snapshot_excluded_path("logs/coding-agent-telegram.log") is True
     assert is_snapshot_excluded_path("worker.out") is True
+    assert is_snapshot_excluded_path(".env") is False
+    assert is_snapshot_excluded_path(".github/workflows/ci.yml") is False
     assert is_snapshot_excluded_path("src/app.py") is False
 
 
@@ -106,9 +121,9 @@ def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     snapshots = snapshot_project_files(tmp_path)
 
     assert "src/app.py" in snapshots
-    assert ".github/workflows/ci.yml" not in snapshots
-    assert ".editorconfig" not in snapshots
-    assert ".env" not in snapshots
+    assert ".github/workflows/ci.yml" in snapshots
+    assert ".editorconfig" in snapshots
+    assert ".env" in snapshots
     assert "logs/coding-agent-telegram.log" not in snapshots
     assert "logs/readme.md" in snapshots
     assert ".pytest_cache/state" not in snapshots
@@ -132,19 +147,19 @@ def test_changed_files_excludes_snapshot_ignored_paths(tmp_path: Path):
 
     assert "src/app.py" in files
     assert "build/artifact.txt" not in files
-    assert ".env" not in files
+    assert ".env" in files
 
 
 def test_changed_files_from_snapshots_excludes_snapshot_ignored_paths():
     before = {
         "src/app.py": "print('before')\n",
         "build/artifact.txt": None,
-        ".env": None,
+        "worker.out": None,
     }
     after = {
         "src/app.py": "print('after')\n",
         "build/artifact.txt": "generated\n",
-        ".env": "SECRET=1\n",
+        "worker.out": "runtime\n",
     }
 
     files = changed_files_from_snapshots(before, after)
@@ -156,15 +171,15 @@ def test_collect_snapshot_diffs_excludes_snapshot_ignored_paths():
     before = {
         "src/app.py": "print('before')\n",
         "build/artifact.txt": None,
-        ".env": None,
+        "worker.out": None,
     }
     after = {
         "src/app.py": "print('after')\n",
         "build/artifact.txt": "generated\n",
-        ".env": "SECRET=1\n",
+        "worker.out": "runtime\n",
     }
 
-    diffs = collect_snapshot_diffs(before, after, ["src/app.py", "build/artifact.txt", ".env"])
+    diffs = collect_snapshot_diffs(before, after, ["src/app.py", "build/artifact.txt", "worker.out"])
 
     assert [diff.path for diff in diffs] == ["src/app.py"]
 
@@ -184,11 +199,31 @@ def test_collect_diffs_excludes_snapshot_ignored_paths(tmp_path: Path):
     (tmp_path / "src" / "app.py").write_text("print('after')\n", encoding="utf-8")
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "artifact.txt").write_text("generated\n", encoding="utf-8")
-    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (tmp_path / "worker.out").write_text("runtime\n", encoding="utf-8")
 
-    diffs = collect_diffs(tmp_path, ["src/app.py", "build/artifact.txt", ".env"])
+    diffs = collect_diffs(tmp_path, ["src/app.py", "build/artifact.txt", "worker.out"])
 
     assert [diff.path for diff in diffs] == ["src/app.py"]
+
+
+def test_snapshot_override_globs_can_hide_hidden_paths(monkeypatch):
+    monkeypatch.setenv("SNAPSHOT_EXCLUDE_PATH_GLOBS", ".*")
+    diff_utils_module._snapshot_exclude_path_globs_from_env.cache_clear()
+
+    assert is_snapshot_excluded_path(".env") is True
+    assert is_snapshot_excluded_path(".github/workflows/ci.yml") is True
+
+
+def test_snapshot_include_globs_override_exclude_globs(monkeypatch):
+    monkeypatch.setenv("SNAPSHOT_EXCLUDE_PATH_GLOBS", ".*")
+    monkeypatch.setenv("SNAPSHOT_INCLUDE_PATH_GLOBS", ".github/*,.profile.test,.profile.prod")
+    diff_utils_module._snapshot_include_path_globs_from_env.cache_clear()
+    diff_utils_module._snapshot_exclude_path_globs_from_env.cache_clear()
+
+    assert is_snapshot_excluded_path(".github/workflows/ci.yml") is False
+    assert is_snapshot_excluded_path(".profile.test") is False
+    assert is_snapshot_excluded_path(".profile.prod") is False
+    assert is_snapshot_excluded_path(".env") is True
 
 
 def test_snapshot_project_files_respects_max_text_file_bytes(tmp_path: Path):
