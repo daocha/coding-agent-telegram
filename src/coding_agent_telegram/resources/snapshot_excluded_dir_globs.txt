@@ -1,0 +1,30 @@
+# Hidden directories are excluded from snapshot diffs by default.
+.*
+
+# Generic cache and metadata directories.
+.*cache*
+*.egg-info
+*.xcworkspace
+*.xcodeproj
+
+# Python and notebook tooling.
+.hypothesis
+.ipynb_checkpoints
+
+# JavaScript and web tooling.
+.angular
+.aws-sam*
+.pnpm-*
+.yarn-*
+bower_components
+jspm_packages
+
+# Infrastructure and deployment tooling.
+.terraform*
+.serverless*
+
+# Mobile and other language ecosystems.
+.dart_tool
+.m2
+Carthage
+Pods

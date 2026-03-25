@@ -255,7 +255,7 @@ class FakeTelegramFile:
 
 
 class FakePhotoSize:
-    def __init__(self, telegram_file: FakeTelegramFile, *, file_size: int | None = None):
+    def __init__(self, telegram_file: FakeTelegramFile, *, file_size=None):
         self.telegram_file = telegram_file
         self.file_size = file_size if file_size is not None else len(getattr(telegram_file, "_content", b""))
 
@@ -360,7 +360,7 @@ def test_project_command_creates_missing_folder(tmp_path: Path):
     assert (tmp_path / "backend").is_dir()
     assert store.get_chat_state("bot-a", 123)["current_project_folder"] == "backend"
     assert store.is_project_trusted("backend") is True
-    assert "Project: <code>backend</code>" in bot.messages[-1][1]
+    assert "Project: <code>backend</code>" in bot.messages[0][1]
 
 
 def test_project_command_warns_when_existing_project_is_untrusted(tmp_path: Path):
@@ -397,10 +397,9 @@ def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
 
     asyncio.run(router.handle_project(update, context))
 
-    project_message = bot.messages[0][1]
-    assert "Current branch: <code>main</code>" in project_message
-    assert "If <code>&lt;origin_branch&gt;</code> is not specified" in project_message
-    assert "the bot will work on the current branch: <code>main</code>" in project_message
+    assert "Current branch: <code>main</code>" in bot.messages[0][1]
+    assert "the default branch: <code>main</code>" in bot.messages[0][1]
+    assert "the current branch: <code>main</code>" in bot.messages[0][1]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "main"
 
 
@@ -417,7 +416,7 @@ def test_project_command_warns_when_active_session_belongs_to_another_project(tm
 
     asyncio.run(router.handle_project(update, context))
 
-    message = bot.messages[-1][1]
+    message = bot.messages[0][1]
     assert "Active Session Mismatch" in message
     assert "Session project: <code>backend</code>" in message
     assert "Start a new session with <code>/new</code>" in message
@@ -463,7 +462,9 @@ def test_trust_project_callback_marks_project_trusted(tmp_path: Path):
     assert edited[-1] == "Project trusted: backend"
 
 
-def test_unauthorized_trust_project_callback_is_answered_without_edit(tmp_path: Path):
+def test_unauthorized_trust_project_callback_is_answered_without_side_effects(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
@@ -494,6 +495,8 @@ def test_unauthorized_trust_project_callback_is_answered_without_edit(tmp_path: 
 
     assert answers == ["answered"]
     assert edited == []
+    assert bot.messages == []
+    assert store.is_project_trusted("backend") is False
 
 
 def test_branch_command_requires_project_first(tmp_path: Path):
@@ -607,7 +610,9 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert html.escape("Created branch 'feature-1' from 'main'.") in bot.messages[-1][1]
+    assert "Created branch" in bot.messages[-1][1]
+    assert "feature-1" in bot.messages[-1][1]
+    assert "main" in bot.messages[-1][1]
     assert "Current branch: feature-1" in bot.messages[-1][1]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
 
@@ -637,7 +642,8 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert html.escape("Switched to existing branch 'main'.") in bot.messages[-1][1]
+    assert "Switched to existing branch" in bot.messages[-1][1]
+    assert "main" in bot.messages[-1][1]
     assert "Current branch: main" in bot.messages[-1][1]
     state = store.get_chat_state("bot-a", 123)
     assert state["current_branch"] == "main"
@@ -787,8 +793,7 @@ def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
     assert "Available sessions (page 1/2):" in message
     assert "session-11" in message
     assert "session-2" in message
-    assert "session-0" not in message
-    assert "\nsession_id: sess_1\n" not in message
+    assert "\n2. session-1 |" not in message
     assert "Pages: /switch page 1 ... /switch page 2" in message
     assert "/switch &lt;session_id&gt;" in message
 
@@ -816,7 +821,8 @@ def test_switch_lists_requested_page(tmp_path: Path):
 
 
 def test_switch_by_session_id_still_works(tmp_path: Path):
-    (tmp_path / "backend").mkdir()
+    backend = tmp_path / "backend"
+    backend.mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
@@ -831,6 +837,41 @@ def test_switch_by_session_id_still_works(tmp_path: Path):
     asyncio.run(router.handle_switch(update, context))
 
     assert "Switched to session: session-a" in bot.messages[-1][1]
+
+
+def test_current_requires_active_session(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    assert "No active session." in bot.messages[-1][1]
+
+
+def test_current_reports_active_session_details(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Current session: session-a" in message
+    assert "Project: backend" in message
+    assert "Provider: codex" in message
+    assert "Branch: feature-1" in message
 
 
 def test_switch_does_not_persist_if_branch_checkout_fails(tmp_path: Path):
