@@ -450,6 +450,14 @@ Typical logged events:
 - `pyproject.toml`
   Packaging and dependency configuration
 
+## 📦 Release Versioning
+
+Package versions are derived from Git tags.
+
+- TestPyPI/testing: `v2026.3.26.dev1`
+- PyPI prerelease: `v2026.3.26rc1`
+- PyPI stable: `v2026.3.26`
+
 ## 🛠️ Typical Local Flow
 
 ```bash
