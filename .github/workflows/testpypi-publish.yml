@@ -3,6 +3,7 @@
 name: Upload Python Package to TestPyPI
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*.dev*"
