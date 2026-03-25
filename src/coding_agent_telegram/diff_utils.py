@@ -7,7 +7,7 @@ import os
 import subprocess
 from functools import lru_cache
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from coding_agent_telegram.config import DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
@@ -69,11 +69,20 @@ def _should_exclude_snapshot_file(name: str) -> bool:
     return any(fnmatch.fnmatch(name, pattern) for pattern in _snapshot_excluded_file_globs())
 
 
-def is_runtime_artifact_path(path: str) -> bool:
-    normalized = path.strip().lstrip("./")
+def is_snapshot_excluded_path(path: str) -> bool:
+    normalized = path.strip().replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     if not normalized:
         return False
-    return Path(normalized).suffix.lower() in {".log", ".out"}
+
+    parts = [part for part in PurePosixPath(normalized).parts if part not in {"", "."}]
+    if not parts:
+        return False
+
+    if _should_exclude_snapshot_file(parts[-1]):
+        return True
+    return any(_should_exclude_snapshot_dir(part) for part in parts[:-1])
 
 
 def _read_snapshot_text(file_path: Path, *, max_text_file_bytes: int) -> Optional[str]:
@@ -98,26 +107,25 @@ def snapshot_project_files(
 ) -> dict[str, Optional[str]]:
     snapshots: dict[str, Optional[str]] = {}
     for root, dirs, files in os.walk(project_path):
-        dirs[:] = [
-            name
-            for name in dirs
-            if not _should_exclude_snapshot_dir(name) and not is_runtime_artifact_path(name)
-        ]
+        dirs[:] = [name for name in dirs if not _should_exclude_snapshot_dir(name)]
         root_path = Path(root)
         for file_name in files:
             if _should_exclude_snapshot_file(file_name):
                 continue
             file_path = root_path / file_name
             rel_path = file_path.relative_to(project_path).as_posix()
-            if is_runtime_artifact_path(rel_path):
-                continue
             snapshots[rel_path] = _read_snapshot_text(file_path, max_text_file_bytes=max_text_file_bytes)
     return snapshots
 
 
 def changed_files_from_snapshots(before: dict[str, Optional[str]], after: dict[str, Optional[str]]) -> set[str]:
     files = set(before) | set(after)
-    return {path for path in files if before.get(path) != after.get(path)}
+    return {
+        path
+        for path in files
+        if before.get(path) != after.get(path)
+        and not is_snapshot_excluded_path(path)
+    }
 
 
 def collect_snapshot_diffs(
@@ -127,6 +135,8 @@ def collect_snapshot_diffs(
 ) -> list[FileDiff]:
     results: list[FileDiff] = []
     for path in files:
+        if is_snapshot_excluded_path(path):
+            continue
         before_text = before.get(path)
         after_text = after.get(path)
         if before_text == after_text:
@@ -178,7 +188,8 @@ def changed_files(project_path: Path) -> list[str]:
     return [
         path
         for path in _parse_status_paths(output)
-        if not path.startswith(f"{INTERNAL_APP_DIR}/") and not is_runtime_artifact_path(path)
+        if not path.startswith(f"{INTERNAL_APP_DIR}/")
+        and not is_snapshot_excluded_path(path)
     ]
 
 
@@ -189,6 +200,8 @@ def _collect_diff_for_file(project_path: Path, path: str) -> str:
 def collect_diffs(project_path: Path, files: list[str]) -> list[FileDiff]:
     results: list[FileDiff] = []
     for path in files:
+        if is_snapshot_excluded_path(path):
+            continue
         diff = _collect_diff_for_file(project_path, path)
         results.append(FileDiff(path=path, diff=diff.strip()))
     return results
