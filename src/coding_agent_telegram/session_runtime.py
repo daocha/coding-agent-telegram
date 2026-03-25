@@ -12,7 +12,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
-from coding_agent_telegram.config import AppConfig
+from coding_agent_telegram.config import AppConfig, DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES
 from coding_agent_telegram.diff_utils import (
     INTERNAL_APP_DIR,
     TEXTUAL_DIFF_UNAVAILABLE,
@@ -38,19 +38,34 @@ from coding_agent_telegram.telegram_sender import (
 
 
 logger = logging.getLogger(__name__)
+PHOTO_ATTACHMENTS_DIR = "telegram_attachments"
 ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
+MISSING_PROJECT_MESSAGE = "⚠️ Project folder no longer exists for this session: {project_folder}"
+WORKING_MESSAGE = "Working on it..."
+PHOTO_TOO_LARGE_MESSAGE = "Photo is too large. The maximum supported size is 5 MB."
+IMAGE_INSPECTION_PROMPT = "Open and inspect that image before answering."
+IMAGE_NO_CAPTION_MESSAGE = "The user sent an image without additional text."
+ACTIVE_RUN_STALL_MESSAGE = (
+    "The current agent run appears stuck.\n"
+    "The local agent process is still running but has not produced output.\n"
+    "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+)
+REPLACEMENT_SESSION_STALL_MESSAGE = (
+    "Replacement session creation appears stuck.\n"
+    "The local agent process is still running but has not produced output.\n"
+    "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+)
 
 
 class PhotoAttachmentStore:
-    ATTACHMENTS_DIR = "telegram_attachments"
-    MAX_PHOTO_BYTES = 5 * 1024 * 1024  # Telegram photos are capped to keep local storage bounded.
+    MAX_PHOTO_BYTES = DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES  # Telegram photos are capped to keep local storage bounded.
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root
 
     def attachments_root(self, project_folder: str) -> Path:
         safe_project_folder = Path(project_folder).name
-        return self.workspace_root / INTERNAL_APP_DIR / self.ATTACHMENTS_DIR / safe_project_folder
+        return self.workspace_root / INTERNAL_APP_DIR / PHOTO_ATTACHMENTS_DIR / safe_project_folder
 
     async def store_photo(self, update: Update, project_folder: str) -> Path:
         if update.message is None or not update.message.photo:
@@ -59,12 +74,12 @@ class PhotoAttachmentStore:
         telegram_photo = update.message.photo[-1]
         declared_size = getattr(telegram_photo, "file_size", None)
         if isinstance(declared_size, int) and declared_size > self.MAX_PHOTO_BYTES:
-            raise ValueError("Photo is too large. The maximum supported size is 5 MB.")
+            raise ValueError(PHOTO_TOO_LARGE_MESSAGE)
 
         telegram_file = await telegram_photo.get_file()
         content = bytes(await telegram_file.download_as_bytearray())
         if len(content) > self.MAX_PHOTO_BYTES:
-            raise ValueError("Photo is too large. The maximum supported size is 5 MB.")
+            raise ValueError(PHOTO_TOO_LARGE_MESSAGE)
         suffix = Path(telegram_file.file_path or "image.jpg").suffix.lower() or ".jpg"
         if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
             suffix = ".jpg"
@@ -81,13 +96,13 @@ class PhotoAttachmentStore:
         rel_path = os.path.relpath(attachment_path, start=project_path).replace(os.sep, "/")
         lines = [
             f"An image is attached at {rel_path}.",
-            "Open and inspect that image before answering.",
+            IMAGE_INSPECTION_PROMPT,
         ]
         caption = caption.strip()
         if caption:
             lines.extend(["", "User caption:", caption])
         else:
-            lines.extend(["", "The user sent an image without additional text."])
+            lines.extend(["", IMAGE_NO_CAPTION_MESSAGE])
         return "\n".join(lines)
 
 
@@ -151,7 +166,7 @@ class SessionRuntime:
             await send_text(
                 update,
                 context,
-                f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+                MISSING_PROJECT_MESSAGE.format(project_folder=session["project_folder"]),
             )
             return None, None, None
         return active_id, session, project_path
@@ -191,7 +206,7 @@ class SessionRuntime:
             max_text_file_bytes=self.cfg.snapshot_text_file_max_bytes,
         )
         before = set(changed_files(project_path))
-        await send_text(update, context, "Working on it...")
+        await send_text(update, context, WORKING_MESSAGE)
         result = await self.run_with_typing(
             update,
             context,
@@ -202,11 +217,7 @@ class SessionRuntime:
             user_message,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
-            stall_message=(
-                "The current agent run appears stuck.\n"
-                "The local agent process is still running but has not produced output.\n"
-                "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
-            ),
+            stall_message=ACTIVE_RUN_STALL_MESSAGE,
         )
         session_name = session["name"]
         result, active_id, session_name = await self._replace_invalid_session_if_needed(
@@ -328,11 +339,7 @@ class SessionRuntime:
             user_message,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
-            stall_message=(
-                "Replacement session creation appears stuck.\n"
-                "The local agent process is still running but has not produced output.\n"
-                "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
-            ),
+            stall_message=REPLACEMENT_SESSION_STALL_MESSAGE,
         )
         if not create_result.success or not create_result.session_id:
             return create_result, active_id, session_name
