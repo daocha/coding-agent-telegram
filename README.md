@@ -75,7 +75,7 @@ cd coding-agent-telegram
 
 What `startup.sh` does:
 
-- creates `.env` from `.env.example` if missing
+- creates `.env` from `src/coding_agent_telegram/resources/.env.example` if missing
 - creates the state files if missing
 - creates `.venv` if missing
 - installs the package into the virtual environment
@@ -424,8 +424,8 @@ Typical logged events:
 - `startup.sh`
   Local bootstrap and startup entrypoint
 
-- `.env.example`
-  Environment template for repo users
+- `src/coding_agent_telegram/resources/.env.example`
+  Canonical environment template used by both repo startup and packaged installs
 
 - `pyproject.toml`
   Packaging and dependency configuration

@@ -15,6 +15,7 @@ resolve_path() {
 }
 
 ENV_FILE="${ENV_FILE:-.env}"
+ENV_TEMPLATE_FILE="${ENV_TEMPLATE_FILE:-src/coding_agent_telegram/resources/.env.example}"
 VENV_DIR="${VENV_DIR:-.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 STATE_FILE_DEFAULT="./state.json"
@@ -27,11 +28,11 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  if [[ -f ".env.example" ]]; then
-    cp ".env.example" "$ENV_FILE"
-    echo "Created $ENV_FILE from .env.example."
+  if [[ -f "$ENV_TEMPLATE_FILE" ]]; then
+    cp "$ENV_TEMPLATE_FILE" "$ENV_FILE"
+    echo "Created $ENV_FILE from $ENV_TEMPLATE_FILE."
   else
-    echo "Error: $ENV_FILE is missing and .env.example was not found." >&2
+    echo "Error: $ENV_FILE is missing and $ENV_TEMPLATE_FILE was not found." >&2
     exit 1
   fi
 fi
