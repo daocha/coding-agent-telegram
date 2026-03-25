@@ -59,6 +59,29 @@ def _snapshot_excluded_file_globs() -> tuple[str, ...]:
     )
 
 
+@lru_cache(maxsize=1)
+def _snapshot_include_path_globs_from_env() -> tuple[str, ...]:
+    raw = os.getenv("SNAPSHOT_INCLUDE_PATH_GLOBS", "").strip()
+    if not raw:
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+@lru_cache(maxsize=1)
+def _snapshot_exclude_path_globs_from_env() -> tuple[str, ...]:
+    raw = os.getenv("SNAPSHOT_EXCLUDE_PATH_GLOBS", "").strip()
+    if not raw:
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def _path_matches_patterns(path: str, patterns: tuple[str, ...]) -> bool:
+    if not patterns:
+        return False
+    name = path.split("/")[-1]
+    return any(fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(name, pattern) for pattern in patterns)
+
+
 def _should_exclude_snapshot_dir(name: str) -> bool:
     if name in _snapshot_excluded_dir_names():
         return True
@@ -79,6 +102,11 @@ def is_snapshot_excluded_path(path: str) -> bool:
     parts = [part for part in PurePosixPath(normalized).parts if part not in {"", "."}]
     if not parts:
         return False
+
+    if _path_matches_patterns(normalized, _snapshot_include_path_globs_from_env()):
+        return False
+    if _path_matches_patterns(normalized, _snapshot_exclude_path_globs_from_env()):
+        return True
 
     if _should_exclude_snapshot_file(parts[-1]):
         return True
@@ -107,13 +135,20 @@ def snapshot_project_files(
 ) -> dict[str, Optional[str]]:
     snapshots: dict[str, Optional[str]] = {}
     for root, dirs, files in os.walk(project_path):
-        dirs[:] = [name for name in dirs if not _should_exclude_snapshot_dir(name)]
         root_path = Path(root)
+        root_relative = "" if root_path == project_path else root_path.relative_to(project_path).as_posix()
+        dirs[:] = [
+            name
+            for name in dirs
+            if not is_snapshot_excluded_path(
+                f"{root_relative}/{name}/__snapshot_probe__" if root_relative else f"{name}/__snapshot_probe__"
+            )
+        ]
         for file_name in files:
-            if _should_exclude_snapshot_file(file_name):
-                continue
             file_path = root_path / file_name
             rel_path = file_path.relative_to(project_path).as_posix()
+            if is_snapshot_excluded_path(rel_path):
+                continue
             snapshots[rel_path] = _read_snapshot_text(file_path, max_text_file_bytes=max_text_file_bytes)
     return snapshots
 
