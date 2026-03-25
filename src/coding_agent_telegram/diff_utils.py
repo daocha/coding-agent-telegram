@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import difflib
+import fnmatch
+import importlib.resources
 import os
 import subprocess
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -22,6 +25,46 @@ class CodeChunk:
     header: str
     code: str
     language: Optional[str]
+
+
+@lru_cache(maxsize=1)
+def _snapshot_excluded_dir_names() -> frozenset[str]:
+    resource = importlib.resources.files("coding_agent_telegram").joinpath("resources/snapshot_excluded_dir_names.txt")
+    return frozenset(
+        line.strip()
+        for line in resource.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+
+
+@lru_cache(maxsize=1)
+def _snapshot_excluded_dir_globs() -> tuple[str, ...]:
+    resource = importlib.resources.files("coding_agent_telegram").joinpath("resources/snapshot_excluded_dir_globs.txt")
+    return tuple(
+        line.strip()
+        for line in resource.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+
+
+@lru_cache(maxsize=1)
+def _snapshot_excluded_file_globs() -> tuple[str, ...]:
+    resource = importlib.resources.files("coding_agent_telegram").joinpath("resources/snapshot_excluded_file_globs.txt")
+    return tuple(
+        line.strip()
+        for line in resource.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+
+
+def _should_exclude_snapshot_dir(name: str) -> bool:
+    if name in _snapshot_excluded_dir_names():
+        return True
+    return any(fnmatch.fnmatch(name, pattern) for pattern in _snapshot_excluded_dir_globs())
+
+
+def _should_exclude_snapshot_file(name: str) -> bool:
+    return any(fnmatch.fnmatch(name, pattern) for pattern in _snapshot_excluded_file_globs())
 
 
 def is_runtime_artifact_path(path: str) -> bool:
@@ -52,10 +95,12 @@ def snapshot_project_files(project_path: Path, *, max_text_file_bytes: int = 200
         dirs[:] = [
             name
             for name in dirs
-            if name not in {".git", INTERNAL_APP_DIR} and not is_runtime_artifact_path(name)
+            if not _should_exclude_snapshot_dir(name) and not is_runtime_artifact_path(name)
         ]
         root_path = Path(root)
         for file_name in files:
+            if _should_exclude_snapshot_file(file_name):
+                continue
             file_path = root_path / file_name
             rel_path = file_path.relative_to(project_path).as_posix()
             if is_runtime_artifact_path(rel_path):
@@ -299,9 +344,10 @@ def chunk_fenced_diff(file_path: str, diff_text: str, max_length: int) -> list[C
     total = len(chunks)
     out: list[CodeChunk] = []
     additions, deletions = _diff_stats(simplified)
+    language = _language_for_path(file_path) or None
     for index, chunk in enumerate(chunks, start=1):
         header = f"{file_path} (+{additions} -{deletions}) ({index}/{total})"
-        out.append(CodeChunk(header=header, code=chunk, language=None))
+        out.append(CodeChunk(header=header, code=chunk, language=language))
     return out
 
 

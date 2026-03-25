@@ -14,7 +14,7 @@ def test_chunk_fenced_diff_limits():
     chunks = chunk_fenced_diff("src/api.py", content, 3000)
     assert len(chunks) > 1
     for msg in chunks:
-        assert msg.language == "diff"
+        assert msg.language == "python"
         assert "src/api.py" in msg.header
         assert msg.code
 
@@ -49,7 +49,7 @@ def test_new_javascript_file_uses_language_code_block():
     assert "+const answer" not in chunks[0].code
 
 
-def test_modified_javascript_file_stays_diff_block():
+def test_modified_javascript_file_uses_file_language():
     diff = "\n".join(
         [
             "--- a/src/app.js",
@@ -61,7 +61,7 @@ def test_modified_javascript_file_stays_diff_block():
     )
     chunks = chunk_fenced_diff("src/app.js", diff, 3000)
     assert len(chunks) == 1
-    assert chunks[0].language == "diff"
+    assert chunks[0].language == "javascript"
 
 
 def test_runtime_artifact_paths_are_ignored():
@@ -75,16 +75,42 @@ def test_runtime_artifact_paths_are_ignored():
 def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "workflows").mkdir()
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text("name: ci\n", encoding="utf-8")
+    (tmp_path / ".editorconfig").write_text("root = true\n", encoding="utf-8")
     (tmp_path / "logs").mkdir()
     (tmp_path / "logs" / "coding-agent-telegram.log").write_text("runtime log\n", encoding="utf-8")
     (tmp_path / "logs" / "readme.md").write_text("keep me\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (tmp_path / ".pytest_cache").mkdir()
+    (tmp_path / ".pytest_cache" / "state").write_text("cache\n", encoding="utf-8")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "pyvenv.cfg").write_text("home=/tmp/python\n", encoding="utf-8")
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "node_modules" / "left-pad.js").write_text("module.exports = {};\n", encoding="utf-8")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "app.cpython-39.pyc").write_bytes(b"\x00pyc")
+    (tmp_path / ".cache-loader").mkdir()
+    (tmp_path / ".cache-loader" / "entry.js").write_text("cached\n", encoding="utf-8")
+    (tmp_path / "package.egg-info").mkdir()
+    (tmp_path / "package.egg-info" / "PKG-INFO").write_text("metadata\n", encoding="utf-8")
     (tmp_path / "state.json").write_text('{"active": true}\n', encoding="utf-8")
 
     snapshots = snapshot_project_files(tmp_path)
 
     assert "src/app.py" in snapshots
+    assert ".github/workflows/ci.yml" not in snapshots
+    assert ".editorconfig" not in snapshots
+    assert ".env" not in snapshots
     assert "logs/coding-agent-telegram.log" not in snapshots
     assert "logs/readme.md" in snapshots
+    assert ".pytest_cache/state" not in snapshots
+    assert ".venv/pyvenv.cfg" not in snapshots
+    assert "node_modules/left-pad.js" not in snapshots
+    assert "__pycache__/app.cpython-39.pyc" not in snapshots
+    assert ".cache-loader/entry.js" not in snapshots
+    assert "package.egg-info/PKG-INFO" not in snapshots
     assert "state.json" in snapshots
 
 
@@ -94,3 +120,35 @@ def test_snapshot_project_files_respects_max_text_file_bytes(tmp_path: Path):
     snapshots = snapshot_project_files(tmp_path, max_text_file_bytes=10)
 
     assert snapshots["big.txt"] is None
+
+
+def test_snapshot_project_files_excludes_diverse_generated_directories(tmp_path: Path):
+    kept_paths = {
+        "docs/guide.md": "# Guide\n",
+        "src/app.ts": "export const ok = true;\n",
+    }
+    excluded_paths = {
+        ".terraform/state.tfstate": "state\n",
+        ".serverless/output.yml": "service: api\n",
+        ".aws-sam/template.yaml": "Resources: {}\n",
+        ".dart_tool/package_config.json": "{}\n",
+        ".m2/settings.xml": "<settings/>\n",
+        ".hypothesis/examples.txt": "cached\n",
+        ".ipynb_checkpoints/notebook.ipynb": "{}\n",
+        "bower_components/jquery.js": "window.$ = {};\n",
+        "jspm_packages/pkg.js": "export {};\n",
+        "Carthage/Build/iOS/App.framework": "binary-ish\n",
+        "Pods/Manifest.lock": "PODS:\n",
+    }
+
+    for rel_path, content in {**kept_paths, **excluded_paths}.items():
+        file_path = tmp_path / rel_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
+
+    snapshots = snapshot_project_files(tmp_path)
+
+    for rel_path in kept_paths:
+        assert rel_path in snapshots
+    for rel_path in excluded_paths:
+        assert rel_path not in snapshots
