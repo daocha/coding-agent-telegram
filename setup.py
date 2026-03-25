@@ -13,7 +13,7 @@ POST_INSTALL_GUIDE = """
 
 Post-installation guide for coding-agent-telegram:
 1. Run ./startup.sh
-2. If .env does not exist, the script will create it from .env.example
+2. If .env does not exist, the script will create it from src/coding_agent_telegram/resources/.env.example
 3. Edit .env and set WORKSPACE_ROOT, TELEGRAM_BOT_TOKENS, and ALLOWED_CHAT_IDS
 4. Re-run ./startup.sh to start the server
 5. In Telegram, use /project <folder> and then /new <session_name> [provider]
