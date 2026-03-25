@@ -355,13 +355,14 @@ Each session stores:
 - timestamps
 - active session selection for that bot/chat scope
 
-During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot.
+## ⚠️ Diff (file changes)
+_During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
 
-Snapshot notes:
+**Snapshot notes:**
 
 - the app walks the project directory before and after the run
 - for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
-- hidden files and hidden directories are skipped by the snapshot walker by default
+- `hidden files` and `hidden directories` are skipped by the snapshot walker by default, git-head diff will be used instead
 - common dependency, cache, and runtime directories are also skipped
 - binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
 - for huge projects, this extra scan can add noticeable I/O and memory overhead
