@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+"""Application configuration loading and shared default limits."""
+
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
+DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
+DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -64,6 +70,7 @@ def _parse_bot_tokens() -> tuple[str, ...]:
 
 
 def load_config() -> AppConfig:
+    """Load application configuration from the environment and `.env`."""
     load_dotenv()
 
     workspace_root_raw = os.getenv("WORKSPACE_ROOT")
@@ -105,8 +112,12 @@ def load_config() -> AppConfig:
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),
         enable_commit_command=_parse_bool(os.getenv("ENABLE_COMMIT_COMMAND", "false")),
-        snapshot_text_file_max_bytes=int(os.getenv("SNAPSHOT_TEXT_FILE_MAX_BYTES", "200000")),
-        max_telegram_message_length=int(os.getenv("MAX_TELEGRAM_MESSAGE_LENGTH", "3000")),
+        snapshot_text_file_max_bytes=int(
+            os.getenv("SNAPSHOT_TEXT_FILE_MAX_BYTES", str(DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES))
+        ),
+        max_telegram_message_length=int(
+            os.getenv("MAX_TELEGRAM_MESSAGE_LENGTH", str(DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH))
+        ),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),
         default_agent_provider=provider,
     )

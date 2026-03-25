@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from coding_agent_telegram.config import DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
+
 INTERNAL_APP_DIR = ".coding-agent-telegram"
 TEXTUAL_DIFF_UNAVAILABLE = "Binary or large file changed; textual diff unavailable."
 
@@ -89,7 +91,11 @@ def _read_snapshot_text(file_path: Path, *, max_text_file_bytes: int) -> Optiona
         return None
 
 
-def snapshot_project_files(project_path: Path, *, max_text_file_bytes: int = 200_000) -> dict[str, Optional[str]]:
+def snapshot_project_files(
+    project_path: Path,
+    *,
+    max_text_file_bytes: int = DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
+) -> dict[str, Optional[str]]:
     snapshots: dict[str, Optional[str]] = {}
     for root, dirs, files in os.walk(project_path):
         dirs[:] = [
@@ -284,11 +290,8 @@ def _extract_new_file_content(diff_text: str) -> str:
     return "\n".join(lines).strip("\n")
 
 
-def _chunk_code_block(file_path: str, code_text: str, max_length: int) -> list[CodeChunk]:
-    language = _language_for_path(file_path)
-    body_limit = max(400, max_length - 128)
-    lines = code_text.splitlines()
-
+def _split_text_chunks(text: str, *, body_limit: int) -> list[str]:
+    lines = text.splitlines()
     chunks: list[str] = []
     current: list[str] = []
     current_len = 0
@@ -305,6 +308,13 @@ def _chunk_code_block(file_path: str, code_text: str, max_length: int) -> list[C
 
     if current:
         chunks.append("\n".join(current))
+    return chunks
+
+
+def _chunk_code_block(file_path: str, code_text: str, max_length: int) -> list[CodeChunk]:
+    language = _language_for_path(file_path)
+    body_limit = max(400, max_length - 128)
+    chunks = _split_text_chunks(code_text, body_limit=body_limit)
 
     total = len(chunks)
     out: list[CodeChunk] = []
@@ -322,24 +332,7 @@ def chunk_fenced_diff(file_path: str, diff_text: str, max_length: int) -> list[C
     if not simplified:
         return []
     body_limit = max(400, max_length - 128)
-    lines = simplified.splitlines()
-
-    chunks: list[str] = []
-    current: list[str] = []
-    current_len = 0
-
-    for line in lines:
-        candidate_len = current_len + len(line) + 1
-        if current and candidate_len > body_limit:
-            chunks.append("\n".join(current))
-            current = [line]
-            current_len = len(line) + 1
-        else:
-            current.append(line)
-            current_len = candidate_len
-
-    if current:
-        chunks.append("\n".join(current))
+    chunks = _split_text_chunks(simplified, body_limit=body_limit)
 
     total = len(chunks)
     out: list[CodeChunk] = []
@@ -357,24 +350,7 @@ def chunk_plain_text(title: str, text: str, max_length: int) -> list[str]:
         return []
 
     body_limit = max(500, max_length - len(title) - 16)
-    lines = normalized.splitlines() or [normalized]
-
-    chunks: list[str] = []
-    current: list[str] = []
-    current_len = 0
-
-    for line in lines:
-        candidate_len = current_len + len(line) + 1
-        if current and candidate_len > body_limit:
-            chunks.append("\n".join(current))
-            current = [line]
-            current_len = len(line) + 1
-        else:
-            current.append(line)
-            current_len = candidate_len
-
-    if current:
-        chunks.append("\n".join(current))
+    chunks = _split_text_chunks(normalized, body_limit=body_limit)
 
     total = len(chunks)
     return [f"{title} ({index}/{total})\n{chunk}" for index, chunk in enumerate(chunks, start=1)]

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import html
 import shlex
@@ -1032,6 +1034,30 @@ def test_photo_message_rejected_when_downloaded_size_exceeds_limit(tmp_path: Pat
     assert bot.messages[-1][1] == "Photo is too large. The maximum supported size is 5 MB."
 
 
+def test_photo_message_reports_missing_project_folder_before_storing_attachment(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    backend.rmdir()
+
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="look"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls == []
+    assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
+
+
 def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -1053,6 +1079,63 @@ def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
     assert "[agent_runner.py](" not in codex_message[1]
     assert "<code>agent_runner.py</code>" in codex_message[1]
     assert "<code>config.py</code>" in codex_message[1]
+
+
+def test_message_reports_missing_project_folder_before_running_agent(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    backend.rmdir()
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls == []
+    assert bot.messages[-1][1] == "⚠️ Project folder no longer exists for this session: backend"
+
+
+def test_current_reports_missing_active_session(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/current")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    assert bot.messages[-1][1] == "No active session.\nPlease run /project and /new first."
+
+
+def test_current_reports_active_session_details(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/current")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    assert "Current session: current-session" in bot.messages[-1][1]
+    assert "Project: backend" in bot.messages[-1][1]
+    assert "Provider: codex" in bot.messages[-1][1]
+    assert "Branch: feature-1" in bot.messages[-1][1]
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
