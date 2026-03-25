@@ -6,7 +6,7 @@ import html
 import logging
 from pathlib import Path
 import os
-from typing import Awaitable, Callable, Sequence
+from typing import Awaitable, Callable, Optional, Sequence
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -38,11 +38,12 @@ from coding_agent_telegram.telegram_sender import (
 
 
 logger = logging.getLogger(__name__)
+ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
 
 
 class PhotoAttachmentStore:
     ATTACHMENTS_DIR = "telegram_attachments"
-    MAX_PHOTO_BYTES = 5 * 1024 * 1024
+    MAX_PHOTO_BYTES = 5 * 1024 * 1024  # Telegram photos are capped to keep local storage bounded.
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root
@@ -127,6 +128,34 @@ class SessionRuntime:
     def should_skip_git_repo_check(self, project_folder: str) -> bool:
         return self.cfg.codex_skip_git_repo_check or self.store.is_project_trusted(project_folder)
 
+    async def _active_session_or_notify(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> tuple[Optional[str], Optional[dict[str, str]], Optional[Path]]:
+        """Load the active session and ensure its project folder still exists."""
+        chat_id = update.effective_chat.id
+        chat_state = self.store.get_chat_state(self.bot_id, chat_id)
+        active_id = chat_state.get("active_session_id")
+        if not active_id:
+            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            return None, None, None
+
+        session = chat_state.get("sessions", {}).get(active_id)
+        if not session:
+            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            return None, None, None
+
+        project_path = resolve_project_path(self.cfg.workspace_root, session["project_folder"])
+        if not project_path.exists() or not project_path.is_dir():
+            await send_text(
+                update,
+                context,
+                f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+            )
+            return None, None, None
+        return active_id, session, project_path
+
     async def run_active_session(
         self,
         update: Update,
@@ -136,20 +165,12 @@ class SessionRuntime:
         image_paths: Sequence[Path] = (),
     ) -> None:
         chat_id = update.effective_chat.id
-        chat_state = self.store.get_chat_state(self.bot_id, chat_id)
-        active_id = chat_state.get("active_session_id")
-        if not active_id:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
-            return
-
-        session = chat_state.get("sessions", {}).get(active_id)
-        if not session:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
+        active_id, session, project_path = await self._active_session_or_notify(update, context)
+        if active_id is None or session is None or project_path is None:
             return
 
         project_folder = session["project_folder"]
         provider = session.get("provider", "codex")
-        project_path = resolve_project_path(self.cfg.workspace_root, project_folder)
         branch_name = session.get("branch_name", "")
         logger.info(
             "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'.",

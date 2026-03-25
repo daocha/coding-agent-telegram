@@ -6,8 +6,9 @@ import logging
 import os
 import shlex
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Awaitable, Callable, Optional, Tuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
@@ -16,13 +17,35 @@ from telegram.ext import ContextTypes
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.filters import is_valid_project_folder, resolve_project_path
-from coding_agent_telegram.git_utils import GitWorkspaceManager
+from coding_agent_telegram.git_utils import GitWorkspaceManager, _sanitize_git_output
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
 from coding_agent_telegram.telegram_sender import send_html_text, send_text
 
 
 logger = logging.getLogger(__name__)
+TYPING_REFRESH_TIMEOUT_SECONDS = 4
+ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
+
+
+def require_allowed_chat(*, answer_callback: bool = False):
+    """Skip handler execution when the incoming chat is not authorized for this bot."""
+
+    def decorator(handler: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[None]]:
+        @wraps(handler)
+        async def wrapper(self: "CommandRouter", update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            allowed, reason = self._chat_allowed(update)
+            if not allowed:
+                if answer_callback and update.callback_query is not None:
+                    await update.callback_query.answer()
+                elif reason:
+                    await send_text(update, context, reason)
+                return
+            await handler(self, update, context)
+
+        return wrapper
+
+    return decorator
 
 
 @dataclass
@@ -148,7 +171,7 @@ class CommandRouter:
             while not stop_event.is_set():
                 await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
                 try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=4)
+                    await asyncio.wait_for(stop_event.wait(), timeout=TYPING_REFRESH_TIMEOUT_SECONDS)
                 except asyncio.TimeoutError:
                     continue
 
@@ -192,7 +215,41 @@ class CommandRouter:
         project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
         return active_id, session, project_path
 
+    async def _active_session_or_notify(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> tuple[Optional[str], Optional[dict[str, str]]]:
+        """Load the active session for the current chat or send the standard setup prompt."""
+        chat_id = update.effective_chat.id
+        active_id, session, _ = self._active_session_context(chat_id)
+        if session is None:
+            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            return None, None
+        return active_id, session
+
+    async def _active_session_project_or_notify(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        require_git_repo: bool = False,
+    ) -> tuple[Optional[dict[str, str]], Optional[Path]]:
+        """Resolve the active session project and perform the common existence checks."""
+        chat_id = update.effective_chat.id
+        _, session, project_path = self._active_session_context(chat_id)
+        if session is None or project_path is None:
+            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            return None, None
+        if not await self._ensure_session_project_exists(update, context, session, project_path):
+            return None, None
+        if require_git_repo and not self.git.is_git_repo(project_path):
+            await send_text(update, context, "⚠️ Current project is not a git repository.")
+            return None, None
+        return session, project_path
+
     def _split_shell_commands(self, raw: str) -> list[str]:
+        """Split shell-like input into independent command segments without executing it."""
         commands: list[str] = []
         current: list[str] = []
         quote: Optional[str] = None
@@ -246,6 +303,7 @@ class CommandRouter:
         return commands
 
     def _validated_commit_commands(self, raw: str) -> tuple[list[list[str]], list[str]]:
+        """Return validated `git` commit subcommands plus ignored raw segments."""
         valid: list[list[str]] = []
         ignored: list[str] = []
         for segment in self._split_shell_commands(raw):
@@ -271,6 +329,7 @@ class CommandRouter:
 
     @classmethod
     def _extract_commit_path_args(cls, subcommand: str, args: list[str]) -> list[str]:
+        """Extract path operands from a validated git subcommand argument list."""
         paths: list[str] = []
         index = 0
         after_double_dash = False
@@ -309,6 +368,7 @@ class CommandRouter:
 
     @staticmethod
     def _path_within_project(project_path: Path, token: str) -> bool:
+        """Validate that a commit-path token stays within the current project boundary."""
         if not token:
             return False
         if token.startswith(":(") or token.startswith(":/"):
@@ -327,6 +387,7 @@ class CommandRouter:
 
     @classmethod
     def _commands_use_only_project_paths(cls, project_path: Path, commands: list[list[str]]) -> bool:
+        """Ensure every path argument in validated commands is relative to the project root."""
         for args in commands:
             if not args:
                 return False
@@ -337,6 +398,7 @@ class CommandRouter:
 
     @classmethod
     def _requires_trusted_project(cls, commands: list[list[str]]) -> bool:
+        """Report whether any validated command mutates tracked content."""
         return any(args and args[0] in cls.TRUST_REQUIRED_COMMIT_SUBCOMMANDS for args in commands)
 
     @staticmethod
@@ -350,11 +412,14 @@ class CommandRouter:
 
     @staticmethod
     def _git_result_output(result) -> str:
-        parts = [part for part in (getattr(result, "stdout", ""), getattr(result, "stderr", "")) if part]
+        stdout = getattr(result, "stdout", "")
+        stderr = getattr(result, "stderr", "")
+        parts = [_sanitize_git_output(part) for part in (stdout, stderr) if part]
         if parts:
             return "\n".join(parts)
         message = getattr(result, "message", "")
-        return message if not getattr(result, "success", False) and message else "[Completed]"
+        sanitized_message = _sanitize_git_output(message) if message else ""
+        return sanitized_message if not getattr(result, "success", False) and sanitized_message else "[Completed]"
 
     @classmethod
     def _effective_git_args(cls, args: list[str]) -> list[str]:
@@ -404,6 +469,7 @@ class CommandRouter:
 
     @classmethod
     def _has_only_safe_commit_args(cls, subcommand: str, args: list[str]) -> bool:
+        """Allow only explicitly whitelisted flags and value-taking options for `/commit`."""
         rules = cls.SAFE_COMMIT_OPTION_RULES.get(subcommand)
         if rules is None:
             return False
@@ -470,13 +536,8 @@ class CommandRouter:
         )
         return False
 
+    @require_allowed_chat()
     async def handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         if len(context.args) != 1:
             await send_text(update, context, "Usage: /project <project_folder>\nExample: /project backend")
             return
@@ -562,13 +623,10 @@ class CommandRouter:
                 reply_markup=keyboard,
             )
 
+    @require_allowed_chat(answer_callback=True)
     async def handle_trust_project_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
         query = update.callback_query
         if query is None:
-            return
-        if not allowed:
-            await query.answer()
             return
 
         await query.answer()
@@ -598,13 +656,8 @@ class CommandRouter:
         logger.info("Trusted existing project folder '%s' for chat %s via inline confirmation.", folder, chat_id)
         await query.edit_message_text(f"Project trusted: {folder}")
 
+    @require_allowed_chat()
     async def handle_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         chat_id = update.effective_chat.id
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
@@ -703,13 +756,8 @@ class CommandRouter:
             f"{result.message}\nCurrent branch: {result.current_branch}",
         )
 
+    @require_allowed_chat()
     async def handle_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         if len(context.args) < 1:
             await send_text(update, context, "Usage: /new <session_name> [provider]\nExample: /new backend-fix codex")
             return
@@ -801,13 +849,8 @@ class CommandRouter:
             ),
         )
 
+    @require_allowed_chat()
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         chat_id = update.effective_chat.id
         sessions = self.deps.store.list_sessions(self.deps.bot_id, chat_id)
         active = self.deps.store.get_chat_state(self.deps.bot_id, chat_id).get("active_session_id")
@@ -872,23 +915,11 @@ class CommandRouter:
             f"Switched to session: {html.escape(session['name'])}\nProject: <code>{html.escape(session['project_folder'])}</code>\nProvider: {html.escape(session.get('provider', 'codex'))}\nBranch: {html.escape(branch_name or '(current branch)')}",
         )
 
+    @require_allowed_chat()
     async def handle_current(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         chat_id = update.effective_chat.id
-        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
-        active_id = chat_state.get("active_session_id")
-        if not active_id:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
-            return
-
-        session = chat_state.get("sessions", {}).get(active_id)
-        if not session:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
+        active_id, session = await self._active_session_or_notify(update, context)
+        if active_id is None or session is None:
             return
 
         logger.info(
@@ -908,12 +939,8 @@ class CommandRouter:
             ),
         )
 
+    @require_allowed_chat()
     async def handle_commit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
         if not self.deps.cfg.enable_commit_command:
             await send_text(
                 update,
@@ -932,14 +959,12 @@ class CommandRouter:
             return
 
         chat_id = update.effective_chat.id
-        _, session, project_path = self._active_session_context(chat_id)
+        session, project_path = await self._active_session_project_or_notify(
+            update,
+            context,
+            require_git_repo=True,
+        )
         if session is None or project_path is None:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
-            return
-        if not await self._ensure_session_project_exists(update, context, session, project_path):
-            return
-        if not self.git.is_git_repo(project_path):
-            await send_text(update, context, "⚠️ Current project is not a git repository.")
             return
 
         commands, ignored = self._validated_commit_commands(raw)
@@ -972,26 +997,18 @@ class CommandRouter:
 
         await send_html_text(update, context, self._bash_block(self._format_git_response(command_results, ignored)))
 
+    @require_allowed_chat()
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         if context.args:
             await send_text(update, context, "Usage: /push")
             return
 
-        chat_id = update.effective_chat.id
-        _, session, project_path = self._active_session_context(chat_id)
+        session, project_path = await self._active_session_project_or_notify(
+            update,
+            context,
+            require_git_repo=True,
+        )
         if session is None or project_path is None:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
-            return
-        if not await self._ensure_session_project_exists(update, context, session, project_path):
-            return
-        if not self.git.is_git_repo(project_path):
-            await send_text(update, context, "⚠️ Current project is not a git repository.")
             return
 
         branch_name = session.get("branch_name") or self.git.current_branch(project_path)
@@ -1017,44 +1034,25 @@ class CommandRouter:
             self._bash_block(self._format_git_response([(["push", "origin", branch_name], result)], [])),
         )
 
+    @require_allowed_chat()
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         if update.message is None or not update.message.text:
             return
         await self.runtime.run_active_session(update, context, user_message=update.message.text)
 
+    @require_allowed_chat()
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         if update.message is None or not update.message.photo:
             return
 
-        chat_id = update.effective_chat.id
-        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
-        active_id = chat_state.get("active_session_id")
-        if not active_id:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
-            return
-
-        session = chat_state.get("sessions", {}).get(active_id)
-        if not session:
-            await send_text(update, context, "No active session.\nPlease run /project and /new first.")
+        session, project_path = await self._active_session_project_or_notify(update, context)
+        if session is None or project_path is None:
             return
 
         if session.get("provider", "codex") != "codex":
             await send_text(update, context, "Photo attachments are currently supported only for codex sessions.")
             return
 
-        project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
         try:
             attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
         except ValueError as exc:
@@ -1063,13 +1061,8 @@ class CommandRouter:
         prompt = self.photo_attachments.build_prompt(attachment_path, project_path, update.message.caption or "")
         await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
 
+    @require_allowed_chat()
     async def handle_unsupported_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        allowed, reason = self._chat_allowed(update)
-        if not allowed:
-            if reason:
-                await send_text(update, context, reason)
-            return
-
         await send_text(
             update,
             context,

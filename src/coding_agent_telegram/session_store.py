@@ -12,6 +12,8 @@ T = TypeVar("T")
 
 
 class SessionStore:
+    """Persist per-chat session state with file locking and crash-safe writes."""
+
     def __init__(self, state_file: Path, backup_file: Path) -> None:
         self.state_file = state_file
         self.backup_file = backup_file
@@ -102,6 +104,45 @@ class SessionStore:
             self._save_unlocked(state)
             return result
 
+    def _mutate_chat_data(
+        self,
+        bot_id: str,
+        chat_id: int,
+        fn: Callable[[dict[str, Any]], T],
+        *,
+        create: bool = False,
+    ) -> Optional[T]:
+        """Mutate a single chat scope and return `None` when that scope does not exist."""
+
+        def mutate(state: dict[str, Any]) -> Optional[T]:
+            chat_data, _ = self._get_chat_data(state, bot_id, chat_id, create=create)
+            if chat_data is None:
+                return None
+            return fn(chat_data)
+
+        return self._mutate_state(mutate)
+
+    def _write_session_record(
+        self,
+        sessions: dict[str, Any],
+        session_id: str,
+        *,
+        session_name: str,
+        project_folder: str,
+        provider: str,
+        branch_name: Optional[str],
+    ) -> dict[str, str]:
+        now = self._now()
+        sessions[session_id] = {
+            "name": session_name,
+            "project_folder": project_folder,
+            "provider": provider,
+            "branch_name": branch_name or "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        return sessions[session_id]
+
     def trust_project(self, project_folder: str) -> None:
         def mutate(state: dict[str, Any]) -> None:
             trusted_projects = state.setdefault("trusted_projects", [])
@@ -117,21 +158,19 @@ class SessionStore:
         return project_folder in trusted_projects
 
     def set_current_project_folder(self, bot_id: str, chat_id: int, project_folder: str) -> None:
-        def mutate(state: dict[str, Any]) -> None:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id, create=True)
+        def mutate(chat_data: dict[str, Any]) -> None:
             chat_data["current_project_folder"] = project_folder
 
-        self._mutate_state(mutate)
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
     def set_current_branch(self, bot_id: str, chat_id: int, branch_name: Optional[str]) -> None:
-        def mutate(state: dict[str, Any]) -> None:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id, create=True)
+        def mutate(chat_data: dict[str, Any]) -> None:
             if branch_name:
                 chat_data["current_branch"] = branch_name
             else:
                 chat_data.pop("current_branch", None)
 
-        self._mutate_state(mutate)
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
     def create_session(
         self,
@@ -143,23 +182,22 @@ class SessionStore:
         provider: str,
         branch_name: Optional[str] = None,
     ) -> None:
-        def mutate(state: dict[str, Any]) -> None:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id, create=True)
-            now = self._now()
-            chat_data.setdefault("sessions", {})[session_id] = {
-                "name": session_name,
-                "project_folder": project_folder,
-                "provider": provider,
-                "branch_name": branch_name or "",
-                "created_at": now,
-                "updated_at": now,
-            }
+        def mutate(chat_data: dict[str, Any]) -> None:
+            sessions = chat_data.setdefault("sessions", {})
+            self._write_session_record(
+                sessions,
+                session_id,
+                session_name=session_name,
+                project_folder=project_folder,
+                provider=provider,
+                branch_name=branch_name,
+            )
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = project_folder
             if branch_name:
                 chat_data["current_branch"] = branch_name
 
-        self._mutate_state(mutate)
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
     def replace_session(
         self,
@@ -172,25 +210,23 @@ class SessionStore:
         provider: str,
         branch_name: Optional[str] = None,
     ) -> None:
-        def mutate(state: dict[str, Any]) -> None:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id, create=True)
+        def mutate(chat_data: dict[str, Any]) -> None:
             sessions = chat_data.setdefault("sessions", {})
             sessions.pop(old_session_id, None)
-            now = self._now()
-            sessions[new_session_id] = {
-                "name": session_name,
-                "project_folder": project_folder,
-                "provider": provider,
-                "branch_name": branch_name or "",
-                "created_at": now,
-                "updated_at": now,
-            }
+            self._write_session_record(
+                sessions,
+                new_session_id,
+                session_name=session_name,
+                project_folder=project_folder,
+                provider=provider,
+                branch_name=branch_name,
+            )
             chat_data["active_session_id"] = new_session_id
             chat_data["current_project_folder"] = project_folder
             if branch_name:
                 chat_data["current_branch"] = branch_name
 
-        self._mutate_state(mutate)
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
     def rebind_session(
         self,
@@ -199,10 +235,7 @@ class SessionStore:
         old_session_id: str,
         new_session_id: str,
     ) -> bool:
-        def mutate(state: dict[str, Any]) -> bool:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id)
-            if not chat_data:
-                return False
+        def mutate(chat_data: dict[str, Any]) -> bool:
             sessions = chat_data.setdefault("sessions", {})
             session = sessions.get(old_session_id)
             if session is None:
@@ -219,7 +252,8 @@ class SessionStore:
                 chat_data["active_session_id"] = new_session_id
             return True
 
-        return self._mutate_state(mutate)
+        result = self._mutate_chat_data(bot_id, chat_id, mutate)
+        return False if result is None else result
 
     def list_sessions(self, bot_id: str, chat_id: int) -> dict[str, dict[str, str]]:
         self._ensure_paths()
@@ -231,10 +265,7 @@ class SessionStore:
             return {} if chat_data is None else dict(chat_data.get("sessions", {}))
 
     def set_active_session_branch(self, bot_id: str, chat_id: int, branch_name: str) -> None:
-        def mutate(state: dict[str, Any]) -> None:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id)
-            if not chat_data:
-                return
+        def mutate(chat_data: dict[str, Any]) -> None:
             active_session_id = chat_data.get("active_session_id")
             if not active_session_id:
                 return
@@ -245,7 +276,7 @@ class SessionStore:
             session["updated_at"] = self._now()
             chat_data["current_branch"] = branch_name
 
-        self._mutate_state(mutate)
+        self._mutate_chat_data(bot_id, chat_id, mutate)
 
     def get_chat_state(self, bot_id: str, chat_id: int) -> dict[str, Any]:
         self._ensure_paths()
@@ -260,10 +291,7 @@ class SessionStore:
         return self.list_sessions(bot_id, chat_id).get(session_id)
 
     def switch_session(self, bot_id: str, chat_id: int, session_id: str) -> bool:
-        def mutate(state: dict[str, Any]) -> bool:
-            chat_data, _ = self._get_chat_data(state, bot_id, chat_id)
-            if not chat_data:
-                return False
+        def mutate(chat_data: dict[str, Any]) -> bool:
             session = chat_data.get("sessions", {}).get(session_id)
             if not session:
                 return False
@@ -277,4 +305,5 @@ class SessionStore:
             session["updated_at"] = self._now()
             return True
 
-        return self._mutate_state(mutate)
+        result = self._mutate_chat_data(bot_id, chat_id, mutate)
+        return False if result is None else result

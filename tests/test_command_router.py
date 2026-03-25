@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import html
 import shlex
@@ -358,7 +360,7 @@ def test_project_command_creates_missing_folder(tmp_path: Path):
     assert (tmp_path / "backend").is_dir()
     assert store.get_chat_state("bot-a", 123)["current_project_folder"] == "backend"
     assert store.is_project_trusted("backend") is True
-    assert "Project set: backend" in bot.messages[-1][1]
+    assert "Project: <code>backend</code>" in bot.messages[-1][1]
 
 
 def test_project_command_warns_when_existing_project_is_untrusted(tmp_path: Path):
@@ -395,9 +397,10 @@ def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
 
     asyncio.run(router.handle_project(update, context))
 
-    assert "Current branch: main" in bot.messages[-1][1]
-    assert "If <origin_branch> is not specified, the bot uses the default branch: main." in bot.messages[-1][1]
-    assert "If you do not set one, the bot will work on the current branch: main" in bot.messages[-1][1]
+    project_message = bot.messages[0][1]
+    assert "Current branch: <code>main</code>" in project_message
+    assert "If <code>&lt;origin_branch&gt;</code> is not specified" in project_message
+    assert "the bot will work on the current branch: <code>main</code>" in project_message
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "main"
 
 
@@ -415,9 +418,9 @@ def test_project_command_warns_when_active_session_belongs_to_another_project(tm
     asyncio.run(router.handle_project(update, context))
 
     message = bot.messages[-1][1]
-    assert "Warning: the current active session is bound to a different project." in message
-    assert "Session project: backend" in message
-    assert "Start a new session with /new" in message
+    assert "Active Session Mismatch" in message
+    assert "Session project: <code>backend</code>" in message
+    assert "Start a new session with <code>/new</code>" in message
 
 
 def test_trust_project_callback_marks_project_trusted(tmp_path: Path):
@@ -458,6 +461,39 @@ def test_trust_project_callback_marks_project_trusted(tmp_path: Path):
 
     assert store.is_project_trusted("backend") is True
     assert edited[-1] == "Project trusted: backend"
+
+
+def test_unauthorized_trust_project_callback_is_answered_without_edit(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    answers = []
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=999, type="private"),
+        callback_query=SimpleNamespace(
+            data="trustproject:yes:backend",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        answers.append("answered")
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert answers == ["answered"]
+    assert edited == []
 
 
 def test_branch_command_requires_project_first(tmp_path: Path):
@@ -509,7 +545,7 @@ def test_branch_command_lists_branches_when_project_is_set(tmp_path: Path):
     assert "Default branch: main" in message
     assert "* feature-1 (current branch)" in message
     assert "- main (default)" in message
-    assert "/branch <new_branch>" in message
+    assert "/branch &lt;new_branch&gt;" in message
 
 
 def test_branch_command_lists_branches_even_when_refresh_warns(tmp_path: Path):
@@ -556,6 +592,7 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     store.set_current_project_folder("bot-a", 123, "backend")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
+        is_git_repo=True,
         prepare_result=SimpleNamespace(
             success=True,
             message="Created branch 'feature-1' from 'main'.",
@@ -570,7 +607,7 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert "Created branch 'feature-1' from 'main'." in bot.messages[-1][1]
+    assert html.escape("Created branch 'feature-1' from 'main'.") in bot.messages[-1][1]
     assert "Current branch: feature-1" in bot.messages[-1][1]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
 
@@ -585,6 +622,7 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
     store.create_session("bot-a", 123, "sess_branch", "branch-session", "backend", "codex", branch_name="feature-1")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
+        is_git_repo=True,
         prepare_result=SimpleNamespace(
             success=True,
             message="Switched to existing branch 'main'.",
@@ -599,7 +637,7 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert "Switched to existing branch 'main'." in bot.messages[-1][1]
+    assert html.escape("Switched to existing branch 'main'.") in bot.messages[-1][1]
     assert "Current branch: main" in bot.messages[-1][1]
     state = store.get_chat_state("bot-a", 123)
     assert state["current_branch"] == "main"
@@ -749,9 +787,10 @@ def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
     assert "Available sessions (page 1/2):" in message
     assert "session-11" in message
     assert "session-2" in message
-    assert "session-1" not in message
+    assert "session-0" not in message
+    assert "\nsession_id: sess_1\n" not in message
     assert "Pages: /switch page 1 ... /switch page 2" in message
-    assert "/switch <session_id>" in message
+    assert "/switch &lt;session_id&gt;" in message
 
 
 def test_switch_lists_requested_page(tmp_path: Path):
@@ -777,6 +816,7 @@ def test_switch_lists_requested_page(tmp_path: Path):
 
 
 def test_switch_by_session_id_still_works(tmp_path: Path):
+    (tmp_path / "backend").mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
@@ -953,6 +993,30 @@ def test_photo_message_rejected_when_downloaded_size_exceeds_limit(tmp_path: Pat
     assert bot.messages[-1][1] == "Photo is too large. The maximum supported size is 5 MB."
 
 
+def test_photo_message_reports_missing_project_folder_before_storing_attachment(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    backend.rmdir()
+
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="look"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls == []
+    assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
+
+
 def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -974,6 +1038,63 @@ def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
     assert "[agent_runner.py](" not in codex_message[1]
     assert "<code>agent_runner.py</code>" in codex_message[1]
     assert "<code>config.py</code>" in codex_message[1]
+
+
+def test_message_reports_missing_project_folder_before_running_agent(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    backend.rmdir()
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls == []
+    assert bot.messages[-1][1] == "⚠️ Project folder no longer exists for this session: backend"
+
+
+def test_current_reports_missing_active_session(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/current")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    assert bot.messages[-1][1] == "No active session.\nPlease run /project and /new first."
+
+
+def test_current_reports_active_session_details(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/current")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    assert "Current session: current-session" in bot.messages[-1][1]
+    assert "Project: backend" in bot.messages[-1][1]
+    assert "Provider: codex" in bot.messages[-1][1]
+    assert "Branch: feature-1" in bot.messages[-1][1]
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):

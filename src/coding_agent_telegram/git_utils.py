@@ -1,11 +1,40 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+
+def _sanitize_git_output(text: str) -> str:
+    """
+    Sanitize git command output to remove credential information.
+    
+    Removes:
+    - HTTPS URLs with embedded credentials: https://user:password@
+    - SSH connection strings that might contain sensitive info
+    
+    Security-critical function: Prevents credential leaks in logs.
+    """
+    if not text:
+        return text
+    
+    # Remove HTTPS credentials: Match everything before first / after https://
+    # This handles passwords with special characters like @ or :
+    sanitized = re.sub(r'https://[^/]+@', 'https://***@', text)
+    
+    # Remove SSH host keys and connection info
+    sanitized = re.sub(
+        r'The authenticity of host .+? can\'t be established\..*',
+        '(SSH host key verification)',
+        sanitized,
+        flags=re.DOTALL
+    )
+    
+    return sanitized
 
 
 @dataclass
@@ -90,11 +119,11 @@ class GitWorkspaceManager:
 
         fetch = self._run(project_path, "fetch", "origin")
         if fetch.returncode != 0:
-            warnings.append(fetch.stderr.strip() or "git fetch origin failed.")
+            warnings.append(_sanitize_git_output(fetch.stderr.strip()) or "git fetch origin failed.")
         else:
             pull = self._run(project_path, "pull", "--ff-only", "origin", current_branch)
             if pull.returncode != 0:
-                warnings.append(pull.stderr.strip() or f"git pull failed for branch: {current_branch}")
+                warnings.append(_sanitize_git_output(pull.stderr.strip()) or f"git pull failed for branch: {current_branch}")
 
         return BranchOperationResult(
             True,
@@ -107,7 +136,7 @@ class GitWorkspaceManager:
     def checkout_branch(self, project_path: Path, branch_name: str) -> BranchOperationResult:
         result = self._run(project_path, "checkout", branch_name)
         if result.returncode != 0:
-            return BranchOperationResult(False, result.stderr.strip() or f"Failed to checkout branch: {branch_name}")
+            return BranchOperationResult(False, _sanitize_git_output(result.stderr.strip()) or f"Failed to checkout branch: {branch_name}")
         return BranchOperationResult(True, f"Checked out branch: {branch_name}", current_branch=branch_name)
 
     def prepare_branch(
@@ -161,15 +190,15 @@ class GitWorkspaceManager:
 
         checkout_base = self._run(project_path, "checkout", base_branch)
         if checkout_base.returncode != 0:
-            return BranchOperationResult(False, checkout_base.stderr.strip() or f"Failed to checkout base branch: {base_branch}")
+            return BranchOperationResult(False, _sanitize_git_output(checkout_base.stderr.strip()) or f"Failed to checkout base branch: {base_branch}")
 
         pull = self._run(project_path, "pull", "--ff-only", "origin", base_branch)
         if pull.returncode != 0:
-            return BranchOperationResult(False, pull.stderr.strip() or f"git pull failed for branch: {base_branch}")
+            return BranchOperationResult(False, _sanitize_git_output(pull.stderr.strip()) or f"git pull failed for branch: {base_branch}")
 
         create = self._run(project_path, "checkout", "-b", new_branch)
         if create.returncode != 0:
-            return BranchOperationResult(False, create.stderr.strip() or f"Failed to create branch: {new_branch}")
+            return BranchOperationResult(False, _sanitize_git_output(create.stderr.strip()) or f"Failed to create branch: {new_branch}")
 
         return BranchOperationResult(
             True,
@@ -183,9 +212,12 @@ class GitWorkspaceManager:
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
         if result.returncode != 0:
-            return GitCommandResult(False, stderr or f"git {' '.join(args)} failed.", stdout=stdout, stderr=stderr)
-        message = stdout or stderr or f"git {' '.join(args)} completed."
-        return GitCommandResult(True, message, stdout=stdout, stderr=stderr)
+            sanitized_stderr = _sanitize_git_output(stderr)
+            return GitCommandResult(False, sanitized_stderr or f"git {' '.join(args)} failed.", stdout=sanitized_stderr, stderr=sanitized_stderr)
+        sanitized_stdout = _sanitize_git_output(stdout)
+        sanitized_stderr = _sanitize_git_output(stderr)
+        message = sanitized_stdout or sanitized_stderr or f"git {' '.join(args)} completed."
+        return GitCommandResult(True, message, stdout=sanitized_stdout, stderr=sanitized_stderr)
 
     def run_safe_commit_command(self, project_path: Path, args: list[str]) -> GitCommandResult:
         with tempfile.TemporaryDirectory(prefix="coding-agent-telegram-git-") as temp_home:
@@ -203,13 +235,16 @@ class GitWorkspaceManager:
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
         if result.returncode != 0:
-            return GitCommandResult(False, stderr or f"git {' '.join(args)} failed.", stdout=stdout, stderr=stderr)
-        message = stdout or stderr or f"git {' '.join(args)} completed."
-        return GitCommandResult(True, message, stdout=stdout, stderr=stderr)
+            sanitized_stderr = _sanitize_git_output(stderr)
+            return GitCommandResult(False, sanitized_stderr or f"git {' '.join(args)} failed.", stdout=sanitized_stderr, stderr=sanitized_stderr)
+        sanitized_stdout = _sanitize_git_output(stdout)
+        sanitized_stderr = _sanitize_git_output(stderr)
+        message = sanitized_stdout or sanitized_stderr or f"git {' '.join(args)} completed."
+        return GitCommandResult(True, message, stdout=sanitized_stdout, stderr=sanitized_stderr)
 
     def push_branch(self, project_path: Path, branch_name: str) -> BranchOperationResult:
         result = self._run(project_path, "push", "origin", branch_name)
         if result.returncode != 0:
-            return BranchOperationResult(False, result.stderr.strip() or f"Failed to push branch: {branch_name}")
+            return BranchOperationResult(False, _sanitize_git_output(result.stderr.strip()) or f"Failed to push branch: {branch_name}")
         message = result.stdout.strip() or f"Pushed branch '{branch_name}' to origin."
         return BranchOperationResult(True, message, current_branch=branch_name)
