@@ -89,7 +89,7 @@ def test_snapshot_excluded_path_matches_generated_dirs_and_runtime_outputs():
     assert is_snapshot_excluded_path(".copilot/session.jsonl") is True
     assert is_snapshot_excluded_path("logs/coding-agent-telegram.log") is True
     assert is_snapshot_excluded_path("worker.out") is True
-    assert is_snapshot_excluded_path(".env_coding_agent_telegram") is True
+    assert is_snapshot_excluded_path(".env_coding_agent_telegram") is False
     assert is_snapshot_excluded_path(".env") is False
     assert is_snapshot_excluded_path(".github/workflows/ci.yml") is False
     assert is_snapshot_excluded_path("src/app.py") is False
@@ -127,7 +127,7 @@ def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     assert ".github/workflows/ci.yml" in snapshots
     assert ".editorconfig" in snapshots
     assert ".env" in snapshots
-    assert ".env_coding_agent_telegram" not in snapshots
+    assert ".env_coding_agent_telegram" in snapshots
     assert "logs/coding-agent-telegram.log" not in snapshots
     assert "logs/readme.md" in snapshots
     assert ".pytest_cache/state" not in snapshots
@@ -153,7 +153,7 @@ def test_changed_files_excludes_snapshot_ignored_paths(tmp_path: Path):
     assert "src/app.py" in files
     assert "build/artifact.txt" not in files
     assert ".env" in files
-    assert ".env_coding_agent_telegram" not in files
+    assert ".env_coding_agent_telegram" in files
 
 
 def test_changed_files_from_snapshots_excludes_snapshot_ignored_paths():

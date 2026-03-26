@@ -185,6 +185,9 @@ class CommandRouterBase:
         typing_task = asyncio.create_task(typing_loop())
         try:
             result = await asyncio.to_thread(fn, *args, **kwargs)
+            # Give thread-safe Telegram notifications one event-loop turn to run
+            # before we close the progress channel and finalize the response.
+            await asyncio.sleep(0)
             progress_state["closed"] = True
             for future in tuple(progress_state["futures"]):
                 future.cancel()
