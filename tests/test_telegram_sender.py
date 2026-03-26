@@ -51,12 +51,12 @@ def test_send_text_chunks_long_messages():
             calls.append((chat_id, text, parse_mode))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
-    context = SimpleNamespace(bot=FakeBot())
+    context = SimpleNamespace(bot=FakeBot(), bot_data={"max_telegram_message_length": 500})
 
-    asyncio.run(send_text(update, context, "a" * 7000))
+    asyncio.run(send_text(update, context, "a" * 1500))
 
     assert len(calls) >= 3
-    assert all(len(call[1]) <= 3000 for call in calls)
+    assert all(len(call[1]) <= 500 for call in calls)
 
 
 def test_send_html_text_chunks_long_messages_as_plain_text():
@@ -67,12 +67,12 @@ def test_send_html_text_chunks_long_messages_as_plain_text():
             calls.append((chat_id, text, parse_mode))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
-    context = SimpleNamespace(bot=FakeBot())
+    context = SimpleNamespace(bot=FakeBot(), bot_data={"max_telegram_message_length": 500})
 
-    asyncio.run(send_html_text(update, context, "<b>" + ("a" * 7000) + "</b>"))
+    asyncio.run(send_html_text(update, context, "<b>" + ("a" * 1500) + "</b>"))
 
     assert len(calls) >= 3
-    assert all(len(call[1]) <= 3000 for call in calls)
+    assert all(len(call[1]) <= 500 for call in calls)
 
 
 def test_send_code_block_chunks_long_code_blocks():
@@ -83,9 +83,9 @@ def test_send_code_block_chunks_long_code_blocks():
             calls.append((chat_id, text, parse_mode))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
-    context = SimpleNamespace(bot=FakeBot())
+    context = SimpleNamespace(bot=FakeBot(), bot_data={"max_telegram_message_length": 500})
 
-    asyncio.run(send_code_block(update, context, "Code", "x" * 7000, language="python"))
+    asyncio.run(send_code_block(update, context, "Code", "x" * 1500, language="python"))
 
     assert len(calls) >= 4
-    assert all(len(call[1]) <= 3000 for call in calls)
+    assert all(len(call[1]) <= 500 for call in calls)

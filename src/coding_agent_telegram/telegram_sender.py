@@ -55,7 +55,7 @@ COMMAND_PREFIXES = (
     "find ",
 )
 SHELL_LANGUAGES = {"bash", "console", "shell", "sh", "zsh"}
-SAFE_TELEGRAM_MESSAGE_LENGTH = 3000
+DEFAULT_TELEGRAM_MESSAGE_LENGTH = 3000
 
 
 @dataclass(frozen=True)
@@ -66,10 +66,20 @@ class AssistantSegment:
     language: Optional[str] = None
 
 
+def _max_telegram_message_length(context: ContextTypes.DEFAULT_TYPE) -> int:
+    bot_data = getattr(context, "bot_data", None)
+    if isinstance(bot_data, dict):
+        value = bot_data.get("max_telegram_message_length")
+        if isinstance(value, int) and value > 0:
+            return value
+    return DEFAULT_TELEGRAM_MESSAGE_LENGTH
+
+
 async def send_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     if update.effective_chat is None:
         return
-    for chunk in _split_text_chunks(text):
+    max_length = _max_telegram_message_length(context)
+    for chunk in _split_text_chunks(text, max_length=max_length):
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=html.escape(chunk),
@@ -90,7 +100,8 @@ async def send_markdown_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
 async def send_html_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     if update.effective_chat is None:
         return
-    if len(text) > SAFE_TELEGRAM_MESSAGE_LENGTH:
+    max_length = _max_telegram_message_length(context)
+    if len(text) > max_length:
         await send_text(update, context, _strip_html_tags(text))
         return
     try:
@@ -138,7 +149,7 @@ def _strip_html_tags(text: str) -> str:
     return html.unescape(re.sub(r"</?[^>]+>", "", normalized))
 
 
-def _split_text_chunks(text: str, max_length: int = SAFE_TELEGRAM_MESSAGE_LENGTH) -> list[str]:
+def _split_text_chunks(text: str, max_length: int = DEFAULT_TELEGRAM_MESSAGE_LENGTH) -> list[str]:
     normalized = text.strip()
     if not normalized:
         return []
@@ -181,7 +192,7 @@ def _split_plain_text_chunk(text: str) -> tuple[str, str]:
     return left, right
 
 
-def _split_code_chunks(code: str, language: Optional[str], max_length: int = SAFE_TELEGRAM_MESSAGE_LENGTH) -> list[str]:
+def _split_code_chunks(code: str, language: Optional[str], max_length: int = DEFAULT_TELEGRAM_MESSAGE_LENGTH) -> list[str]:
     wrapper = len('<pre><code class="language-"></code></pre>') + len(html.escape(language or ""))
     return _split_text_chunks(code, max(1, max_length - wrapper))
 
@@ -268,7 +279,8 @@ async def send_code_block(
 ) -> None:
     if update.effective_chat is None:
         return
-    chunks = _split_code_chunks(code, language)
+    max_length = _max_telegram_message_length(context)
+    chunks = _split_code_chunks(code, language, max_length=max_length)
     total = len(chunks)
     for index, chunk in enumerate(chunks, start=1):
         current_header = header if total == 1 else f"{header} ({index}/{total})"
