@@ -164,6 +164,6 @@ echo "1. Confirm $ENV_FILE contains WORKSPACE_ROOT, TELEGRAM_BOT_TOKENS, and ALL
 echo "2. State files are ready at $STATE_FILE and $STATE_BACKUP_FILE."
 echo "3. Application logs will be written under $LOG_DIR."
 echo "4. Start the server with: ./startup.sh"
-echo "5. In Telegram, use /project <folder> and then /new [session_name]."
+echo "5. In Telegram, start conversations."
 echo "Starting coding-agent-telegram..."
 exec python -m coding_agent_telegram
