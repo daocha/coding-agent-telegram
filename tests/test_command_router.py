@@ -249,9 +249,17 @@ class FakeBot:
     def __init__(self):
         self.messages = []
         self.actions = []
+        self.deleted_messages = []
 
     async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
         self.messages.append((chat_id, text, parse_mode, reply_markup))
+        return SimpleNamespace(message_id=len(self.messages))
+
+    async def edit_message_text(self, chat_id, message_id, text, parse_mode=None, reply_markup=None):
+        self.messages.append((chat_id, text, parse_mode, reply_markup))
+
+    async def delete_message(self, chat_id, message_id):
+        self.deleted_messages.append((chat_id, message_id))
 
     async def send_chat_action(self, chat_id, action):
         self.actions.append((chat_id, action))
@@ -1180,6 +1188,25 @@ def test_assistant_output_is_rendered_as_html_not_raw_markdown(tmp_path: Path):
     assert "[agent_runner.py](" not in codex_message[1]
     assert "<code>agent_runner.py</code>" in codex_message[1]
     assert "<code>config.py</code>" in codex_message[1]
+
+
+def test_copilot_output_uses_copilot_label(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = MarkdownRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "copilot")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert any("Copilot output" in message[1] for message in bot.messages)
 
 
 def test_message_reports_missing_project_folder_before_running_agent(tmp_path: Path):

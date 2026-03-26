@@ -84,41 +84,89 @@ class MultiAgentRunner:
         self.copilot_deny_tools = tuple(tool.strip() for tool in copilot_deny_tools if tool.strip())
         self.copilot_available_tools = tuple(tool.strip() for tool in copilot_available_tools if tool.strip())
 
-    def _extract_assistant_text(self, event: AssistantEvent) -> str:
-        if isinstance(event, str):
-            return event
-        if isinstance(event, list):
-            return "\n".join(filter(None, [self._extract_assistant_text(item) for item in event]))
-        if not isinstance(event, dict):
-            return ""
+    def _looks_textual_key(self, key: str) -> bool:
+        normalized = key.strip().lower()
+        if not normalized:
+            return False
+        return any(
+            token in normalized
+            for token in ("text", "message", "content", "delta", "error", "status", "summary", "description")
+        )
 
-        chunks: list[str] = []
-        if isinstance(event.get("assistant_text"), str):
-            chunks.append(event["assistant_text"])
+    def _looks_metadata_key(self, key: str) -> bool:
+        normalized = key.strip().lower()
+        if not normalized:
+            return False
+        return any(
+            token in normalized
+            for token in ("id", "timestamp", "time", "session", "thread", "uuid", "parent", "index")
+        )
 
-        role = event.get("role")
-        event_type = event.get("type")
-        if role == "assistant" or event_type in {"message", "assistant_message", "output_text", "text"}:
-            for key in ("text", "message", "content"):
-                value = event.get(key)
-                extracted = self._extract_assistant_text(value)
-                if extracted:
-                    chunks.append(extracted)
+    def _collect_text_fragments(self, value: AssistantEvent, *, parent_key: str = "") -> list[str]:
+        if isinstance(value, str):
+            return [value] if self._looks_textual_key(parent_key) else []
+        if isinstance(value, list):
+            fragments: list[str] = []
+            for item in value:
+                fragments.extend(self._collect_text_fragments(item, parent_key=parent_key))
+            return fragments
+        if not isinstance(value, dict):
+            return []
 
-        for item in event.values():
+        fragments: list[str] = []
+        for key, item in value.items():
+            if self._looks_metadata_key(key):
+                continue
+            if isinstance(item, str) and self._looks_textual_key(key):
+                fragments.append(item)
+                continue
             if isinstance(item, (dict, list)):
-                extracted = self._extract_assistant_text(item)
-                if extracted:
-                    chunks.append(extracted)
+                fragments.extend(self._collect_text_fragments(item, parent_key=key))
+        return fragments
 
+    def _unique_text_fragments(self, fragments: list[str]) -> list[str]:
         unique_chunks: list[str] = []
-        for chunk in chunks:
+        for chunk in fragments:
             cleaned = chunk.strip()
             if cleaned and cleaned not in unique_chunks:
                 unique_chunks.append(cleaned)
-        return "\n".join(unique_chunks)
+        return unique_chunks
 
-    def _parse_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
+    def _summarize_structured_event(self, event: dict) -> str:
+        summary: dict[str, object] = {}
+        for key, value in event.items():
+            if self._looks_metadata_key(key):
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                summary[key] = value
+        if summary:
+            return json.dumps(summary, ensure_ascii=False)
+        return json.dumps(event, ensure_ascii=False)
+
+    def _extract_codex_assistant_text(self, event: AssistantEvent) -> str:
+        if isinstance(event, str):
+            return event
+        if isinstance(event, list):
+            return "\n".join(filter(None, [self._extract_codex_assistant_text(item) for item in event]))
+        if not isinstance(event, dict):
+            return ""
+        return "\n".join(self._unique_text_fragments(self._collect_text_fragments(event)))
+
+    def _extract_copilot_assistant_text(self, event: AssistantEvent) -> str:
+        if isinstance(event, str):
+            return event
+        if isinstance(event, list):
+            return "\n".join(filter(None, [self._extract_copilot_assistant_text(item) for item in event]))
+        if not isinstance(event, dict):
+            return ""
+        return "\n".join(self._unique_text_fragments(self._collect_text_fragments(event)))
+
+    def _parse_jsonl(
+        self,
+        stdout: str,
+        *,
+        assistant_text_extractor: Callable[[AssistantEvent], str],
+    ) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
         events: list[dict] = []
         for line in stdout.splitlines():
             line = line.strip()
@@ -138,7 +186,7 @@ class MultiAgentRunner:
             for key in ("session_id", "thread_id", "sessionId", "threadId"):
                 if isinstance(ev.get(key), str):
                     session_id = ev[key]
-            extracted_text = self._extract_assistant_text(ev)
+            extracted_text = assistant_text_extractor(ev)
             if extracted_text:
                 assistant_text = extracted_text
             if isinstance(ev.get("error"), str):
@@ -150,7 +198,13 @@ class MultiAgentRunner:
 
         return session_id, success, assistant_text, error_message, events
 
-    def _extract_progress_text(self, chunk: str, *, is_stderr: bool) -> str:
+    def _parse_codex_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
+        return self._parse_jsonl(stdout, assistant_text_extractor=self._extract_codex_assistant_text)
+
+    def _parse_copilot_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
+        return self._parse_jsonl(stdout, assistant_text_extractor=self._extract_copilot_assistant_text)
+
+    def _extract_codex_progress_text(self, chunk: str, *, is_stderr: bool) -> str:
         stripped = chunk.strip()
         if not stripped:
             return ""
@@ -161,19 +215,32 @@ class MultiAgentRunner:
         except json.JSONDecodeError:
             return stripped
 
-        extracted = self._extract_assistant_text(event)
+        extracted = self._extract_codex_assistant_text(event)
         if extracted:
             return extracted
-        for key in ("message", "error", "status", "text"):
-            value = event.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return ""
+        return self._summarize_structured_event(event)
+
+    def _extract_copilot_progress_text(self, chunk: str, *, is_stderr: bool) -> str:
+        stripped = chunk.strip()
+        if not stripped:
+            return ""
+        if is_stderr:
+            return stripped
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            return stripped
+
+        extracted = self._extract_copilot_assistant_text(event)
+        if extracted:
+            return extracted
+        return self._summarize_structured_event(event)
 
     def _run(
         self,
         args: list[str],
         *,
+        provider: str,
         cwd: Optional[Path] = None,
         env: Optional[dict[str, str]] = None,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
@@ -208,7 +275,10 @@ class MultiAgentRunner:
                 seen_output = True
                 if is_stderr and chunk.strip():
                     last_stderr = chunk.strip()
-                progress_text = self._extract_progress_text(chunk, is_stderr=is_stderr)
+                if provider == "codex":
+                    progress_text = self._extract_codex_progress_text(chunk, is_stderr=is_stderr)
+                else:
+                    progress_text = self._extract_copilot_progress_text(chunk, is_stderr=is_stderr)
                 should_report_progress = bool(
                     on_progress
                     and progress_text
@@ -285,7 +355,10 @@ class MultiAgentRunner:
         stderr_thread.join()
         stdout = "".join(stdout_chunks)
         stderr = "".join(stderr_chunks)
-        session_id, parsed_success, assistant_text, error_message, events = self._parse_jsonl(stdout)
+        if provider == "codex":
+            session_id, parsed_success, assistant_text, error_message, events = self._parse_codex_jsonl(stdout)
+        else:
+            session_id, parsed_success, assistant_text, error_message, events = self._parse_copilot_jsonl(stdout)
 
         success = proc.returncode == 0 and parsed_success
         if not success and not error_message:
@@ -303,6 +376,7 @@ class MultiAgentRunner:
         self,
         args: list[str],
         *,
+        provider: str,
         cwd: Path,
         tail_args: int,
         env: Optional[dict[str, str]] = None,
@@ -316,6 +390,7 @@ class MultiAgentRunner:
             split_at = len(args) - tail_args
             result = self._run(
                 [*args[:split_at], "--output-last-message", str(output_path), *args[split_at:]],
+                provider=provider,
                 cwd=cwd,
                 env=env,
                 on_stall=on_stall,
@@ -450,6 +525,7 @@ class MultiAgentRunner:
             ]
             return self._run_with_output_file(
                 args,
+                provider="codex",
                 cwd=project_path,
                 tail_args=1,
                 on_stall=on_stall,
@@ -461,6 +537,7 @@ class MultiAgentRunner:
             args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(
                 args,
+                provider="copilot",
                 cwd=project_path,
                 env=self._copilot_env(project_path, skip_git_repo_check),
                 on_stall=on_stall,
@@ -490,6 +567,7 @@ class MultiAgentRunner:
             ]
             return self._run_with_output_file(
                 args,
+                provider="codex",
                 cwd=project_path,
                 tail_args=2,
                 on_stall=on_stall,
@@ -501,6 +579,7 @@ class MultiAgentRunner:
             args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(
                 args,
+                provider="copilot",
                 cwd=project_path,
                 env=self._copilot_env(project_path, skip_git_repo_check),
                 on_stall=on_stall,

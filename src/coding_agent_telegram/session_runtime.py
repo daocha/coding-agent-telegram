@@ -283,6 +283,7 @@ class SessionRuntime:
         await self._send_run_results(
             update,
             context,
+            provider=provider,
             session_name=session_name,
             project_folder=project_folder,
             project_path=project_path,
@@ -380,6 +381,7 @@ class SessionRuntime:
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
         *,
+        provider: str,
         session_name: str,
         project_folder: str,
         project_path: Path,
@@ -402,7 +404,7 @@ class SessionRuntime:
         }
         diffs = self._merge_snapshot_diffs(diffs, snapshot_diffs_by_path)
 
-        await self._send_assistant_chunks(update, context, result.assistant_text)
+        await self._send_assistant_chunks(update, context, result.assistant_text, provider=provider)
         logger.info(
             "Completed run for chat %s on session '%s' (%s); %d changed file(s).",
             update.effective_chat.id,
@@ -431,7 +433,14 @@ class SessionRuntime:
                 merged_diffs.append(file_diff)
         return merged_diffs
 
-    async def _send_assistant_chunks(self, update: Update, context: ContextTypes.DEFAULT_TYPE, assistant_text: str) -> None:
+    async def _send_assistant_chunks(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        assistant_text: str,
+        *,
+        provider: str,
+    ) -> None:
         segments = split_assistant_output(assistant_text)
         if not segments:
             return
@@ -448,7 +457,8 @@ class SessionRuntime:
                 )
                 continue
 
-            title_prefix = "Codex output" if total == 1 else f"Codex output {index}/{total}"
+            provider_label = "Copilot" if provider == "copilot" else "Codex"
+            title_prefix = f"{provider_label} output" if total == 1 else f"{provider_label} output {index}/{total}"
             for message in self._chunk_assistant_prose(title_prefix, segment.text):
                 await send_html_text(update, context, message)
 
