@@ -98,7 +98,7 @@ def main() -> None:
         print(str(exc), file=sys.stderr)
         print("", file=sys.stderr)
         print(f"Created {env_path} if it did not already exist.", file=sys.stderr)
-        print("Update these fields in .env:", file=sys.stderr)
+        print(f"Update these fields in {env_path}:", file=sys.stderr)
         print("- WORKSPACE_ROOT", file=sys.stderr)
         print("- TELEGRAM_BOT_TOKENS", file=sys.stderr)
         print("- ALLOWED_CHAT_IDS", file=sys.stderr)

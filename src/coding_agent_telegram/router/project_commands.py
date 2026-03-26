@@ -13,6 +13,62 @@ from .base import logger, require_allowed_chat
 
 
 class ProjectCommandMixin:
+    async def _send_branch_selection_prompt(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        project_folder: str,
+        project_path,
+        intro_lines: list[str] | None = None,
+    ) -> None:
+        refresh_result = await asyncio.to_thread(self.git.refresh_current_branch, project_path)
+        if refresh_result is None:
+            refresh_result = type("RefreshResult", (), {"success": True, "warnings": ()})()
+        if not refresh_result.success:
+            await send_text(update, context, refresh_result.message)
+            return
+
+        current_branch = self.git.current_branch(project_path) or "(unknown)"
+        default_branch = self.git.default_branch(project_path) or "(unknown)"
+        branches = self.git.list_local_branches(project_path)
+        lines = list(intro_lines or [])
+        lines.extend(
+            [
+                f"Project: {project_folder}",
+                f"Current branch in repo: {current_branch}",
+                f"Default branch: {default_branch}",
+                "",
+            ]
+        )
+        if refresh_result.warnings:
+            lines.append("Refresh warnings:")
+            for warning in refresh_result.warnings:
+                lines.append(f"- {warning}")
+            lines.append("")
+        lines.append("Local branches:")
+        if branches:
+            for branch in branches[:20]:
+                marker = "*" if branch == current_branch else "-"
+                annotations: list[str] = []
+                if branch == default_branch:
+                    annotations.append("default")
+                if branch == current_branch:
+                    annotations.append("current branch in repo")
+                suffix = f" ({', '.join(annotations)})" if annotations else ""
+                lines.append(f"{marker} {branch}{suffix}")
+        else:
+            lines.append("- (none)")
+        lines.extend(
+            [
+                "",
+                "Select a branch with:",
+                "/branch <new_branch>",
+                "/branch <origin_branch> <new_branch>",
+            ]
+        )
+        await send_text(update, context, "\n".join(lines))
+
     @require_allowed_chat()
     async def handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if len(context.args) != 1:
@@ -26,6 +82,8 @@ class ProjectCommandMixin:
 
         chat_id = update.effective_chat.id
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        previous_project_folder = chat_state.get("current_project_folder")
+        switched_project = previous_project_folder != folder
         active_session_id = chat_state.get("active_session_id")
         active_session = None
         if active_session_id:
@@ -43,9 +101,13 @@ class ProjectCommandMixin:
             logger.info("Created project folder '%s' for chat %s.", folder, update.effective_chat.id)
 
         self.deps.store.set_current_project_folder(self.deps.bot_id, chat_id, folder)
-        branch_name = self.git.current_branch(path) if self.git.is_git_repo(path) else None
-        default_branch = self.git.default_branch(path) if self.git.is_git_repo(path) else None
-        self.deps.store.set_current_branch(self.deps.bot_id, chat_id, branch_name)
+        is_git_repo = self.git.is_git_repo(path)
+        branch_name = self.git.current_branch(path) if is_git_repo else None
+        default_branch = self.git.default_branch(path) if is_git_repo else None
+        if is_git_repo and switched_project:
+            self.deps.store.set_current_branch(self.deps.bot_id, chat_id, None)
+        else:
+            self.deps.store.set_current_branch(self.deps.bot_id, chat_id, branch_name)
         logger.info("Set current project to '%s' for chat %s.", folder, chat_id)
         should_prompt_trust = not project_created and not self.deps.store.is_project_trusted(folder)
         warning_lines: list[str] = []
@@ -59,7 +121,27 @@ class ProjectCommandMixin:
                 "Start a new session with <code>/new</code> if you want to work in this newly selected project.",
                 *warning_lines,
             ]
-        if branch_name:
+        if is_git_repo and switched_project:
+            intro_lines = [
+                f"Project changed to: {folder}",
+                "Branch selection is required before creating or continuing a session in this project.",
+            ]
+            if active_session and active_session.get("project_folder") != folder:
+                intro_lines.extend(
+                    [
+                        "",
+                        f"Active session: {active_session['name']}",
+                        f"Session project: {active_session['project_folder']}",
+                    ]
+                )
+            await self._send_branch_selection_prompt(
+                update,
+                context,
+                project_folder=folder,
+                project_path=path,
+                intro_lines=intro_lines + [""],
+            )
+        elif branch_name:
             await send_html_text(
                 update,
                 context,
@@ -99,6 +181,8 @@ class ProjectCommandMixin:
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
+        if (not is_git_repo or not switched_project) and hasattr(self, "_continue_pending_action"):
+            await self._continue_pending_action(update, context)
 
     @require_allowed_chat(answer_callback=True)
     async def handle_trust_project_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -148,50 +232,12 @@ class ProjectCommandMixin:
             return
 
         if not context.args:
-            refresh_result = await asyncio.to_thread(self.git.refresh_current_branch, project_path)
-            if not refresh_result.success:
-                await send_text(update, context, refresh_result.message)
-                return
-            current_branch = self.git.current_branch(project_path) or "(unknown)"
-            default_branch = self.git.default_branch(project_path) or "(unknown)"
-            branches = self.git.list_local_branches(project_path)
-            lines = [
-                f"Project: {project_folder}",
-                f"Current branch: {current_branch}",
-                f"Default branch: {default_branch}",
-                "",
-            ]
-            if refresh_result.warnings:
-                lines.append("Refresh warnings:")
-                for warning in refresh_result.warnings:
-                    lines.append(f"- {warning}")
-                lines.append("")
-            lines.extend(
-                [
-                    "Local branches:",
-                ]
+            await self._send_branch_selection_prompt(
+                update,
+                context,
+                project_folder=project_folder,
+                project_path=project_path,
             )
-            if branches:
-                for branch in branches[:20]:
-                    marker = "*" if branch == current_branch else "-"
-                    annotations: list[str] = []
-                    if branch == default_branch:
-                        annotations.append("default")
-                    if branch == current_branch:
-                        annotations.append("current branch")
-                    suffix = f" ({', '.join(annotations)})" if annotations else ""
-                    lines.append(f"{marker} {branch}{suffix}")
-            else:
-                lines.append("- (none)")
-            lines.extend(
-                [
-                    "",
-                    "Use:",
-                    "/branch <new_branch>",
-                    "/branch <origin_branch> <new_branch>",
-                ]
-            )
-            await send_text(update, context, "\n".join(lines))
             return
 
         if len(context.args) not in {1, 2}:
@@ -232,3 +278,5 @@ class ProjectCommandMixin:
             context,
             f"{result.message}\nCurrent branch: {result.current_branch}",
         )
+        if hasattr(self, "_continue_pending_action"):
+            await self._continue_pending_action(update, context)

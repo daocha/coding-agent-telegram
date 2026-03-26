@@ -13,7 +13,16 @@ class MessageCommandMixin:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or not update.message.text:
             return
-        await self.runtime.run_active_session(update, context, user_message=update.message.text)
+        chat_id = update.effective_chat.id
+        self._store_pending_action(
+            chat_id,
+            {
+                "kind": "message",
+                "user_message": update.message.text,
+            },
+        )
+        if await self._continue_pending_action(update, context):
+            return
 
     @require_allowed_chat()
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -15,3 +15,4 @@ node_modules
 venv
 .coding-agent-telegram
 .copilot
+.codex

@@ -130,6 +130,24 @@ def test_resolve_env_file_path_uses_explicit_env_override(monkeypatch, tmp_path)
     assert resolve_env_file_path() == env_path
 
 
+def test_resolve_env_file_path_prefers_app_specific_file(monkeypatch, tmp_path):
+    app_env_path = tmp_path / ".env_coding_agent_telegram"
+    legacy_env_path = tmp_path / ".env"
+    app_env_path.write_text("", encoding="utf-8")
+    legacy_env_path.write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_env_file_path() == app_env_path
+
+
+def test_resolve_env_file_path_falls_back_to_legacy_dotenv(monkeypatch, tmp_path):
+    legacy_env_path = tmp_path / ".env"
+    legacy_env_path.write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_env_file_path() == legacy_env_path
+
+
 def test_load_config_uses_env_file_and_overrides_empty_process_values(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text(
