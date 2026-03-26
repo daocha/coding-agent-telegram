@@ -86,6 +86,7 @@ def test_modified_javascript_file_uses_file_language():
 def test_snapshot_excluded_path_matches_generated_dirs_and_runtime_outputs():
     assert is_snapshot_excluded_path("build/lib/pkg.py") is True
     assert is_snapshot_excluded_path("node_modules/left-pad.js") is True
+    assert is_snapshot_excluded_path(".copilot/session.jsonl") is True
     assert is_snapshot_excluded_path("logs/coding-agent-telegram.log") is True
     assert is_snapshot_excluded_path("worker.out") is True
     assert is_snapshot_excluded_path(".env") is False
