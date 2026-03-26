@@ -168,7 +168,7 @@ class MultiAgentRunner:
             value = event.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
-        return ""
+        return stripped
 
     def _run(
         self,
