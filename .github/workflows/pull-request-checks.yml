@@ -9,6 +9,8 @@ permissions:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM: 0.0.dev0
 
     steps:
       - uses: actions/checkout@v4

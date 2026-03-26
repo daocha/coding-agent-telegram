@@ -12,9 +12,10 @@ from typing import Awaitable, Callable, Optional, Tuple
 
 from telegram import Update
 from telegram.constants import ChatAction
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
-from coding_agent_telegram.agent_runner import MultiAgentRunner
+from coding_agent_telegram.agent_runner import AgentProgressInfo, MultiAgentRunner
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager, _sanitize_git_output
@@ -26,6 +27,7 @@ from coding_agent_telegram.telegram_sender import send_text
 logger = logging.getLogger(__name__)
 TYPING_REFRESH_TIMEOUT_SECONDS = 4
 ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
+PROGRESS_PREVIEW_MAX_CHARS = 600
 
 
 def require_allowed_chat(*, answer_callback: bool = False):
@@ -161,8 +163,11 @@ class CommandRouterBase:
             return await asyncio.to_thread(fn, *args, **kwargs)
 
         stall_message = kwargs.pop("stall_message", None)
+        progress_label = kwargs.pop("progress_label", None)
         if stall_message:
             kwargs["on_stall"] = self._make_stall_notifier(update, context, stall_message)
+        if progress_label:
+            kwargs["on_progress"] = self._make_progress_notifier(update, context, progress_label)
 
         stop_event = asyncio.Event()
         await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
@@ -187,6 +192,41 @@ class CommandRouterBase:
 
         def notify(_info) -> None:
             future = asyncio.run_coroutine_threadsafe(send_text(update, context, message), loop)
+            future.result(timeout=5)
+
+        return notify
+
+    def _make_progress_notifier(self, update: Update, context: ContextTypes.DEFAULT_TYPE, label: str):
+        loop = asyncio.get_running_loop()
+        progress_state = {"message_id": None, "last_text": ""}
+
+        async def publish(info: AgentProgressInfo) -> None:
+            chat = update.effective_chat
+            if chat is None:
+                return
+            body = info.text.strip()
+            if len(body) > PROGRESS_PREVIEW_MAX_CHARS:
+                body = body[: PROGRESS_PREVIEW_MAX_CHARS - 1].rstrip() + "..."
+            message_text = f"{label} ({int(info.elapsed_seconds)}s)\n{body}"
+            if message_text == progress_state["last_text"]:
+                return
+            progress_state["last_text"] = message_text
+            if progress_state["message_id"] is None:
+                message = await context.bot.send_message(chat_id=chat.id, text=message_text)
+                progress_state["message_id"] = getattr(message, "message_id", None)
+                return
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat.id,
+                    message_id=progress_state["message_id"],
+                    text=message_text,
+                )
+            except BadRequest:
+                message = await context.bot.send_message(chat_id=chat.id, text=message_text)
+                progress_state["message_id"] = getattr(message, "message_id", None)
+
+        def notify(info: AgentProgressInfo) -> None:
+            future = asyncio.run_coroutine_threadsafe(publish(info), loop)
             future.result(timeout=5)
 
         return notify
@@ -249,6 +289,7 @@ class CommandRouterBase:
 
     def _split_shell_commands(self, raw: str) -> list[str]:
         """Split shell-like input into independent command segments without executing it."""
+        raw = self._normalize_shell_line_continuations(raw)
         commands: list[str] = []
         current: list[str] = []
         quote: Optional[str] = None
@@ -300,6 +341,48 @@ class CommandRouterBase:
         if segment:
             commands.append(segment)
         return commands
+
+    def _normalize_shell_line_continuations(self, raw: str) -> str:
+        normalized: list[str] = []
+        quote: Optional[str] = None
+        escape = False
+        index = 0
+
+        while index < len(raw):
+            char = raw[index]
+            if escape:
+                if char == "\n" and quote is None:
+                    escape = False
+                    index += 1
+                    while index < len(raw) and raw[index] in {" ", "\t"}:
+                        index += 1
+                    continue
+                normalized.append("\\")
+                normalized.append(char)
+                escape = False
+                index += 1
+                continue
+            if char == "\\":
+                escape = True
+                index += 1
+                continue
+            if quote:
+                normalized.append(char)
+                if char == quote:
+                    quote = None
+                index += 1
+                continue
+            if char in {"'", '"'}:
+                quote = char
+                normalized.append(char)
+                index += 1
+                continue
+            normalized.append(char)
+            index += 1
+
+        if escape:
+            normalized.append("\\")
+        return "".join(normalized)
 
     def _validated_commit_commands(self, raw: str) -> tuple[list[list[str]], list[str]]:
         """Return validated `git` commit subcommands plus ignored raw segments."""

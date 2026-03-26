@@ -84,6 +84,7 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
         app = build_application(token, router, allowed_chat_ids=cfg.allowed_chat_ids)
         app.bot_data["enable_commit_command"] = cfg.enable_commit_command
         app.bot_data["allowed_chat_ids"] = set(cfg.allowed_chat_ids)
+        app.bot_data["max_telegram_message_length"] = cfg.max_telegram_message_length
         apps.append(app)
 
     await _run_polling_apps(apps)

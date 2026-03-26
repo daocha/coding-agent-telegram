@@ -218,6 +218,7 @@ class SessionRuntime:
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
             stall_message=ACTIVE_RUN_STALL_MESSAGE,
+            progress_label="Live agent output",
         )
         session_name = session["name"]
         result, active_id, session_name = await self._replace_invalid_session_if_needed(
@@ -340,6 +341,7 @@ class SessionRuntime:
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
             stall_message=REPLACEMENT_SESSION_STALL_MESSAGE,
+            progress_label="Live agent output",
         )
         if not create_result.success or not create_result.session_id:
             return create_result, active_id, session_name

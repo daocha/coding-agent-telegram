@@ -21,6 +21,24 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 STATE_FILE_DEFAULT="./state.json"
 STATE_BACKUP_FILE_DEFAULT="./state.json.bak"
 LOG_DIR_DEFAULT="./logs"
+LOCAL_PRETEND_VERSION="${SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM:-0.0.dev0}"
+INSTALL_STATE_FILE_NAME=".coding-agent-telegram-install-state"
+FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
+
+compute_install_fingerprint() {
+  local files=()
+  local file
+  for file in pyproject.toml setup.py; do
+    if [[ -f "$file" ]]; then
+      files+=("$file")
+    fi
+  done
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    printf 'no-packaging-files\n'
+    return
+  fi
+  shasum -a 256 "${files[@]}" | shasum -a 256 | awk '{print $1}'
+}
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Error: $PYTHON_BIN was not found in PATH." >&2
@@ -110,7 +128,30 @@ fi
 source "$VENV_DIR/bin/activate"
 
 python -m pip install --upgrade pip >/dev/null
-python -m pip install -e .
+INSTALL_STATE_FILE="$VENV_DIR/$INSTALL_STATE_FILE_NAME"
+CURRENT_INSTALL_FINGERPRINT="$(compute_install_fingerprint)"
+STORED_INSTALL_FINGERPRINT=""
+if [[ -f "$INSTALL_STATE_FILE" ]]; then
+  STORED_INSTALL_FINGERPRINT="$(<"$INSTALL_STATE_FILE")"
+fi
+
+NEEDS_REINSTALL=0
+if [[ "$FORCE_REINSTALL" == "1" ]]; then
+  NEEDS_REINSTALL=1
+elif ! python -c "import coding_agent_telegram" >/dev/null 2>&1; then
+  NEEDS_REINSTALL=1
+elif [[ "$CURRENT_INSTALL_FINGERPRINT" != "$STORED_INSTALL_FINGERPRINT" ]]; then
+  NEEDS_REINSTALL=1
+fi
+
+if [[ "$NEEDS_REINSTALL" == "1" ]]; then
+  echo "Installing local package into $VENV_DIR."
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM="$LOCAL_PRETEND_VERSION" \
+    python -m pip install -e .
+  printf '%s\n' "$CURRENT_INSTALL_FINGERPRINT" > "$INSTALL_STATE_FILE"
+else
+  echo "Existing editable install detected; skipping reinstall."
+fi
 
 echo "Post-installation guide:"
 echo "1. Confirm $ENV_FILE contains WORKSPACE_ROOT, TELEGRAM_BOT_TOKENS, and ALLOWED_CHAT_IDS."
