@@ -55,6 +55,7 @@ COMMAND_PREFIXES = (
     "find ",
 )
 SHELL_LANGUAGES = {"bash", "console", "shell", "sh", "zsh"}
+SAFE_TELEGRAM_MESSAGE_LENGTH = 3000
 
 
 @dataclass(frozen=True)
@@ -68,11 +69,12 @@ class AssistantSegment:
 async def send_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     if update.effective_chat is None:
         return
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=html.escape(text),
-        parse_mode=ParseMode.HTML,
-    )
+    for chunk in _split_text_chunks(text):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=html.escape(chunk),
+            parse_mode=ParseMode.HTML,
+        )
 
 
 async def send_markdown_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
@@ -88,6 +90,9 @@ async def send_markdown_text(update: Update, context: ContextTypes.DEFAULT_TYPE,
 async def send_html_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     if update.effective_chat is None:
         return
+    if len(text) > SAFE_TELEGRAM_MESSAGE_LENGTH:
+        await send_text(update, context, _strip_html_tags(text))
+        return
     try:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -97,11 +102,7 @@ async def send_html_text(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
     except BadRequest as exc:
         if "Can't parse entities" not in str(exc):
             raise
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=html.escape(_strip_html_tags(text)),
-            parse_mode=ParseMode.HTML,
-        )
+        await send_text(update, context, _strip_html_tags(text))
 
 
 def markdownish_to_html(text: str) -> str:
@@ -135,6 +136,54 @@ def _format_plain_markdownish(text: str) -> str:
 def _strip_html_tags(text: str) -> str:
     normalized = text.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
     return html.unescape(re.sub(r"</?[^>]+>", "", normalized))
+
+
+def _split_text_chunks(text: str, max_length: int = SAFE_TELEGRAM_MESSAGE_LENGTH) -> list[str]:
+    normalized = text.strip()
+    if not normalized:
+        return []
+
+    chunks = [normalized]
+    while True:
+        for index, chunk in enumerate(chunks):
+            if len(chunk) <= max_length:
+                continue
+            left, right = _split_plain_text_chunk(chunk)
+            chunks = [*chunks[:index], left, right, *chunks[index + 1 :]]
+            break
+        else:
+            return chunks
+
+
+def _split_plain_text_chunk(text: str) -> tuple[str, str]:
+    lines = text.splitlines()
+    if len(lines) > 1:
+        midpoint = len(lines) // 2
+        left = "\n".join(lines[:midpoint]).strip()
+        right = "\n".join(lines[midpoint:]).strip()
+        if left and right:
+            return left, right
+
+    midpoint = len(text) // 2
+    for split_at in range(midpoint, 0, -1):
+        if text[split_at].isspace():
+            left = text[:split_at].rstrip()
+            right = text[split_at:].lstrip()
+            if left and right:
+                return left, right
+
+    left = text[:midpoint].rstrip()
+    right = text[midpoint:].lstrip()
+    if not left:
+        left = text[:1]
+    if not right:
+        right = text[-1:]
+    return left, right
+
+
+def _split_code_chunks(code: str, language: Optional[str], max_length: int = SAFE_TELEGRAM_MESSAGE_LENGTH) -> list[str]:
+    wrapper = len('<pre><code class="language-"></code></pre>') + len(html.escape(language or ""))
+    return _split_text_chunks(code, max(1, max_length - wrapper))
 
 
 def split_assistant_output(text: str) -> list[AssistantSegment]:
@@ -219,18 +268,22 @@ async def send_code_block(
 ) -> None:
     if update.effective_chat is None:
         return
-    escaped_code = html.escape(code)
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=html.escape(header),
-        parse_mode=ParseMode.HTML,
-    )
-    if language:
-        text = f"<pre><code class=\"language-{html.escape(language)}\">{escaped_code}</code></pre>"
-    else:
-        text = f"<pre><code>{escaped_code}</code></pre>"
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=text,
-        parse_mode=ParseMode.HTML,
-    )
+    chunks = _split_code_chunks(code, language)
+    total = len(chunks)
+    for index, chunk in enumerate(chunks, start=1):
+        current_header = header if total == 1 else f"{header} ({index}/{total})"
+        escaped_code = html.escape(chunk)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=html.escape(current_header),
+            parse_mode=ParseMode.HTML,
+        )
+        if language:
+            text = f"<pre><code class=\"language-{html.escape(language)}\">{escaped_code}</code></pre>"
+        else:
+            text = f"<pre><code>{escaped_code}</code></pre>"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=text,
+            parse_mode=ParseMode.HTML,
+        )

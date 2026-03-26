@@ -207,6 +207,23 @@ def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
     assert "--allow-all" in calls[0][0]
 
 
+def test_copilot_runner_preserves_explicit_copilot_home(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+    monkeypatch.setenv("COPILOT_HOME", "/tmp/custom-copilot-home")
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+
+    assert calls[0][2]["COPILOT_HOME"] == "/tmp/custom-copilot-home"
+
+
 def test_codex_runner_passes_model_when_configured(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))

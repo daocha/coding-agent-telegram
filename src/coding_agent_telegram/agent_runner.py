@@ -344,7 +344,7 @@ class MultiAgentRunner:
 
     def _copilot_env(self, project_path: Path, skip_git_repo_check: bool) -> dict[str, str]:
         env = os.environ.copy()
-        if skip_git_repo_check:
+        if skip_git_repo_check and not env.get("COPILOT_HOME"):
             env["COPILOT_HOME"] = str(project_path / ".copilot")
         return env
 
