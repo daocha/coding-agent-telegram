@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html
 import shlex
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -365,8 +366,8 @@ def make_config(tmp_path: Path) -> AppConfig:
         log_dir=tmp_path / "logs",
         telegram_bot_tokens=("x",),
         allowed_chat_ids={123},
-        codex_bin="codex",
-        copilot_bin="copilot",
+        codex_bin=sys.executable,
+        copilot_bin=sys.executable,
         codex_model="",
         copilot_model="",
         copilot_autopilot=True,
@@ -1150,7 +1151,7 @@ def test_provider_availability_uses_cache(tmp_path: Path, monkeypatch):
 
     assert router._provider_available("codex") is True
     assert router._provider_available("codex") is True
-    assert calls == ["codex"]
+    assert calls == [cfg.codex_bin]
 
 
 def test_missing_provider_availability_cache_expires_faster(tmp_path: Path, monkeypatch):
@@ -1175,7 +1176,7 @@ def test_missing_provider_availability_cache_expires_faster(tmp_path: Path, monk
     )
 
     assert router._provider_available("copilot") is True
-    assert calls == ["copilot", "copilot"]
+    assert calls == [cfg.copilot_bin, cfg.copilot_bin]
 
 
 def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
