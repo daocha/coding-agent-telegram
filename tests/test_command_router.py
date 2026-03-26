@@ -2130,13 +2130,58 @@ def test_push_uses_current_session_branch(tmp_path: Path):
 
     bot = _run_push_command(router)
 
+    assert router.git.push_calls == []
+    assert bot.messages[-1][1] == "Push branch `feature-1` to `origin`?"
+    assert bot.messages[-1][2] == "Markdown"
+    assert bot.messages[-1][3] is not None
+
+
+def test_push_confirmation_executes_push(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "enable_commit_command": False})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-1",
+        push_result=SimpleNamespace(success=True, message="Pushed branch 'feature-1' to origin.", current_branch="feature-1"),
+    )
+    router.runtime.git = router.git
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="push:confirm",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append((text, parse_mode))
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_push_callback(update, context))
+
+    assert edited == [("Pushing branch `feature-1` to `origin`...", "Markdown")]
     assert router.git.push_calls == [(backend, "feature-1")]
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert f"${shlex.join(['git', 'push', 'origin', 'feature-1'])}" in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
 
 
-def test_push_is_rejected_when_disabled(tmp_path: Path):
+def test_push_confirmation_cancel_does_not_push(tmp_path: Path):
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
     runner = DummyRunner()
@@ -2146,10 +2191,30 @@ def test_push_is_rejected_when_disabled(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
     router.runtime.git = router.git
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="push:cancel",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
 
-    bot = _run_push_command(router)
+    async def fake_answer():
+        return None
 
-    assert "/push is disabled." in bot.messages[-1][1]
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_push_callback(update, context))
+
+    assert edited == ["Push cancelled."]
     assert router.git.push_calls == []
 
 

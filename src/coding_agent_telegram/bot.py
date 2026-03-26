@@ -26,14 +26,10 @@ def default_bot_commands(*, enable_commit_command: bool) -> list[BotCommand]:
         BotCommand("new", "Create a new session"),
         BotCommand("switch", "List sessions or switch to one"),
         BotCommand("current", "Show the active session"),
+        BotCommand("push", "Push the current session branch"),
     ]
     if enable_commit_command:
-        commands.extend(
-            [
-                BotCommand("commit", "Run validated git commit commands"),
-                BotCommand("push", "Push the current session branch"),
-            ]
-        )
+        commands.append(BotCommand("commit", "Run validated git commit commands"))
     return commands
 
 
@@ -93,6 +89,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CommandHandler("commit", router.handle_commit, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
     app.add_handler(CallbackQueryHandler(router.handle_provider_callback, pattern=r"^provider:set:(codex|copilot)$"))
+    app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo))
     app.add_handler(MessageHandler(allowed_private & tg_filters.TEXT & ~tg_filters.COMMAND, router.handle_message))

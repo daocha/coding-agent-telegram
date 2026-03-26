@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.telegram_sender import send_html_text, send_text
@@ -70,14 +70,6 @@ class GitCommandMixin:
 
     @require_allowed_chat()
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self.deps.cfg.enable_commit_command:
-            await send_text(
-                update,
-                context,
-                "/push is disabled.\nSet ENABLE_COMMIT_COMMAND=true in the bot environment to enable it.",
-            )
-            return
-
         if context.args:
             await send_text(update, context, "Usage: /push")
             return
@@ -95,17 +87,56 @@ class GitCommandMixin:
             await send_text(update, context, "⚠️ Could not determine the branch for the current session.")
             return
 
+        confirm_markup = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Confirm push", callback_data="push:confirm"),
+                    InlineKeyboardButton("Cancel", callback_data="push:cancel"),
+                ]
+            ]
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Push branch `{branch_name}` to `origin`?",
+            parse_mode="Markdown",
+            reply_markup=confirm_markup,
+        )
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_push_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None:
+            return
+
+        action = (query.data or "").strip()
+        if action == "push:cancel":
+            await query.edit_message_text("Push cancelled.")
+            return
+        if action != "push:confirm":
+            return
+
+        session, project_path = await self._active_session_project_or_notify(
+            update,
+            context,
+            require_git_repo=True,
+        )
+        if session is None or project_path is None:
+            return
+
+        branch_name = session.get("branch_name") or self.git.current_branch(project_path)
+        if not branch_name:
+            await query.edit_message_text("⚠️ Could not determine the branch for the current session.")
+            return
+
         current_branch = self.git.current_branch(project_path)
         if current_branch != branch_name:
             checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
             if not checkout.success:
-                await send_html_text(
-                    update,
-                    context,
-                    self._bash_block(self._format_git_response([(["checkout", branch_name], checkout)], [])),
-                )
+                await query.edit_message_text(f"Push cancelled. Failed to switch to `{branch_name}` first.", parse_mode="Markdown")
+                await send_html_text(update, context, self._bash_block(self._format_git_response([(["checkout", branch_name], checkout)], [])))
                 return
 
+        await query.edit_message_text(f"Pushing branch `{branch_name}` to `origin`...", parse_mode="Markdown")
         result = await asyncio.to_thread(self.git.push_branch, project_path, branch_name)
         await send_html_text(
             update,
