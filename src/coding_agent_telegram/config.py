@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -69,9 +70,20 @@ def _parse_bot_tokens() -> tuple[str, ...]:
     return tuple(_parse_csv_env("TELEGRAM_BOT_TOKENS"))
 
 
-def load_config() -> AppConfig:
+def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
+    if env_file is not None:
+        return env_file
+
+    env_file_override = os.getenv("CODING_AGENT_TELEGRAM_ENV_FILE", "").strip()
+    if env_file_override:
+        return Path(env_file_override).expanduser()
+
+    return Path.cwd() / ".env"
+
+
+def load_config(env_file: Optional[Path] = None) -> AppConfig:
     """Load application configuration from the environment and `.env`."""
-    load_dotenv()
+    load_dotenv(dotenv_path=resolve_env_file_path(env_file), override=True)
 
     workspace_root_raw = os.getenv("WORKSPACE_ROOT")
     tokens = _parse_bot_tokens()

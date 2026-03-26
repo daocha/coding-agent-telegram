@@ -7,6 +7,7 @@ from coding_agent_telegram.config import (
     DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
     DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
     load_config,
+    resolve_env_file_path,
 )
 
 
@@ -120,3 +121,33 @@ def test_load_config_snapshot_limit_override(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.snapshot_text_file_max_bytes == 4096
+
+
+def test_resolve_env_file_path_uses_explicit_env_override(monkeypatch, tmp_path):
+    env_path = tmp_path / "custom.env"
+    monkeypatch.setenv("CODING_AGENT_TELEGRAM_ENV_FILE", str(env_path))
+
+    assert resolve_env_file_path() == env_path
+
+
+def test_load_config_uses_env_file_and_overrides_empty_process_values(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            (
+                "WORKSPACE_ROOT=~/git",
+                "TELEGRAM_BOT_TOKENS=token-a",
+                "ALLOWED_CHAT_IDS=123",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WORKSPACE_ROOT", "")
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config(env_path)
+
+    assert cfg.workspace_root.name == "git"
+    assert cfg.telegram_bot_tokens == ("token-a",)
+    assert cfg.allowed_chat_ids == {123}
