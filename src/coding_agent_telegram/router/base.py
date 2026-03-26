@@ -164,10 +164,11 @@ class CommandRouterBase:
 
         stall_message = kwargs.pop("stall_message", None)
         progress_label = kwargs.pop("progress_label", None)
+        progress_state = {"message_id": None, "last_text": ""}
         if stall_message:
             kwargs["on_stall"] = self._make_stall_notifier(update, context, stall_message)
         if progress_label:
-            kwargs["on_progress"] = self._make_progress_notifier(update, context, progress_label)
+            kwargs["on_progress"] = self._make_progress_notifier(update, context, progress_label, progress_state)
 
         stop_event = asyncio.Event()
         await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
@@ -182,7 +183,13 @@ class CommandRouterBase:
 
         typing_task = asyncio.create_task(typing_loop())
         try:
-            return await asyncio.to_thread(fn, *args, **kwargs)
+            result = await asyncio.to_thread(fn, *args, **kwargs)
+            if progress_state["message_id"] is not None and hasattr(context.bot, "delete_message"):
+                try:
+                    await context.bot.delete_message(chat_id=chat.id, message_id=progress_state["message_id"])
+                except BadRequest:
+                    pass
+            return result
         finally:
             stop_event.set()
             await typing_task
@@ -196,9 +203,14 @@ class CommandRouterBase:
 
         return notify
 
-    def _make_progress_notifier(self, update: Update, context: ContextTypes.DEFAULT_TYPE, label: str):
+    def _make_progress_notifier(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        label: str,
+        progress_state: dict[str, object],
+    ):
         loop = asyncio.get_running_loop()
-        progress_state = {"message_id": None, "last_text": ""}
 
         async def publish(info: AgentProgressInfo) -> None:
             chat = update.effective_chat

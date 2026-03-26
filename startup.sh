@@ -68,11 +68,7 @@ LOG_DIR="$(resolve_path "$LOG_DIR")"
 LOG_FILE="$LOG_DIR/coding-agent-telegram.log"
 
 mkdir -p "$(dirname "$STATE_FILE")" "$(dirname "$STATE_BACKUP_FILE")" "$LOG_DIR"
-touch "$STATE_FILE" "$STATE_BACKUP_FILE" "$LOG_FILE"
-
-exec >> "$LOG_FILE" 2>&1
-
-echo "Logging output to $LOG_FILE"
+touch "$STATE_FILE" "$STATE_BACKUP_FILE"
 
 required_vars=(
   WORKSPACE_ROOT
@@ -106,12 +102,16 @@ case "$DEFAULT_AGENT_PROVIDER" in
   codex)
     if ! command -v "$CODEX_BIN" >/dev/null 2>&1; then
       echo "Error: Codex CLI not found: $CODEX_BIN" >&2
+      echo "Check DEFAULT_AGENT_PROVIDER and CODEX_BIN in $ENV_FILE." >&2
+      echo "If this machine only has Copilot, set DEFAULT_AGENT_PROVIDER=copilot." >&2
       exit 1
     fi
     ;;
   copilot)
     if ! command -v "$COPILOT_BIN" >/dev/null 2>&1; then
       echo "Error: Copilot CLI not found: $COPILOT_BIN" >&2
+      echo "Check DEFAULT_AGENT_PROVIDER and COPILOT_BIN in $ENV_FILE." >&2
+      echo "If this machine only has Codex, set DEFAULT_AGENT_PROVIDER=codex." >&2
       exit 1
     fi
     ;;
