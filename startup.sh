@@ -68,11 +68,7 @@ LOG_DIR="$(resolve_path "$LOG_DIR")"
 LOG_FILE="$LOG_DIR/coding-agent-telegram.log"
 
 mkdir -p "$(dirname "$STATE_FILE")" "$(dirname "$STATE_BACKUP_FILE")" "$LOG_DIR"
-touch "$STATE_FILE" "$STATE_BACKUP_FILE" "$LOG_FILE"
-
-exec >> "$LOG_FILE" 2>&1
-
-echo "Logging output to $LOG_FILE"
+touch "$STATE_FILE" "$STATE_BACKUP_FILE"
 
 required_vars=(
   WORKSPACE_ROOT
