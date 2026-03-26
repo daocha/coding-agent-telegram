@@ -11,7 +11,7 @@ from typing import Sequence
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.bot import build_application, default_bot_commands, initialize_bot_commands
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
-from coding_agent_telegram.config import load_config
+from coding_agent_telegram.config import load_config, resolve_env_file_path
 from coding_agent_telegram.logging_utils import setup_logging
 from coding_agent_telegram.session_store import SessionStore
 
@@ -21,7 +21,8 @@ BOT_ID_HASH_PREFIX_LENGTH = 12
 
 
 def _ensure_env_file() -> Path:
-    env_path = Path.cwd() / ".env"
+    env_path = resolve_env_file_path()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
     if not env_path.exists():
         template = importlib.resources.files("coding_agent_telegram").joinpath("resources/.env.example").read_text(
             encoding="utf-8"
@@ -89,10 +90,10 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
 
 
 def main() -> None:
+    env_path = _ensure_env_file()
     try:
-        cfg = load_config()
+        cfg = load_config(env_path)
     except ValueError as exc:
-        env_path = _ensure_env_file()
         print(str(exc), file=sys.stderr)
         print("", file=sys.stderr)
         print(f"Created {env_path} if it did not already exist.", file=sys.stderr)
