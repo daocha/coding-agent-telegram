@@ -114,9 +114,7 @@ def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
 
     assert calls[0][0] == [
         "copilot",
-        "--autopilot",
         "--no-ask-user",
-        "--allow-all",
         "--output-format=json",
         "--prompt",
         runner.PROMPT_PREFIX + "hello",
@@ -193,6 +191,7 @@ def test_copilot_runner_rejects_image_attachments():
 def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+    monkeypatch.delenv("COPILOT_HOME", raising=False)
 
     runner = MultiAgentRunner(
         codex_bin="codex",
@@ -204,7 +203,8 @@ def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
     runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True)
 
     assert calls[0][2]["COPILOT_HOME"] == "/tmp/project/.copilot"
-    assert "--allow-all" in calls[0][0]
+    assert "--allow-all" not in calls[0][0]
+    assert "--allow-all-tools" not in calls[0][0]
 
 
 def test_copilot_runner_preserves_explicit_copilot_home(monkeypatch):
@@ -357,15 +357,12 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
 
     runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
 
-    assert calls[0][0][:8] == [
+    assert calls[0][0][:5] == [
         "copilot",
         "--model",
         "gpt-5",
-        "--autopilot",
         "--no-ask-user",
-        "--allow-all",
         "--output-format=json",
-        "--prompt",
     ]
 
 
@@ -389,11 +386,7 @@ def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
 
     runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
 
-    assert "--allow-all-tools" in calls[0][0]
-    assert calls[0][0].count("--allow-tool") == 2
-    assert "shell(git)" in calls[0][0]
-    assert "shell(npm)" in calls[0][0]
-    assert "--deny-tool" in calls[0][0]
-    assert "shell(rm)" in calls[0][0]
-    assert "--available-tools" in calls[0][0]
-    assert "shell,apply_patch" in calls[0][0]
+    assert "--allow-all-tools" not in calls[0][0]
+    assert "--allow-tool" not in calls[0][0]
+    assert "--deny-tool" not in calls[0][0]
+    assert "--available-tools" not in calls[0][0]

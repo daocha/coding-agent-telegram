@@ -5,6 +5,7 @@ import html
 import logging
 import os
 import shlex
+from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
@@ -164,18 +165,18 @@ class CommandRouterBase:
 
         stall_message = kwargs.pop("stall_message", None)
         progress_label = kwargs.pop("progress_label", None)
-        progress_state = {"message_id": None, "last_text": ""}
+        progress_state = {"message_id": None, "last_text": "", "closed": False, "futures": set()}
         if stall_message:
             kwargs["on_stall"] = self._make_stall_notifier(update, context, stall_message)
         if progress_label:
             kwargs["on_progress"] = self._make_progress_notifier(update, context, progress_label, progress_state)
 
         stop_event = asyncio.Event()
-        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+        await self._safe_send_chat_action(context, chat.id, ChatAction.TYPING)
 
         async def typing_loop() -> None:
             while not stop_event.is_set():
-                await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+                await self._safe_send_chat_action(context, chat.id, ChatAction.TYPING)
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=TYPING_REFRESH_TIMEOUT_SECONDS)
                 except asyncio.TimeoutError:
@@ -184,6 +185,12 @@ class CommandRouterBase:
         typing_task = asyncio.create_task(typing_loop())
         try:
             result = await asyncio.to_thread(fn, *args, **kwargs)
+            # Give thread-safe Telegram notifications one event-loop turn to run
+            # before we close the progress channel and finalize the response.
+            await asyncio.sleep(0)
+            progress_state["closed"] = True
+            for future in tuple(progress_state["futures"]):
+                future.cancel()
             if progress_state["message_id"] is not None and hasattr(context.bot, "delete_message"):
                 try:
                     await context.bot.delete_message(chat_id=chat.id, message_id=progress_state["message_id"])
@@ -198,8 +205,7 @@ class CommandRouterBase:
         loop = asyncio.get_running_loop()
 
         def notify(_info) -> None:
-            future = asyncio.run_coroutine_threadsafe(send_text(update, context, message), loop)
-            future.result(timeout=5)
+            self._submit_threadsafe_notification(asyncio.run_coroutine_threadsafe(send_text(update, context, message), loop))
 
         return notify
 
@@ -214,7 +220,7 @@ class CommandRouterBase:
 
         async def publish(info: AgentProgressInfo) -> None:
             chat = update.effective_chat
-            if chat is None:
+            if chat is None or progress_state.get("closed"):
                 return
             body = info.text.strip()
             if len(body) > PROGRESS_PREVIEW_MAX_CHARS:
@@ -223,9 +229,18 @@ class CommandRouterBase:
             if message_text == progress_state["last_text"]:
                 return
             progress_state["last_text"] = message_text
+            if progress_state.get("closed"):
+                return
             if progress_state["message_id"] is None:
                 message = await context.bot.send_message(chat_id=chat.id, text=message_text)
-                progress_state["message_id"] = getattr(message, "message_id", None)
+                message_id = getattr(message, "message_id", None)
+                if progress_state.get("closed") and message_id is not None and hasattr(context.bot, "delete_message"):
+                    try:
+                        await context.bot.delete_message(chat_id=chat.id, message_id=message_id)
+                    except BadRequest:
+                        pass
+                    return
+                progress_state["message_id"] = message_id
                 return
             try:
                 await context.bot.edit_message_text(
@@ -239,9 +254,29 @@ class CommandRouterBase:
 
         def notify(info: AgentProgressInfo) -> None:
             future = asyncio.run_coroutine_threadsafe(publish(info), loop)
-            future.result(timeout=5)
+            progress_state["futures"].add(future)
+            self._submit_threadsafe_notification(future, progress_state=progress_state)
 
         return notify
+
+    def _submit_threadsafe_notification(self, future: Future, *, progress_state: Optional[dict[str, object]] = None) -> None:
+        def on_done(done_future: Future) -> None:
+            if progress_state is not None:
+                progress_state["futures"].discard(done_future)
+            try:
+                done_future.result()
+            except CancelledError:
+                pass
+            except Exception:
+                logger.exception("Telegram notification callback failed.")
+
+        future.add_done_callback(on_done)
+
+    async def _safe_send_chat_action(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, action: ChatAction) -> None:
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action=action)
+        except Exception:
+            logger.warning("Failed to send Telegram chat action '%s' to chat %s.", action, chat_id, exc_info=True)
 
     def _chat_allowed(self, update: Update) -> Tuple[bool, Optional[str]]:
         chat = update.effective_chat

@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
 DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
 DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES = 5 * 1024 * 1024
+DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
+LEGACY_ENV_FILE_NAME = ".env"
 
 
 @dataclass(frozen=True)
@@ -78,11 +80,18 @@ def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file_override:
         return Path(env_file_override).expanduser()
 
-    return Path.cwd() / ".env"
+    cwd = Path.cwd()
+    default_env = cwd / DEFAULT_ENV_FILE_NAME
+    legacy_env = cwd / LEGACY_ENV_FILE_NAME
+    if default_env.exists():
+        return default_env
+    if legacy_env.exists():
+        return legacy_env
+    return default_env
 
 
 def load_config(env_file: Optional[Path] = None) -> AppConfig:
-    """Load application configuration from the environment and `.env`."""
+    """Load application configuration from the environment and the resolved env file."""
     load_dotenv(dotenv_path=resolve_env_file_path(env_file), override=True)
 
     workspace_root_raw = os.getenv("WORKSPACE_ROOT")
