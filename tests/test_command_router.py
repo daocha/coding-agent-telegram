@@ -6,7 +6,7 @@ import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
-from coding_agent_telegram.agent_runner import AgentRunResult, AgentStallInfo
+from coding_agent_telegram.agent_runner import AgentProgressInfo, AgentRunResult, AgentStallInfo
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.session_store import SessionStore
@@ -483,10 +483,12 @@ def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
 
     asyncio.run(router.handle_project(update, context))
 
-    assert "Current branch: <code>main</code>" in bot.messages[0][1]
-    assert "the default branch: <code>main</code>" in bot.messages[0][1]
-    assert "the current branch: <code>main</code>" in bot.messages[0][1]
-    assert store.get_chat_state("bot-a", 123)["current_branch"] == "main"
+    message = bot.messages[0][1]
+    assert "Project changed to: backend" in message
+    assert "Branch selection is required" in message
+    assert "Current branch in repo: main" in message
+    assert "Select a branch with:" in message
+    assert "current_branch" not in store.get_chat_state("bot-a", 123)
 
 
 def test_project_command_warns_when_active_session_belongs_to_another_project(tmp_path: Path):
@@ -630,11 +632,11 @@ def test_branch_command_lists_branches_when_project_is_set(tmp_path: Path):
 
     message = bot.messages[-1][1]
     assert "Project: backend" in message
-    assert "Current branch: feature-1" in message
+    assert "Current branch in repo: feature-1" in message
     assert "Default branch: main" in message
-    assert "* feature-1 (current branch)" in message
+    assert "* feature-1 (current branch in repo)" in message
     assert "- main (default)" in message
-    assert "/branch &lt;new_branch&gt;" in message
+    assert "Select a branch with:" in message
 
 
 def test_branch_command_lists_branches_even_when_refresh_warns(tmp_path: Path):
@@ -668,7 +670,7 @@ def test_branch_command_lists_branches_even_when_refresh_warns(tmp_path: Path):
     message = bot.messages[-1][1]
     assert "Refresh warnings:" in message
     assert "git pull failed for branch: feature-deleted-remote" in message
-    assert "* feature-deleted-remote (current branch)" in message
+    assert "* feature-deleted-remote (current branch in repo)" in message
     assert "- main (default)" in message
 
 
@@ -802,6 +804,37 @@ class StallingRunner(DummyRunner):
         )
 
 
+class ProgressRunner(DummyRunner):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        if on_progress is not None:
+            on_progress(
+                AgentProgressInfo(
+                    command=("codex", "exec", "resume"),
+                    elapsed_seconds=5.0,
+                    text="Indexing files...",
+                    source="stdout",
+                )
+            )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="done",
+            error_message=None,
+            raw_events=[],
+        )
+
+
 def test_new_command_supports_copilot_provider(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -809,11 +842,13 @@ def test_new_command_supports_copilot_provider(tmp_path: Path):
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "copilot")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
 
     update = make_update()
     bot = FakeBot()
-    context = SimpleNamespace(args=["my-session", "copilot"], bot=bot)
+    context = SimpleNamespace(args=["my-session"], bot=bot)
 
     asyncio.run(router.handle_new(update, context))
     state = store.get_chat_state("bot-a", 123)
@@ -831,7 +866,9 @@ def test_new_command_skips_git_repo_check_for_trusted_project(tmp_path: Path):
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.trust_project("backend")
     store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
 
     update = make_update()
     bot = FakeBot()
@@ -851,8 +888,10 @@ def test_new_command_rejects_duplicate_session_name(tmp_path: Path):
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
     store.create_session("bot-a", 123, "sess_existing", "my-session", "backend", "codex")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
 
     update = make_update()
     bot = FakeBot()
@@ -871,7 +910,9 @@ def test_new_command_reports_stalled_agent_process(tmp_path: Path):
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
 
     update = make_update()
     bot = FakeBot()
@@ -881,6 +922,260 @@ def test_new_command_reports_stalled_agent_process(tmp_path: Path):
 
     assert any("Session creation appears stuck." in message[1] for message in bot.messages)
     assert any("hidden permission dialog" in message[1] for message in bot.messages)
+
+
+def test_new_command_prompts_for_provider_when_not_selected(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls == []
+    assert "Provider selection is required" in bot.messages[-1][1]
+    assert bot.messages[-1][3] is not None
+    assert store.get_chat_state("bot-a", 123)["pending_action"]["kind"] == "new_session"
+
+
+def test_new_without_name_uses_new_session_as_default_name(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    update = make_update(text="/new")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
+    assert "Session created successfully: sess_abc123" in bot.messages[-1][1]
+    assert runner.create_calls[-1]["user_message"] == "Create session: new session"
+
+
+def test_new_without_name_ignores_existing_new_session_labels(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    store.create_session("bot-a", 123, "sess_existing", "new session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    update = make_update(text="/new")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
+    assert "Session created successfully: sess_abc123" in bot.messages[-1][1]
+
+
+def test_provider_command_sends_inline_buttons(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_provider("bot-a", 123, "copilot")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: provider == "copilot"
+
+    update = make_update(text="/provider")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_provider(update, context))
+
+    assert len(bot.messages) == 1
+    message = bot.messages[0]
+    assert "Current provider: copilot" in message[1]
+    keyboard = message[3]
+    assert keyboard is not None
+    buttons = keyboard.inline_keyboard[0]
+    assert buttons[0].callback_data == "provider:set:codex"
+    assert buttons[1].callback_data == "provider:set:copilot"
+    assert "missing" in buttons[0].text
+    assert "current" in buttons[1].text
+
+
+def test_provider_callback_updates_current_provider(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    answers = []
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:copilot",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        answers.append("answered")
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    assert answers == ["answered"]
+    assert edited == ["Current provider set to: copilot"]
+    assert store.get_chat_state("bot-a", 123)["current_provider"] == "copilot"
+
+
+def test_provider_callback_continues_pending_new_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_pending_action("bot-a", 123, {"kind": "new_session", "session_name": "my-session"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:copilot",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    assert edited == ["Current provider set to: copilot"]
+    assert runner.create_calls[-1]["provider"] == "copilot"
+    state = store.get_chat_state("bot-a", 123)
+    assert "pending_action" not in state
+    assert state["sessions"][state["active_session_id"]]["provider"] == "copilot"
+
+
+def test_provider_switch_auto_creates_session_named_by_session_id(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:copilot",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert edited == ["Current provider set to: copilot"]
+    assert state["sessions"][state["active_session_id"]]["name"] == "sess_abc123"
+    assert state["sessions"][state["active_session_id"]]["provider"] == "copilot"
+
+
+def test_provider_availability_uses_cache(tmp_path: Path, monkeypatch):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    calls = []
+
+    def fake_which(_name):
+        calls.append(_name)
+        return "/usr/local/bin/codex"
+
+    monkeypatch.setattr("coding_agent_telegram.router.session_commands.shutil.which", fake_which)
+
+    assert router._provider_available("codex") is True
+    assert router._provider_available("codex") is True
+    assert calls == ["codex"]
+
+
+def test_missing_provider_availability_cache_expires_faster(tmp_path: Path, monkeypatch):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    calls = []
+
+    def fake_which(_name):
+        calls.append(_name)
+        return None if len(calls) == 1 else "/usr/local/bin/copilot"
+
+    monkeypatch.setattr("coding_agent_telegram.router.session_commands.shutil.which", fake_which)
+
+    assert router._provider_available("copilot") is False
+    cached_at, available, bin_name = router._provider_availability_cache["copilot"]
+    router._provider_availability_cache["copilot"] = (
+        cached_at - router.PROVIDER_BIN_MISSING_CACHE_TTL_SECONDS - 1,
+        available,
+        bin_name,
+    )
+
+    assert router._provider_available("copilot") is True
+    assert calls == ["copilot", "copilot"]
 
 
 def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
@@ -1227,7 +1522,28 @@ def test_message_reports_missing_project_folder_before_running_agent(tmp_path: P
     asyncio.run(router.handle_message(update, context))
 
     assert runner.resume_calls == []
-    assert bot.messages[-1][1] == "⚠️ Project folder no longer exists for this session: backend"
+    assert bot.messages[-1][1] == "Project folder does not exist: backend\nRun /project backend again."
+
+
+def test_message_prompts_for_provider_when_not_selected(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls == []
+    assert "Provider selection is required" in bot.messages[-1][1]
+    assert bot.messages[-1][3] is not None
+    assert store.get_chat_state("bot-a", 123)["pending_action"]["kind"] == "message"
 
 
 def test_current_reports_missing_active_session(tmp_path: Path):
@@ -1261,6 +1577,7 @@ def test_current_reports_active_session_details(tmp_path: Path):
     asyncio.run(router.handle_current(update, context))
 
     assert "Current session: current-session" in bot.messages[-1][1]
+    assert "Session ID: sess_current" in bot.messages[-1][1]
     assert "Project: backend" in bot.messages[-1][1]
     assert "Provider: codex" in bot.messages[-1][1]
     assert "Branch: feature-1" in bot.messages[-1][1]
@@ -1378,6 +1695,27 @@ def test_active_session_reports_stalled_agent_process(tmp_path: Path):
 
     assert any("The current agent run appears stuck." in message[1] for message in bot.messages)
     assert any("hidden permission dialog" in message[1] for message in bot.messages)
+
+
+def test_active_session_deletes_live_progress_message_when_final_output_is_sent(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ProgressRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_progress", "progress-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="continue")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert len(bot.deleted_messages) == 1
+    assert bot.deleted_messages[0][0] == 123
+    assert any("Codex output" in message[1] for message in bot.messages)
 
 
 def test_assistant_output_is_chunked_by_rendered_html_length(tmp_path: Path):
@@ -1779,6 +2117,7 @@ def test_push_uses_current_session_branch(tmp_path: Path):
     backend.mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "enable_commit_command": True})
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
@@ -1797,11 +2136,29 @@ def test_push_uses_current_session_branch(tmp_path: Path):
     assert "[Completed]" in bot.messages[-1][1]
 
 
+def test_push_is_rejected_when_disabled(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+
+    bot = _run_push_command(router)
+
+    assert "/push is disabled." in bot.messages[-1][1]
+    assert router.git.push_calls == []
+
+
 def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
     runner = DummyRunner()
     cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "enable_commit_command": True})
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))

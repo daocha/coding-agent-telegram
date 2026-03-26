@@ -1,11 +1,14 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-.venv/
-.env
+.venv*/
+.env_*
+.env.*
 state.json
 state.json.lock
 state.json.tmp
 state.json.bak
 *.egg-info/
 logs/
+.codex
+.copilot

@@ -70,6 +70,14 @@ class GitCommandMixin:
 
     @require_allowed_chat()
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self.deps.cfg.enable_commit_command:
+            await send_text(
+                update,
+                context,
+                "/push is disabled.\nSet ENABLE_COMMIT_COMMAND=true in the bot environment to enable it.",
+            )
+            return
+
         if context.args:
             await send_text(update, context, "Usage: /push")
             return

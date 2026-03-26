@@ -172,6 +172,21 @@ class SessionStore:
 
         self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
+    def set_current_provider(self, bot_id: str, chat_id: int, provider: str) -> None:
+        def mutate(chat_data: dict[str, Any]) -> None:
+            chat_data["current_provider"] = provider
+
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
+
+    def set_pending_action(self, bot_id: str, chat_id: int, pending_action: Optional[dict[str, Any]]) -> None:
+        def mutate(chat_data: dict[str, Any]) -> None:
+            if pending_action:
+                chat_data["pending_action"] = pending_action
+            else:
+                chat_data.pop("pending_action", None)
+
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
+
     def create_session(
         self,
         bot_id: str,
@@ -194,6 +209,7 @@ class SessionStore:
             )
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = project_folder
+            chat_data["current_provider"] = provider
             if branch_name:
                 chat_data["current_branch"] = branch_name
 
@@ -223,6 +239,7 @@ class SessionStore:
             )
             chat_data["active_session_id"] = new_session_id
             chat_data["current_project_folder"] = project_folder
+            chat_data["current_provider"] = provider
             if branch_name:
                 chat_data["current_branch"] = branch_name
 
@@ -298,6 +315,7 @@ class SessionStore:
 
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = session["project_folder"]
+            chat_data["current_provider"] = session.get("provider", "codex")
             if session.get("branch_name"):
                 chat_data["current_branch"] = session["branch_name"]
             else:

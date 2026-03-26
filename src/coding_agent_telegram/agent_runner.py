@@ -479,23 +479,29 @@ class MultiAgentRunner:
             env["COPILOT_HOME"] = str(project_path / ".copilot")
         return env
 
-    def _copilot_base(self, user_message: str, skip_git_repo_check: bool) -> list[str]:
+    def _copilot_base(
+        self,
+        user_message: str,
+        skip_git_repo_check: bool,
+        *,
+        for_session_creation: bool = False,
+    ) -> list[str]:
         args = []
         if self.copilot_model:
             args.extend(["--model", self.copilot_model])
-        if self.copilot_autopilot:
+        if self.copilot_autopilot and not for_session_creation:
             args.append("--autopilot")
         if self.copilot_no_ask_user:
             args.append("--no-ask-user")
-        if self.copilot_allow_all:
+        if self.copilot_allow_all and not for_session_creation:
             args.append("--allow-all")
-        elif self.copilot_allow_all_tools or skip_git_repo_check:
+        elif (self.copilot_allow_all_tools or skip_git_repo_check) and not for_session_creation:
             args.append("--allow-all-tools")
-        for tool in self.copilot_allow_tools:
+        for tool in self.copilot_allow_tools if not for_session_creation else ():
             args.extend(["--allow-tool", tool])
-        for tool in self.copilot_deny_tools:
+        for tool in self.copilot_deny_tools if not for_session_creation else ():
             args.extend(["--deny-tool", tool])
-        if self.copilot_available_tools:
+        if self.copilot_available_tools and not for_session_creation:
             args.extend(["--available-tools", ",".join(self.copilot_available_tools)])
         args.extend(
             [
@@ -534,7 +540,7 @@ class MultiAgentRunner:
         elif provider == "copilot":
             if image_paths:
                 return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
-            args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check)]
+            args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=True)]
             return self._run(
                 args,
                 provider="copilot",

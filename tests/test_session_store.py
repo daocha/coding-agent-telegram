@@ -23,7 +23,31 @@ def test_create_and_switch_session(tmp_path: Path):
     chat = store.get_chat_state("bot-a", 123)
     assert chat["active_session_id"] == "sess_1"
     assert chat["current_project_folder"] == "backend"
+    assert chat["current_provider"] == "codex"
     assert chat["current_branch"] == "feature-1"
+
+
+def test_set_current_provider_persists_in_chat_state(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.set_current_provider("bot-a", 123, "copilot")
+
+    chat = store.get_chat_state("bot-a", 123)
+    assert chat["current_provider"] == "copilot"
+
+
+def test_set_pending_action_persists_and_clears(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hello"})
+    assert store.get_chat_state("bot-a", 123)["pending_action"]["kind"] == "message"
+
+    store.set_pending_action("bot-a", 123, None)
+    assert "pending_action" not in store.get_chat_state("bot-a", 123)
 
 
 def test_load_empty_state_file_returns_default_state(tmp_path: Path):

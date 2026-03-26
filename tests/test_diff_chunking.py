@@ -89,6 +89,7 @@ def test_snapshot_excluded_path_matches_generated_dirs_and_runtime_outputs():
     assert is_snapshot_excluded_path(".copilot/session.jsonl") is True
     assert is_snapshot_excluded_path("logs/coding-agent-telegram.log") is True
     assert is_snapshot_excluded_path("worker.out") is True
+    assert is_snapshot_excluded_path(".env_coding_agent_telegram") is True
     assert is_snapshot_excluded_path(".env") is False
     assert is_snapshot_excluded_path(".github/workflows/ci.yml") is False
     assert is_snapshot_excluded_path("src/app.py") is False
@@ -105,6 +106,7 @@ def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     (tmp_path / "logs" / "coding-agent-telegram.log").write_text("runtime log\n", encoding="utf-8")
     (tmp_path / "logs" / "readme.md").write_text("keep me\n", encoding="utf-8")
     (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (tmp_path / ".env_coding_agent_telegram").write_text("WORKSPACE_ROOT=~/git/\n", encoding="utf-8")
     (tmp_path / ".pytest_cache").mkdir()
     (tmp_path / ".pytest_cache" / "state").write_text("cache\n", encoding="utf-8")
     (tmp_path / ".venv").mkdir()
@@ -125,6 +127,7 @@ def test_snapshot_project_files_excludes_runtime_artifacts(tmp_path: Path):
     assert ".github/workflows/ci.yml" in snapshots
     assert ".editorconfig" in snapshots
     assert ".env" in snapshots
+    assert ".env_coding_agent_telegram" not in snapshots
     assert "logs/coding-agent-telegram.log" not in snapshots
     assert "logs/readme.md" in snapshots
     assert ".pytest_cache/state" not in snapshots
@@ -143,12 +146,14 @@ def test_changed_files_excludes_snapshot_ignored_paths(tmp_path: Path):
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "artifact.txt").write_text("generated\n", encoding="utf-8")
     (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (tmp_path / ".env_coding_agent_telegram").write_text("WORKSPACE_ROOT=~/git/\n", encoding="utf-8")
 
     files = changed_files(tmp_path)
 
     assert "src/app.py" in files
     assert "build/artifact.txt" not in files
     assert ".env" in files
+    assert ".env_coding_agent_telegram" not in files
 
 
 def test_changed_files_from_snapshots_excludes_snapshot_ignored_paths():

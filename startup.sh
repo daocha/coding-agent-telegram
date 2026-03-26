@@ -14,7 +14,9 @@ resolve_path() {
   fi
 }
 
-ENV_FILE="${ENV_FILE:-.env}"
+DEFAULT_ENV_FILE=".env_coding_agent_telegram"
+LEGACY_ENV_FILE=".env"
+ENV_FILE="${ENV_FILE:-$DEFAULT_ENV_FILE}"
 ENV_TEMPLATE_FILE="${ENV_TEMPLATE_FILE:-src/coding_agent_telegram/resources/.env.example}"
 VENV_DIR="${VENV_DIR:-.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -43,6 +45,10 @@ compute_install_fingerprint() {
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Error: $PYTHON_BIN was not found in PATH." >&2
   exit 1
+fi
+
+if [[ "${ENV_FILE}" == "$DEFAULT_ENV_FILE" && ! -f "$ENV_FILE" && -f "$LEGACY_ENV_FILE" ]]; then
+  ENV_FILE="$LEGACY_ENV_FILE"
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -158,6 +164,6 @@ echo "1. Confirm $ENV_FILE contains WORKSPACE_ROOT, TELEGRAM_BOT_TOKENS, and ALL
 echo "2. State files are ready at $STATE_FILE and $STATE_BACKUP_FILE."
 echo "3. Application logs will be written under $LOG_DIR."
 echo "4. Start the server with: ./startup.sh"
-echo "5. In Telegram, use /project <folder> and then /new <session_name> [provider]."
+echo "5. In Telegram, use /project <folder> and then /new [session_name]."
 echo "Starting coding-agent-telegram..."
 exec python -m coding_agent_telegram
