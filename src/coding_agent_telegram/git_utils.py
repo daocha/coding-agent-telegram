@@ -76,6 +76,29 @@ class GitWorkspaceManager:
             env=env,
         )
 
+    def _resolved_commit_identity(self, project_path: Path) -> dict[str, str]:
+        identity: dict[str, str] = {}
+        for key in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"):
+            value = os.environ.get(key, "").strip()
+            if value:
+                identity[key] = value
+
+        if "GIT_AUTHOR_NAME" not in identity or "GIT_COMMITTER_NAME" not in identity:
+            result = self._run(project_path, "config", "--get", "user.name")
+            name = result.stdout.strip() if result.returncode == 0 else ""
+            if name:
+                identity.setdefault("GIT_AUTHOR_NAME", name)
+                identity.setdefault("GIT_COMMITTER_NAME", name)
+
+        if "GIT_AUTHOR_EMAIL" not in identity or "GIT_COMMITTER_EMAIL" not in identity:
+            result = self._run(project_path, "config", "--get", "user.email")
+            email = result.stdout.strip() if result.returncode == 0 else ""
+            if email:
+                identity.setdefault("GIT_AUTHOR_EMAIL", email)
+                identity.setdefault("GIT_COMMITTER_EMAIL", email)
+
+        return identity
+
     def is_git_repo(self, project_path: Path) -> bool:
         result = self._run(project_path, "rev-parse", "--is-inside-work-tree")
         return result.returncode == 0 and result.stdout.strip() == "true"
@@ -230,6 +253,7 @@ class GitWorkspaceManager:
                     "XDG_CONFIG_HOME": temp_home,
                 }
             )
+            env.update(self._resolved_commit_identity(project_path))
             result = self._run(project_path, *self.SAFE_COMMIT_CONFIG, *args, env=env)
 
         stdout = result.stdout.strip()
