@@ -224,6 +224,32 @@ def test_copilot_runner_preserves_explicit_copilot_home(monkeypatch):
     assert calls[0][2]["COPILOT_HOME"] == "/tmp/custom-copilot-home"
 
 
+def test_copilot_runner_emits_progress_updates(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"assistant_text":"partial output"}\n{"sessionId":"sess_copilot"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == "partial output"
+    assert captured[0].source == "stdout"
+
+
 def test_codex_runner_passes_model_when_configured(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))

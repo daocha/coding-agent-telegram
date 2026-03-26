@@ -17,7 +17,17 @@ class DummyRunner:
         self.create_calls = []
         self.resume_calls = []
 
-    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def create_session(
+        self,
+        provider,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.create_calls.append(
             {
                 "provider": provider,
@@ -26,6 +36,7 @@ class DummyRunner:
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
                 "on_stall": on_stall,
+                "on_progress": on_progress,
             }
         )
         return AgentRunResult(
@@ -36,7 +47,18 @@ class DummyRunner:
             raw_events=[],
         )
 
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -46,6 +68,7 @@ class DummyRunner:
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
                 "on_stall": on_stall,
+                "on_progress": on_progress,
             }
         )
         return AgentRunResult(
@@ -58,7 +81,18 @@ class DummyRunner:
 
 
 class MarkdownRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -80,7 +114,18 @@ class MarkdownRunner(DummyRunner):
 
 
 class CommandBlockRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -102,7 +147,18 @@ class CommandBlockRunner(DummyRunner):
 
 
 class SessionIdRotatingRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -124,7 +180,18 @@ class SessionIdRotatingRunner(DummyRunner):
 
 
 class ResumeReplacementRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -146,7 +213,18 @@ class ResumeReplacementRunner(DummyRunner):
 
 
 class LongEscapedMarkdownRunner(DummyRunner):
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         self.resume_calls.append(
             {
                 "provider": provider,
@@ -651,7 +729,17 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
 
 
 class StallingRunner(DummyRunner):
-    def create_session(self, provider, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def create_session(
+        self,
+        provider,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         if on_stall is not None:
             on_stall(
                 AgentStallInfo(
@@ -669,9 +757,21 @@ class StallingRunner(DummyRunner):
             skip_git_repo_check=skip_git_repo_check,
             image_paths=image_paths,
             on_stall=on_stall,
+            on_progress=on_progress,
         )
 
-    def resume_session(self, provider, session_id, project_path, user_message, *, skip_git_repo_check=False, image_paths=(), on_stall=None):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
         if on_stall is not None:
             on_stall(
                 AgentStallInfo(
@@ -690,6 +790,7 @@ class StallingRunner(DummyRunner):
             skip_git_repo_check=skip_git_repo_check,
             image_paths=image_paths,
             on_stall=on_stall,
+            on_progress=on_progress,
         )
 
 
@@ -1491,6 +1592,28 @@ def test_commit_allows_common_safe_short_forms(tmp_path: Path):
     assert html.escape(
         f"${shlex.join(['git', 'commit', '-msafe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
     ) in bot.messages[-1][1]
+    assert "[Completed]" in bot.messages[-1][1]
+
+
+def test_commit_allows_shell_style_backslash_newline_continuations(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git add completed."),
+                SimpleNamespace(success=True, message="git commit completed."),
+            ],
+        ),
+    )
+
+    raw = '/commit git add \\\n  src/app.py \\\n  tests/test_app.py && git commit -m "safe"'
+    bot = _run_commit_command(router, raw)
+
+    assert router.git.safe_git_commands == [
+        (backend, ["add", "src/app.py", "tests/test_app.py"]),
+        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
+    ]
     assert "[Completed]" in bot.messages[-1][1]
 
 
