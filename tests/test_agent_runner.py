@@ -275,6 +275,31 @@ def test_copilot_runner_progress_falls_back_to_raw_json_when_no_text_field_exist
     assert '"type":"session.update"' in captured[0].text
 
 
+def test_copilot_runner_extracts_assistant_message_delta_content(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"assistant.message_delta","data":{"messageId":"abc","deltaContent":" log"}}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == "log"
+
+
 def test_codex_runner_passes_model_when_configured(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))

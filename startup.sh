@@ -102,12 +102,16 @@ case "$DEFAULT_AGENT_PROVIDER" in
   codex)
     if ! command -v "$CODEX_BIN" >/dev/null 2>&1; then
       echo "Error: Codex CLI not found: $CODEX_BIN" >&2
+      echo "Check DEFAULT_AGENT_PROVIDER and CODEX_BIN in $ENV_FILE." >&2
+      echo "If this machine only has Copilot, set DEFAULT_AGENT_PROVIDER=copilot." >&2
       exit 1
     fi
     ;;
   copilot)
     if ! command -v "$COPILOT_BIN" >/dev/null 2>&1; then
       echo "Error: Copilot CLI not found: $COPILOT_BIN" >&2
+      echo "Check DEFAULT_AGENT_PROVIDER and COPILOT_BIN in $ENV_FILE." >&2
+      echo "If this machine only has Codex, set DEFAULT_AGENT_PROVIDER=codex." >&2
       exit 1
     fi
     ;;

@@ -95,11 +95,20 @@ class MultiAgentRunner:
         chunks: list[str] = []
         if isinstance(event.get("assistant_text"), str):
             chunks.append(event["assistant_text"])
+        if isinstance(event.get("deltaContent"), str):
+            chunks.append(event["deltaContent"])
 
         role = event.get("role")
         event_type = event.get("type")
-        if role == "assistant" or event_type in {"message", "assistant_message", "output_text", "text"}:
-            for key in ("text", "message", "content"):
+        if role == "assistant" or event_type in {
+            "message",
+            "assistant_message",
+            "assistant.message_delta",
+            "message_delta",
+            "output_text",
+            "text",
+        }:
+            for key in ("text", "message", "content", "deltaContent"):
                 value = event.get(key)
                 extracted = self._extract_assistant_text(value)
                 if extracted:
