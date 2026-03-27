@@ -385,6 +385,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         max_telegram_message_length=3000,
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
+        agent_hard_timeout_seconds=0,
     )
 
 
@@ -2236,3 +2237,1109 @@ def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):
 
     assert router.git.push_calls == []
     assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# _path_within_project — symlink traversal guard
+# ---------------------------------------------------------------------------
+
+
+def test_path_within_project_allows_normal_files(tmp_path: Path):
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "src").mkdir()
+    (project / "src" / "file.py").write_text("x")
+
+    assert CommandRouterBase._path_within_project(project, "src/file.py")
+    assert CommandRouterBase._path_within_project(project, "README.md")
+
+
+def test_path_within_project_blocks_symlink_escape(tmp_path: Path):
+    """A symlink inside the project pointing outside must be rejected."""
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+
+    # Create a symlink inside the project that points outside
+    link = project / "external_link"
+    link.symlink_to(outside)
+
+    assert not CommandRouterBase._path_within_project(project, "external_link/secret.txt")
+
+
+def test_path_within_project_blocks_symlink_to_file_outside(tmp_path: Path):
+    """A symlink to a single file outside the project must also be rejected."""
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("secret")
+
+    link = project / "linked_secret.txt"
+    link.symlink_to(secret)
+
+    assert not CommandRouterBase._path_within_project(project, "linked_secret.txt")
+
+
+# ---------------------------------------------------------------------------
+# Workspace lock — concurrent agent runs on the same project are blocked
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_lock_blocks_second_call_on_same_project(tmp_path: Path):
+    """When a workspace lock is held, a second _run_with_typing call on the same
+    project must be rejected immediately with an 'already running' message."""
+    from coding_agent_telegram.agent_runner import MultiAgentRunner
+
+    runner_real = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner_real, bot_id="bot-a"))
+
+    messages_sent: list = []
+
+    async def run():
+        # Manually hold the workspace lock to simulate an in-flight agent run.
+        lock = router._workspace_locks.setdefault("myproject", asyncio.Lock())
+        async with lock:
+            bot = FakeBot()
+            update = make_update()
+            context = SimpleNamespace(args=[], bot=bot)
+            result = await router._run_with_typing(
+                update,
+                context,
+                runner_real.resume_session,
+                "codex",
+                "sess_1",
+                tmp_path,
+                "hello",
+                workspace_lock_key="myproject",
+            )
+            assert result is None
+            messages_sent.extend(bot.messages)
+
+    asyncio.run(run())
+    assert any("already running" in msg[1] for msg in messages_sent)
+
+
+def test_workspace_lock_allows_different_projects_concurrently(tmp_path: Path):
+    """Two calls with different workspace_lock_keys must not block each other."""
+    from coding_agent_telegram.agent_runner import MultiAgentRunner
+
+    runner_real = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner_real, bot_id="bot-a"))
+
+    async def run():
+        # Hold the lock for "project-a"
+        lock_a = router._workspace_locks.setdefault("project-a", asyncio.Lock())
+        async with lock_a:
+            # "project-b" lock should be free — lock.locked() returns False
+            lock_b = router._workspace_locks.setdefault("project-b", asyncio.Lock())
+            assert not lock_b.locked()
+
+    asyncio.run(run())
+
+
+# ---------------------------------------------------------------------------
+# message_commands — null message guards (lines 15, 31)
+# ---------------------------------------------------------------------------
+
+
+def test_handle_message_does_nothing_when_message_is_none(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert bot.messages == []
+
+
+def test_handle_message_does_nothing_when_text_is_empty(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text="", photo=None, caption=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert bot.messages == []
+
+
+def test_handle_photo_does_nothing_when_message_is_none(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert bot.messages == []
+
+
+# ---------------------------------------------------------------------------
+# git_commands — commit disabled, empty args, git command fails
+# ---------------------------------------------------------------------------
+
+
+def test_commit_sends_disabled_message_when_not_enabled(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    # enable_commit_command defaults to False in make_config
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+    router.runtime.git = router.git
+
+    update = make_update(text="/commit git add .")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["git", "add", "."], bot=bot)
+    asyncio.run(router.handle_commit(update, context))
+
+    assert "disabled" in bot.messages[-1][1].lower()
+
+
+def test_commit_sends_usage_when_no_text_after_command(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text="/commit", photo=None, caption=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_commit(update, context))
+
+    assert "Usage" in bot.messages[-1][1]
+
+
+def test_commit_reports_failed_git_command_and_stops(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[SimpleNamespace(success=False, message="nothing to commit")],
+        ),
+    )
+
+    bot = _run_commit_command(router, "/commit git add -u")
+
+    assert router.git.safe_git_commands != []
+    assert "nothing to commit" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# git_commands — handle_push edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_push_sends_usage_when_extra_args_provided(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s1", "backend", "codex", branch_name="main")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main")
+    router.runtime.git = router.git
+
+    update = make_update(text="/push extra")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["extra"], bot=bot)
+    asyncio.run(router.handle_push(update, context))
+
+    assert "Usage" in bot.messages[-1][1]
+
+
+def test_push_warns_when_branch_cannot_be_determined(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # session with no branch_name stored
+    store.create_session("bot-a", 123, "sess1", "s1", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # current_branch also returns None
+    router.git = FakeGitManager(is_git_repo=True, current_branch=None)
+    router.runtime.git = router.git
+
+    bot = _run_push_command(router)
+
+    assert "Could not determine" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# session_commands — handle_switch
+# ---------------------------------------------------------------------------
+
+
+def _make_switch_router(tmp_path: Path) -> CommandRouter:
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.runtime.git = router.git
+    return router
+
+
+def test_switch_command_reports_no_sessions_when_empty(tmp_path: Path):
+    router = _make_switch_router(tmp_path)
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+    assert "No sessions found" in bot.messages[-1][1]
+
+
+def test_switch_command_lists_sessions_when_no_arg(tmp_path: Path):
+    router = _make_switch_router(tmp_path)
+    router.deps.store.create_session("bot-a", 123, "sess-abc", "my-session", "backend", "codex")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "my-session" in bot.messages[-1][1]
+
+
+def test_switch_command_handles_page_arg(tmp_path: Path):
+    router = _make_switch_router(tmp_path)
+    router.deps.store.create_session("bot-a", 123, "sess-abc", "my-session", "backend", "codex")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["page", "1"], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "my-session" in bot.messages[-1][1]
+
+
+def test_switch_command_rejects_non_numeric_page(tmp_path: Path):
+    router = _make_switch_router(tmp_path)
+    router.deps.store.create_session("bot-a", 123, "sess-abc", "my-session", "backend", "codex")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["page", "abc"], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "Invalid page number" in bot.messages[-1][1]
+
+
+def test_switch_command_by_session_id_activates_session(tmp_path: Path):
+    router = _make_switch_router(tmp_path)
+    router.deps.store.create_session("bot-a", 123, "sess-abc", "my-session", "backend", "codex")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess-abc"], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+
+    # Should send a confirmation message
+    assert any("my-session" in m[1] or "sess-abc" in m[1] or "Switched" in m[1] for m in bot.messages)
+
+
+def test_switch_command_reports_not_found_for_unknown_session_id(tmp_path: Path):
+    router = _make_switch_router(tmp_path)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess-nonexistent"], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "not found" in bot.messages[-1][1].lower()
+
+
+def test_switch_command_reports_missing_project_folder(tmp_path: Path):
+    backend = (tmp_path / "vanished").resolve()  # intentionally doesn't exist
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess-xyz", "ghost-session", "vanished", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.runtime.git = router.git
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess-xyz"], bot=bot)
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "no longer exists" in bot.messages[-1][1].lower() or "vanished" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# session_commands — handle_provider
+# ---------------------------------------------------------------------------
+
+
+def test_handle_provider_sends_keyboard_when_no_args(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_provider(update, context))
+
+    # Should have sent a message with a reply_markup keyboard
+    assert len(bot.messages) >= 1
+    assert bot.messages[-1][3] is not None  # reply_markup present
+
+
+def test_handle_provider_sends_usage_when_args_provided(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["codex"], bot=bot)
+    asyncio.run(router.handle_provider(update, context))
+
+    assert "Usage" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# project_commands — handle_project edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_project_command_sends_usage_when_no_args(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_project(update, context))
+
+    assert "Usage" in bot.messages[-1][1]
+
+
+def test_project_command_rejects_when_path_is_a_file(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    # Create a file (not directory) at the project path
+    (tmp_path / "myfile").write_text("x")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["myfile"], bot=bot)
+    asyncio.run(router.handle_project(update, context))
+
+    assert "not a directory" in bot.messages[-1][1].lower() or "exists" in bot.messages[-1][1].lower()
+
+
+# ---------------------------------------------------------------------------
+# project_commands — handle_branch edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_branch_command_sends_error_when_no_project_selected(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["new-branch"], bot=bot)
+    asyncio.run(router.handle_branch(update, context))
+
+    assert "No project selected" in bot.messages[-1][1] or "project" in bot.messages[-1][1].lower()
+
+
+def test_branch_command_rejects_wrong_number_of_args(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+    router.runtime.git = router.git
+    # Set the project folder via the store directly
+    store.set_current_project_folder(router.deps.bot_id, 123, "backend")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["a", "b", "c"], bot=bot)  # 3 args — wrong
+    asyncio.run(router.handle_branch(update, context))
+
+    assert "Usage" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# trust_project_callback — edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_trust_project_callback_handles_invalid_payload(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="trustproject:yes",  # missing folder — only 2 parts
+            answer=fake_answer,
+            edit_message_text=fake_edit,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert any("Invalid" in e for e in edited)
+
+
+def test_trust_project_callback_no_decision_leaves_project_untrusted(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="trustproject:no:backend",
+            answer=fake_answer,
+            edit_message_text=fake_edit,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert not store.is_project_trusted("backend")
+    assert any("untrusted" in e.lower() for e in edited)
+
+
+# ---------------------------------------------------------------------------
+# git_commands.py — additional coverage
+# ---------------------------------------------------------------------------
+
+
+def test_commit_disabled_sends_message(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    # enable_commit_command defaults to False in make_config
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    bot = _run_commit_command(router, "/commit git add -u")
+
+    assert "/commit is disabled" in bot.messages[-1][1]
+
+
+def test_commit_no_args_sends_usage(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    update = make_update(text="/commit")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_commit(update, context))
+
+    assert "Usage: /commit" in bot.messages[-1][1]
+
+
+def test_commit_no_valid_git_commands_found(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    # Only non-git segments — no valid git commands
+    bot = _run_commit_command(router, "/commit echo hello && ls -la")
+
+    assert "No valid git commit commands were found." in bot.messages[-1][1]
+
+
+def test_commit_fails_mid_execution_sends_partial_results(tmp_path: Path):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            git_command_results=[
+                SimpleNamespace(success=True, message="git status completed."),
+                SimpleNamespace(success=False, message="nothing to commit"),
+            ],
+        ),
+    )
+
+    bot = _run_commit_command(router, "/commit git status && git commit -m safe")
+
+    last_msg = bot.messages[-1][1]
+    assert "git status" in last_msg
+    assert "nothing to commit" in last_msg
+    assert len(router.git.safe_git_commands) == 2
+
+
+def test_push_with_args_sends_usage(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/push origin")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["origin"], bot=bot)
+    asyncio.run(router.handle_push(update, context))
+
+    assert "Usage: /push" in bot.messages[-1][1]
+
+
+def test_push_no_branch_warns(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Session with no branch_name; git also returns None
+    store.create_session("bot-a", 123, "sess_pb", "push-nobranch", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch=None)
+    router.runtime.git = router.git
+
+    bot = _run_push_command(router)
+
+    assert "Could not determine the branch" in bot.messages[-1][1]
+
+
+def test_push_callback_unknown_action_returns_silently(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="push:unknown",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_push_callback(update, context))
+
+    assert edited == []
+    assert bot.messages == []
+
+
+def test_push_callback_empty_branch_warns(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Session with no branch_name; git also returns None
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch=None)
+    router.runtime.git = router.git
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="push:confirm",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_push_callback(update, context))
+
+    assert any("Could not determine the branch" in e for e in edited)
+
+
+def test_push_callback_checkout_failure_sends_edit(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-x")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # current_branch differs from session branch so checkout is attempted
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        checkout_result=SimpleNamespace(success=False, message="error: pathspec 'feature-x' did not match"),
+    )
+    router.runtime.git = router.git
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="push:confirm",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_push_callback(update, context))
+
+    assert any("Push cancelled" in e for e in edited)
+    assert router.git.push_calls == []
+
+
+# ---------------------------------------------------------------------------
+# session_commands.py — additional coverage
+# ---------------------------------------------------------------------------
+
+
+def test_switch_no_sessions_sends_not_found(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "No sessions found." in bot.messages[-1][1]
+
+
+def test_switch_page_invalid_number_sends_error(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["page", "abc"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "Invalid page number" in bot.messages[-1][1]
+
+
+def test_switch_invalid_session_id_sends_not_found(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["nonexistent-id"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    assert "Session not found" in bot.messages[-1][1]
+
+
+def test_provider_with_args_sends_usage(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/provider codex")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["codex"], bot=bot)
+
+    asyncio.run(router.handle_provider(update, context))
+
+    assert "Usage: /provider" in bot.messages[-1][1]
+
+
+def test_provider_callback_unavailable_shows_not_found(tmp_path: Path, monkeypatch):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    monkeypatch.setattr("coding_agent_telegram.router.session_commands.shutil.which", lambda _: None)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:codex",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    assert edited
+    assert "not found" in edited[0].lower() or "CLI not found" in edited[0]
+
+
+def test_provider_callback_available_sets_provider(tmp_path: Path, monkeypatch):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    monkeypatch.setattr("coding_agent_telegram.router.session_commands.shutil.which", lambda _: "/usr/bin/codex")
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:codex",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    assert "codex" in edited[0]
+    assert store.get_chat_state("bot-a", 123)["current_provider"] == "codex"
+
+
+# ---------------------------------------------------------------------------
+# project_commands.py — additional coverage
+# ---------------------------------------------------------------------------
+
+
+def test_project_no_args_sends_usage(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert "Usage: /project" in bot.messages[-1][1]
+
+
+def test_project_path_is_file_sends_error(tmp_path: Path):
+    # Create a file where the project folder would go
+    file_path = tmp_path / "backend"
+    file_path.write_text("not a directory")
+
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert "not a directory" in bot.messages[-1][1]
+
+
+def test_branch_not_git_repo_sends_error(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert "not a git repository" in bot.messages[-1][1]
+
+
+def test_branch_wrong_arg_count_sends_usage(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["a", "b", "c"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert "Usage: /branch" in bot.messages[-1][1]
+
+
+def test_branch_prepare_fails_sends_failure_message(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        prepare_result=SimpleNamespace(
+            success=False,
+            message="Branch preparation failed: branch already exists.",
+            current_branch=None,
+            default_branch="main",
+        ),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["feature-new"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert "Branch preparation failed" in bot.messages[-1][1]
+
+
+def _make_trust_callback_update(data: str):
+    """Build a fake update + edited-list for handle_trust_project_callback."""
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data=data,
+            answer=fake_answer,
+            edit_message_text=fake_edit,
+        ),
+    )
+    return update, edited
+
+
+def test_trust_project_callback_invalid_payload(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update, edited = _make_trust_callback_update("trustproject:onlytwoparts")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert "Invalid trust decision." in edited
+
+
+def test_trust_project_callback_no_leaves_untrusted(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update, edited = _make_trust_callback_update("trustproject:no:backend")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert any("left untrusted" in e for e in edited)
+    assert not store.is_project_trusted("backend")
+
+
+def test_trust_project_callback_already_trusted(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.trust_project("backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update, edited = _make_trust_callback_update("trustproject:yes:backend")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+
+    assert any("already trusted" in e for e in edited)
+
+
+# ---------------------------------------------------------------------------
+# base.py — additional coverage
+# ---------------------------------------------------------------------------
+
+
+def test_handle_unsupported_message_sends_unsupported_text(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_unsupported_message(update, context))
+
+    assert "Unsupported message type" in bot.messages[-1][1]
+
+
+def test_format_git_response_with_ignored_segments():
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    result = SimpleNamespace(success=True, message="git status completed.", stdout=None, returncode=0)
+    output = CommandRouterBase._format_git_response(
+        [(["status"], result)],
+        ["echo hello", "ls -la"],
+    )
+
+    assert "Ignored non-git commands:" in output
+    assert "echo hello" in output
+    assert "ls -la" in output

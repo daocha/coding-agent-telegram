@@ -390,3 +390,186 @@ def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
     assert "--allow-tool" not in calls[0][0]
     assert "--deny-tool" not in calls[0][0]
     assert "--available-tools" not in calls[0][0]
+
+
+# ---------------------------------------------------------------------------
+# _validate_session_id
+# ---------------------------------------------------------------------------
+
+
+def test_validate_session_id_accepts_valid_ids():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("abc123") == "abc123"
+    assert _validate_session_id("sess-1.0_abc") == "sess-1.0_abc"
+    assert _validate_session_id("A" * 128) == "A" * 128
+
+
+def test_validate_session_id_rejects_flag_like():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("--exec") is None
+    assert _validate_session_id("-c") is None
+
+
+def test_validate_session_id_rejects_special_chars():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("sess;rm -rf") is None
+    assert _validate_session_id("sess\x00null") is None
+    assert _validate_session_id("a" * 129) is None  # too long
+
+
+def test_validate_session_id_rejects_empty_and_none():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("") is None
+    assert _validate_session_id(None) is None  # type: ignore[arg-type]
+
+
+def test_parse_jsonl_rejects_flag_session_id(monkeypatch):
+    """A session_id starting with '--' emitted by the LLM must not be stored."""
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"session_id": "--malicious"}\n'),
+    )
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    assert result.session_id is None
+
+
+def test_parse_jsonl_accepts_valid_session_id(monkeypatch):
+    """A well-formed session_id from the LLM must be stored and returned."""
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"session_id": "valid-sess-123"}\n'),
+    )
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    assert result.session_id == "valid-sess-123"
+
+
+# ---------------------------------------------------------------------------
+# Unsupported provider
+# ---------------------------------------------------------------------------
+
+
+def test_create_session_returns_failure_for_unsupported_provider(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("badprovider", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert "Unsupported provider" in (result.error_message or "")
+    assert calls == []  # no subprocess launched
+
+
+def test_resume_session_returns_failure_for_unsupported_provider(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.resume_session("badprovider", "sess_1", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert "Unsupported provider" in (result.error_message or "")
+    assert calls == []
+
+
+def test_copilot_resume_rejects_image_attachments(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.resume_session(
+        "copilot",
+        "sess_1",
+        Path("/tmp/project"),
+        "hello",
+        image_paths=[Path("/tmp/image.png")],
+    )
+
+    assert result.success is False
+    assert "not supported" in (result.error_message or "").lower()
+    assert calls == []  # no subprocess launched
+
+
+# ---------------------------------------------------------------------------
+# _collect_text_fragments / _looks_textual_key heuristics
+# ---------------------------------------------------------------------------
+
+
+def test_looks_textual_key_matches_known_tokens():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    assert runner._looks_textual_key("message") is True
+    assert runner._looks_textual_key("content") is True
+    assert runner._looks_textual_key("delta") is True
+    assert runner._looks_textual_key("id") is False
+    assert runner._looks_textual_key("") is False
+
+
+def test_looks_metadata_key_matches_id_timestamp():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    assert runner._looks_metadata_key("session_id") is True
+    assert runner._looks_metadata_key("timestamp") is True
+    assert runner._looks_metadata_key("text") is False
+    assert runner._looks_metadata_key("") is False
+
+
+def test_collect_text_fragments_extracts_from_nested_dict():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    event = {"message": {"content": "hello from agent"}, "session_id": "ignored"}
+    fragments = runner._collect_text_fragments(event)
+    assert "hello from agent" in fragments
+
+
+def test_extract_codex_assistant_text_handles_list_of_strings():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    result = runner._extract_codex_assistant_text(["line 1", "line 2"])
+    assert "line 1" in result
+    assert "line 2" in result
+
+
+# ---------------------------------------------------------------------------
+# _parse_jsonl: error and session success fields
+# ---------------------------------------------------------------------------
+
+
+def test_parse_jsonl_extracts_success_false_from_error_field(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"error": "agent crashed"}\n', returncode=1),
+    )
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    assert result.success is False

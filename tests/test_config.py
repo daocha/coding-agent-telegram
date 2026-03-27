@@ -169,3 +169,42 @@ def test_load_config_uses_env_file_and_overrides_empty_process_values(monkeypatc
     assert cfg.workspace_root.name == "git"
     assert cfg.telegram_bot_tokens == ("token-a",)
     assert cfg.allowed_chat_ids == {123}
+
+
+# ---------------------------------------------------------------------------
+# _parse_bool edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_parse_bool_accepts_truthy_values():
+    from coding_agent_telegram.config import _parse_bool
+
+    for val in ("1", "true", "True", "TRUE", "yes", "on"):
+        assert _parse_bool(val) is True, f"Expected True for {val!r}"
+
+
+def test_parse_bool_treats_none_as_default():
+    from coding_agent_telegram.config import _parse_bool
+
+    assert _parse_bool(None, default=True) is True
+    assert _parse_bool(None, default=False) is False
+
+
+def test_parse_bool_rejects_unknown_string():
+    from coding_agent_telegram.config import _parse_bool
+
+    assert _parse_bool("maybe") is False
+    assert _parse_bool("0") is False
+
+
+# ---------------------------------------------------------------------------
+# resolve_env_file_path: legacy fallback
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_env_file_path_returns_default_path_when_neither_file_exists(tmp_path, monkeypatch):
+    from coding_agent_telegram.config import resolve_env_file_path, DEFAULT_ENV_FILE_NAME
+
+    monkeypatch.chdir(tmp_path)
+    path = resolve_env_file_path()
+    assert path.name == DEFAULT_ENV_FILE_NAME

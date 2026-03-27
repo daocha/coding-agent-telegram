@@ -10,15 +10,7 @@ from typing import Optional
 
 
 def _sanitize_git_output(text: str) -> str:
-    """
-    Sanitize git command output to remove credential information.
-    
-    Removes:
-    - HTTPS URLs with embedded credentials: https://user:password@
-    - SSH connection strings that might contain sensitive info
-    
-    Security-critical function: Prevents credential leaks in logs.
-    """
+    """Sanitize git command output to remove credential information."""
     if not text:
         return text
     
@@ -35,6 +27,20 @@ def _sanitize_git_output(text: str) -> str:
     )
     
     return sanitized
+
+
+# Allows letters, digits, dots, hyphens, forward-slashes (remote/branch).
+# Must not start with '-' to prevent flag injection into git subcommands.
+_BRANCH_NAME_RE = re.compile(r"^[A-Za-z0-9._/\-]{1,200}$")
+
+
+def _validate_branch_name(name: str) -> bool:
+    """Return True only if *name* is safe to pass as a git branch name argument."""
+    if not name:
+        return False
+    if name.startswith("-"):
+        return False
+    return bool(_BRANCH_NAME_RE.match(name))
 
 
 @dataclass
@@ -157,6 +163,8 @@ class GitWorkspaceManager:
         )
 
     def checkout_branch(self, project_path: Path, branch_name: str) -> BranchOperationResult:
+        if not _validate_branch_name(branch_name):
+            return BranchOperationResult(False, f"Invalid branch name: {branch_name!r}")
         result = self._run(project_path, "checkout", branch_name)
         if result.returncode != 0:
             return BranchOperationResult(False, _sanitize_git_output(result.stderr.strip()) or f"Failed to checkout branch: {branch_name}")
@@ -171,6 +179,10 @@ class GitWorkspaceManager:
     ) -> BranchOperationResult:
         if not self.is_git_repo(project_path):
             return BranchOperationResult(False, "Current project is not a git repository.")
+        if not _validate_branch_name(new_branch):
+            return BranchOperationResult(False, f"Invalid branch name: {new_branch!r}")
+        if origin_branch and not _validate_branch_name(origin_branch):
+            return BranchOperationResult(False, f"Invalid origin branch name: {origin_branch!r}")
 
         current_branch = self.current_branch(project_path)
         default_branch = self.default_branch(project_path)
