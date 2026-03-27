@@ -262,8 +262,15 @@ class CommandRouterBase:
 
     def _queued_file_prompt(self, queue_file: Path) -> str:
         return (
-            "Please read the queued questions in this file and answer them in order:\n"
-            f"{queue_file.resolve()}"
+            "Queued-question handoff. Do not answer this handoff message itself.\n\n"
+            "The real queued user questions are stored in this file:\n"
+            f"{queue_file.resolve()}\n\n"
+            "Read the file first, then answer the questions from the file in order.\n"
+            "The file uses this format:\n"
+            "[Question 1]\n"
+            "...\n"
+            "[End Question 1]\n\n"
+            "Do not answer about the file path itself unless one of the queued questions asks about it."
         )
 
     def _preview_queued_message(self, message: str, *, max_chars: int = 100) -> str:

@@ -108,6 +108,20 @@ def resolve_app_internal_root(workspace_root: Path) -> Path:
     return home_root
 
 
+def resolve_default_state_file_path(file_name: str) -> Path:
+    home_path = default_app_internal_root() / file_name
+    cwd_path = Path.cwd() / file_name
+    if home_path.exists():
+        return home_path
+    if cwd_path.exists():
+        return cwd_path
+    return home_path
+
+
+def default_log_dir_path() -> Path:
+    return default_app_internal_root() / "logs"
+
+
 def load_config(env_file: Optional[Path] = None) -> AppConfig:
     """Load application configuration from the environment and the resolved env file."""
     load_dotenv(dotenv_path=resolve_env_file_path(env_file), override=True)
@@ -131,10 +145,10 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
 
     return AppConfig(
         workspace_root=workspace_root,
-        state_file=Path(os.getenv("STATE_FILE", "./state.json")),
-        state_backup_file=Path(os.getenv("STATE_BACKUP_FILE", "./state.json.bak")),
+        state_file=resolve_default_state_file_path("state.json"),
+        state_backup_file=resolve_default_state_file_path("state.json.bak"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        log_dir=Path(os.getenv("LOG_DIR", "./logs")),
+        log_dir=default_log_dir_path(),
         telegram_bot_tokens=tokens,
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),

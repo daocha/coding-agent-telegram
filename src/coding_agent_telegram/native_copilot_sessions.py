@@ -16,7 +16,14 @@ def copilot_session_roots(project_path: Path) -> list[Path]:
     env_home = Path(os.environ["COPILOT_HOME"]).expanduser() if os.environ.get("COPILOT_HOME") else None
     if env_home is not None:
         return [env_home]
-    return [project_path / ".copilot"]
+    return [Path.home() / ".copilot"]
+
+
+def copilot_session_label(data: dict[str, str], session_id: str, project_folder: str) -> str:
+    branch_name = str(data.get("branch") or "").strip()
+    if branch_name:
+        return f"Copilot session on {branch_name}"
+    return f"Copilot session in {project_folder}"
 
 
 def discover_copilot_sessions(project_path: Path, project_folder: str) -> list[NativeSessionRecord]:
@@ -34,18 +41,25 @@ def discover_copilot_sessions(project_path: Path, project_folder: str) -> list[N
             cwd = data.get("cwd") or data.get("git_root") or ""
             if not path_matches_project(cwd, project_path):
                 continue
-            init_text = data.get("summary") or first_copilot_user_message(workspace_path.parent / "events.jsonl") or session_id
+            init_text = (
+                data.get("summary")
+                or first_copilot_user_message(workspace_path.parent / "events.jsonl")
+                or copilot_session_label(data, session_id, project_folder)
+            )
             records.append(
                 NativeSessionRecord(
                     session_id=session_id,
-                    name=normalize_init_text(init_text, fallback=session_id),
+                    name=normalize_init_text(init_text, fallback=copilot_session_label(data, session_id, project_folder)),
                     project_folder=project_folder,
                     provider="copilot",
                     branch_name=data.get("branch", ""),
                     created_at=data.get("created_at", ""),
                     updated_at=data.get("updated_at", ""),
                     source_label="native copilot",
-                    initialized_from=normalize_init_text(init_text, fallback="Native Copilot session"),
+                    initialized_from=normalize_init_text(
+                        init_text,
+                        fallback=copilot_session_label(data, session_id, project_folder),
+                    ),
                 )
             )
             seen_session_ids.add(session_id)

@@ -81,6 +81,9 @@ def _scrub_secrets(text: str) -> str:
 
 def _sanitize_agent_error(text: str) -> str:
     """Remove absolute filesystem paths from agent error messages before sending to users."""
+    normalized = " ".join((text or "").split())
+    if re.match(r"^Agent run aborted by .+", normalized):
+        return "Agent run aborted by /abort."
     return _ABSOLUTE_PATH_RE.sub("<path>", text)
 
 

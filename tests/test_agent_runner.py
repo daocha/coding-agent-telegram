@@ -209,7 +209,7 @@ def test_copilot_runner_rejects_image_attachments():
     assert result.error_message == "Image attachments are not supported for Copilot sessions."
 
 
-def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
+def test_copilot_runner_uses_native_home_when_copilot_home_is_unset(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
     monkeypatch.delenv("COPILOT_HOME", raising=False)
@@ -223,7 +223,7 @@ def test_copilot_runner_uses_project_scoped_home_for_trusted_mode(monkeypatch):
 
     runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True)
 
-    assert calls[0][2]["COPILOT_HOME"] == "/tmp/project/.copilot"
+    assert "COPILOT_HOME" not in calls[0][2]
     assert "--allow-all" not in calls[0][0]
     assert "--allow-all-tools" not in calls[0][0]
 

@@ -8,6 +8,7 @@ from coding_agent_telegram.config import (
     DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
     load_config,
     resolve_app_internal_root,
+    resolve_default_state_file_path,
     resolve_env_file_path,
 )
 
@@ -49,6 +50,8 @@ def _isolate_env(monkeypatch, tmp_path):
 
 def test_load_config_required(monkeypatch, tmp_path):
     _isolate_env(monkeypatch, tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
     monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a, token-b")
     monkeypatch.setenv("ALLOWED_CHAT_IDS", "123,456")
@@ -91,6 +94,8 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.copilot_allow_tools == ()
     assert cfg.copilot_deny_tools == ()
     assert cfg.copilot_available_tools == ()
+    assert cfg.state_file == home / ".coding-agent-telegram" / "state.json"
+    assert cfg.state_backup_file == home / ".coding-agent-telegram" / "state.json.bak"
 
 
 def test_load_config_missing(monkeypatch, tmp_path):
@@ -219,6 +224,35 @@ def test_resolve_app_internal_root_defaults_to_home_when_neither_exists(monkeypa
     monkeypatch.setattr(Path, "home", lambda: home)
 
     assert resolve_app_internal_root(workspace_root) == home / ".coding-agent-telegram"
+
+
+def test_resolve_default_state_file_path_prefers_home_file(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    home_state = home / ".coding-agent-telegram" / "state.json"
+    home_state.parent.mkdir(parents=True, exist_ok=True)
+    home_state.write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_default_state_file_path("state.json") == home_state
+
+
+def test_resolve_default_state_file_path_falls_back_to_cwd_file(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    cwd_state = tmp_path / "state.json"
+    cwd_state.write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_default_state_file_path("state.json") == cwd_state
+
+
+def test_resolve_default_state_file_path_defaults_to_home_when_neither_exists(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_default_state_file_path("state.json") == home / ".coding-agent-telegram" / "state.json"
 
 
 # ---------------------------------------------------------------------------

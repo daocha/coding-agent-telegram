@@ -169,21 +169,14 @@ These are the main fields in the env file the app uses:
 
 ### State and Logging
 
-- `STATE_FILE`
-  JSON file used to store session state.
-  Default: `./state.json`
-
-- `STATE_BACKUP_FILE`
-  Backup copy of the state file.
-  Default: `./state.json.bak`
+- Session state files are stored at:
+  - `~/.coding-agent-telegram/state.json`
+  - `~/.coding-agent-telegram/state.json.bak`
+  Backward compatibility: if `./state.json` or `./state.json.bak` already exists and the home file does not, the app keeps using the local file.
 
 - `LOG_LEVEL`
   Python app log level.
   Default: `INFO`
-
-- `LOG_DIR`
-  Directory for application logs.
-  Default: `./logs`
 
 ### Agent Configuration
 
@@ -312,7 +305,6 @@ ENABLE_COMMIT_COMMAND=false
 
 SNAPSHOT_TEXT_FILE_MAX_BYTES=200000
 LOG_LEVEL=INFO
-LOG_DIR=./logs
 ```
 
 ## 🤖 Telegram Commands
@@ -498,7 +490,9 @@ If your preferred source branch is missing, the bot offers fallback source choic
 
 ## 🪵 Logs
 
-Logs are written to **both stdout and a rotating log file** under `LOG_DIR`.
+Logs are written to **both stdout and a rotating log file** under:
+
+- `~/.coding-agent-telegram/logs`
 
 Main log file:
 

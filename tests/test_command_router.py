@@ -452,29 +452,34 @@ def seed_codex_native_session(
 
 
 def seed_copilot_native_session(
-    project_path: Path,
+    store_root: Path,
     *,
     session_id: str,
     branch: str,
     created_at: str,
     updated_at: str,
-    summary: str,
+    summary: str = "",
+    with_events: bool = True,
+    cwd: Path | None = None,
 ) -> None:
-    session_dir = project_path / ".copilot" / "session-state" / session_id
+    session_dir = store_root / ".copilot" / "session-state" / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
-    (session_dir / "workspace.yaml").write_text(
-        (
-            f"id: {session_id}\n"
-            f"cwd: {project_path}\n"
-            f"git_root: {project_path}\n"
-            f"branch: {branch}\n"
-            f"created_at: {created_at}\n"
-            f"updated_at: {updated_at}\n"
-            f"summary: {summary}\n"
-        ),
-        encoding="utf-8",
-    )
-    (session_dir / "events.jsonl").write_text("", encoding="utf-8")
+    session_cwd = cwd or store_root
+    lines = [
+        f"id: {session_id}",
+        f"cwd: {session_cwd}",
+        f"git_root: {session_cwd}",
+        f"branch: {branch}",
+        f"created_at: {created_at}",
+        f"updated_at: {updated_at}",
+    ]
+    if summary:
+        lines.append(f"summary: {summary}")
+    else:
+        lines.append("summary_count: 0")
+    (session_dir / "workspace.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if with_events:
+        (session_dir / "events.jsonl").write_text("", encoding="utf-8")
 
 
 def test_project_command_rejects_path(tmp_path: Path):
@@ -1507,12 +1512,13 @@ def test_switch_lists_mixed_bot_and_native_project_sessions_with_legend(tmp_path
         updated_at=1_700_000_010,
     )
     seed_copilot_native_session(
-        backend,
+        home,
         session_id="sess_native_copilot",
         branch="enhancement",
         created_at="2026-03-27T01:00:00Z",
         updated_at="2026-03-27T02:00:00Z",
         summary="Native copilot review",
+        cwd=backend,
     )
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
 
@@ -1551,12 +1557,13 @@ def test_switch_lists_only_current_provider_native_sessions(tmp_path: Path, monk
         updated_at=1_700_000_010,
     )
     seed_copilot_native_session(
-        backend,
+        home,
         session_id="sess_native_copilot",
         branch="enhancement",
         created_at="2026-03-27T01:00:00Z",
         updated_at="2026-03-27T02:00:00Z",
         summary="Native copilot review",
+        cwd=backend,
     )
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
 
@@ -1570,6 +1577,72 @@ def test_switch_lists_only_current_provider_native_sessions(tmp_path: Path, monk
     assert "💻 Native copilot review" in message
     assert "initialized: Native copilot review" in message
     assert "💻 Native codex review" not in message
+
+
+def test_switch_uses_human_fallback_for_copilot_session_without_summary(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "copilot")
+    seed_copilot_native_session(
+        home,
+        session_id="a3293772-2567-42a4-af26-bf61f0e33792",
+        branch="enhancement",
+        created_at="2026-03-26T16:56:05.485Z",
+        updated_at="2026-03-26T16:56:05.542Z",
+        summary="",
+        with_events=False,
+        cwd=backend,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "💻 Copilot session on enhancement" in message
+    assert "initialized: Copilot session on enhancement" in message
+    assert "💻 a3293772-2567-42a4-af26-bf61f0e33792" not in message
+
+
+def test_switch_discovers_native_copilot_session_from_home_store(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "copilot")
+    seed_copilot_native_session(
+        home,
+        session_id="83d5cd02-0022-4b02-9ad0-47594ebe05ea",
+        branch="feature-enhancements",
+        created_at="2026-03-27T21:31:57.142Z",
+        updated_at="2026-03-27T21:32:08.193Z",
+        summary="pls scan the code quality",
+        cwd=backend,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "💻 pls scan the code quality" in message
+    assert "initialized: pls scan the code quality" in message
 
 
 def test_switch_by_session_id_still_works(tmp_path: Path):
@@ -2620,8 +2693,12 @@ def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Pat
 
         assert len(runner.resume_calls) == 2
         assert runner.resume_calls[0]["user_message"] == "first question"
-        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[1]["user_message"]
-        queue_file_path = Path(runner.resume_calls[1]["user_message"].splitlines()[-1])
+        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[1]["user_message"]
+        queue_file_path = next(
+            Path(line.strip())
+            for line in runner.resume_calls[1]["user_message"].splitlines()
+            if line.strip().startswith("/")
+        )
         assert queue_file_path.is_absolute()
         assert queue_file_path.name == "sess_queue-queue-0.txt"
         assert queue_file_path.exists() is False
@@ -2668,10 +2745,18 @@ def test_new_questions_create_next_queue_file_while_previous_queue_file_is_proce
 
         assert len(runner.resume_calls) == 3
         assert runner.resume_calls[0]["user_message"] == "first question"
-        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[1]["user_message"]
-        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[2]["user_message"]
-        first_queue_file = Path(runner.resume_calls[1]["user_message"].splitlines()[-1])
-        second_queue_file = Path(runner.resume_calls[2]["user_message"].splitlines()[-1])
+        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[1]["user_message"]
+        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[2]["user_message"]
+        first_queue_file = next(
+            Path(line.strip())
+            for line in runner.resume_calls[1]["user_message"].splitlines()
+            if line.strip().startswith("/")
+        )
+        second_queue_file = next(
+            Path(line.strip())
+            for line in runner.resume_calls[2]["user_message"].splitlines()
+            if line.strip().startswith("/")
+        )
         assert first_queue_file != second_queue_file
         assert first_queue_file.name == "sess_queue-queue-0.txt"
         assert second_queue_file.name == "sess_queue-queue-1.txt"
@@ -2795,7 +2880,7 @@ def test_aborted_run_yes_callback_continues_pending_queue(tmp_path: Path):
         assert answers == ["answered"]
         assert edited == ["Continuing with the pending queued questions."]
         assert len(runner.resume_calls) == 2
-        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[1]["user_message"]
+        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[1]["user_message"]
         assert any("Working on queued questions:" in message for _, message, _, _ in bot.messages)
 
     asyncio.run(exercise())

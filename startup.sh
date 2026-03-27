@@ -5,15 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-resolve_path() {
-  local value="$1"
-  if [[ "$value" = /* ]]; then
-    printf '%s\n' "$value"
-  else
-    printf '%s/%s\n' "$SCRIPT_DIR" "$value"
-  fi
-}
-
 DEFAULT_ENV_FILE=".env_coding_agent_telegram"
 APP_HOME_DIR="${HOME}/.coding-agent-telegram"
 HOME_ENV_FILE="$APP_HOME_DIR/$DEFAULT_ENV_FILE"
@@ -21,9 +12,9 @@ ENV_FILE="${ENV_FILE:-}"
 ENV_TEMPLATE_FILE="${ENV_TEMPLATE_FILE:-src/coding_agent_telegram/resources/.env.example}"
 VENV_DIR="${VENV_DIR:-.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-STATE_FILE_DEFAULT="./state.json"
-STATE_BACKUP_FILE_DEFAULT="./state.json.bak"
-LOG_DIR_DEFAULT="./logs"
+STATE_FILE_DEFAULT="$APP_HOME_DIR/state.json"
+STATE_BACKUP_FILE_DEFAULT="$APP_HOME_DIR/state.json.bak"
+LOG_DIR_DEFAULT="$APP_HOME_DIR/logs"
 LOCAL_PRETEND_VERSION="${SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM:-0.0.dev0}"
 INSTALL_STATE_FILE_NAME=".coding-agent-telegram-install-state"
 FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
@@ -73,13 +64,19 @@ set -a
 source "$ENV_FILE"
 set +a
 
-STATE_FILE="${STATE_FILE:-$STATE_FILE_DEFAULT}"
-STATE_BACKUP_FILE="${STATE_BACKUP_FILE:-$STATE_BACKUP_FILE_DEFAULT}"
-LOG_DIR="${LOG_DIR:-$LOG_DIR_DEFAULT}"
-STATE_FILE="$(resolve_path "$STATE_FILE")"
-STATE_BACKUP_FILE="$(resolve_path "$STATE_BACKUP_FILE")"
-LOG_DIR="$(resolve_path "$LOG_DIR")"
-LOG_FILE="$LOG_DIR/coding-agent-telegram.log"
+STATE_FILE="$STATE_FILE_DEFAULT"
+STATE_BACKUP_FILE="$STATE_BACKUP_FILE_DEFAULT"
+if [[ -f "$APP_HOME_DIR/state.json" ]]; then
+  STATE_FILE="$APP_HOME_DIR/state.json"
+elif [[ -f "./state.json" ]]; then
+  STATE_FILE="./state.json"
+fi
+if [[ -f "$APP_HOME_DIR/state.json.bak" ]]; then
+  STATE_BACKUP_FILE="$APP_HOME_DIR/state.json.bak"
+elif [[ -f "./state.json.bak" ]]; then
+  STATE_BACKUP_FILE="./state.json.bak"
+fi
+LOG_DIR="$LOG_DIR_DEFAULT"
 
 mkdir -p "$(dirname "$STATE_FILE")" "$(dirname "$STATE_BACKUP_FILE")" "$LOG_DIR"
 touch "$STATE_FILE" "$STATE_BACKUP_FILE"

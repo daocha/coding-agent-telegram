@@ -72,10 +72,7 @@ class MultiAgentRunner:
     STALL_WARNING_AFTER_SECONDS = 60.0
     STALL_POLL_INTERVAL_SECONDS = 0.5
     PROGRESS_UPDATE_INTERVAL_SECONDS = 3.0
-    PROMPT_PREFIX = (
-        "Treat the current on-disk workspace as the source of truth. "
-        "Re-read relevant files from disk before making claims or edits. "
-    )
+    PROMPT_PREFIX = ""
 
     def __init__(
         self,
@@ -584,10 +581,7 @@ class MultiAgentRunner:
         ]
 
     def _copilot_env(self, project_path: Path, skip_git_repo_check: bool) -> dict[str, str]:
-        env = os.environ.copy()
-        if skip_git_repo_check and not env.get("COPILOT_HOME"):
-            env["COPILOT_HOME"] = str(project_path / ".copilot")
-        return env
+        return os.environ.copy()
 
     def _copilot_base(
         self,
