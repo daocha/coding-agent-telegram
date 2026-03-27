@@ -136,6 +136,18 @@ class GitWorkspaceManager:
             return []
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
+    def local_branch_exists(self, project_path: Path, branch_name: str) -> bool:
+        if not _validate_branch_name(branch_name):
+            return False
+        result = self._run(project_path, "show-ref", "--verify", f"refs/heads/{branch_name}")
+        return result.returncode == 0
+
+    def remote_branch_exists(self, project_path: Path, branch_name: str) -> bool:
+        if not _validate_branch_name(branch_name):
+            return False
+        result = self._run(project_path, "ls-remote", "--exit-code", "--heads", "origin", branch_name)
+        return result.returncode == 0
+
     def refresh_current_branch(self, project_path: Path) -> BranchOperationResult:
         if not self.is_git_repo(project_path):
             return BranchOperationResult(False, "Current project is not a git repository.")
@@ -238,6 +250,162 @@ class GitWorkspaceManager:
         return BranchOperationResult(
             True,
             f"Created branch '{new_branch}' from '{base_branch}'.",
+            current_branch=new_branch,
+            default_branch=default_branch,
+        )
+
+    def prepare_branch_from_source(
+        self,
+        project_path: Path,
+        *,
+        source_kind: str,
+        source_branch: str,
+        new_branch: str,
+    ) -> BranchOperationResult:
+        if not self.is_git_repo(project_path):
+            return BranchOperationResult(False, "Current project is not a git repository.")
+        if source_kind not in {"local", "origin"}:
+            return BranchOperationResult(False, f"Invalid branch source kind: {source_kind!r}")
+        if not _validate_branch_name(source_branch):
+            return BranchOperationResult(False, f"Invalid source branch name: {source_branch!r}")
+        if not _validate_branch_name(new_branch):
+            return BranchOperationResult(False, f"Invalid branch name: {new_branch!r}")
+
+        default_branch = self.default_branch(project_path)
+        current_branch = self.current_branch(project_path)
+        original_branch = current_branch
+
+        def rollback_failure(message: str) -> BranchOperationResult:
+            if not original_branch:
+                return BranchOperationResult(False, message)
+            active_branch = self.current_branch(project_path)
+            if active_branch == original_branch:
+                return BranchOperationResult(False, message)
+            restore = self._run(project_path, "checkout", original_branch)
+            if restore.returncode != 0:
+                restore_message = _sanitize_git_output(restore.stderr.strip()) or (
+                    f"Failed to restore previous branch: {original_branch}"
+                )
+                return BranchOperationResult(
+                    False,
+                    f"{message}\nAlso failed to restore previous branch '{original_branch}': {restore_message}",
+                )
+            return BranchOperationResult(False, message)
+
+        if source_kind == "local":
+            if not self.local_branch_exists(project_path, source_branch):
+                return BranchOperationResult(False, f"Local branch does not exist: {source_branch}")
+            if source_branch == new_branch:
+                checkout = self._run(project_path, "checkout", new_branch)
+                if checkout.returncode != 0:
+                    return BranchOperationResult(
+                        False,
+                        _sanitize_git_output(checkout.stderr.strip()) or f"Failed to checkout branch: {new_branch}",
+                    )
+                message = (
+                    f"Already on branch '{new_branch}'."
+                    if current_branch == new_branch
+                    else f"Switched to existing local branch '{new_branch}'."
+                )
+                return BranchOperationResult(True, message, current_branch=new_branch, default_branch=default_branch)
+
+            checkout_source = self._run(project_path, "checkout", source_branch)
+            if checkout_source.returncode != 0:
+                return BranchOperationResult(
+                    False,
+                    _sanitize_git_output(checkout_source.stderr.strip()) or f"Failed to checkout source branch: {source_branch}",
+                )
+            existing = self.local_branch_exists(project_path, new_branch)
+            if existing:
+                checkout_existing = self._run(project_path, "checkout", new_branch)
+                if checkout_existing.returncode != 0:
+                    return rollback_failure(
+                        _sanitize_git_output(checkout_existing.stderr.strip()) or f"Failed to checkout branch: {new_branch}",
+                    )
+                return BranchOperationResult(
+                    True,
+                    f"Switched to existing local branch '{new_branch}'.",
+                    current_branch=new_branch,
+                    default_branch=default_branch,
+                )
+            create = self._run(project_path, "checkout", "-b", new_branch)
+            if create.returncode != 0:
+                return rollback_failure(
+                    _sanitize_git_output(create.stderr.strip()) or f"Failed to create branch: {new_branch}",
+                )
+            return BranchOperationResult(
+                True,
+                f"Created branch '{new_branch}' from local branch '{source_branch}'.",
+                current_branch=new_branch,
+                default_branch=default_branch,
+            )
+
+        fetch = self._run(project_path, "fetch", "origin")
+        if fetch.returncode != 0:
+            return BranchOperationResult(False, _sanitize_git_output(fetch.stderr.strip()) or "git fetch origin failed.")
+        if not self.remote_branch_exists(project_path, source_branch):
+            return BranchOperationResult(False, f"Remote branch does not exist: origin/{source_branch}")
+
+        if source_branch == new_branch:
+            if self.local_branch_exists(project_path, new_branch):
+                if current_branch == new_branch:
+                    pull = self._run(project_path, "pull", "--ff-only", "origin", source_branch)
+                    if pull.returncode != 0:
+                        return BranchOperationResult(
+                            False,
+                            _sanitize_git_output(pull.stderr.strip()) or f"git pull failed for branch: {source_branch}",
+                        )
+                else:
+                    update_local = self._run(project_path, "fetch", "origin", f"{source_branch}:{new_branch}")
+                    if update_local.returncode != 0:
+                        return BranchOperationResult(
+                            False,
+                            _sanitize_git_output(update_local.stderr.strip())
+                            or f"Failed to update local branch '{new_branch}' from origin/{source_branch}",
+                        )
+                    checkout_existing = self._run(project_path, "checkout", new_branch)
+                    if checkout_existing.returncode != 0:
+                        return BranchOperationResult(
+                            False,
+                            _sanitize_git_output(checkout_existing.stderr.strip()) or f"Failed to checkout branch: {new_branch}",
+                        )
+            else:
+                checkout_new = self._run(project_path, "checkout", "-b", new_branch, "--track", f"origin/{source_branch}")
+                if checkout_new.returncode != 0:
+                    return BranchOperationResult(
+                        False,
+                        _sanitize_git_output(checkout_new.stderr.strip()) or f"Failed to checkout branch: {new_branch}",
+                    )
+            return BranchOperationResult(
+                True,
+                f"Updated branch '{new_branch}' from origin/{source_branch} and switched to it.",
+                current_branch=new_branch,
+                default_branch=default_branch,
+            )
+
+        if self.local_branch_exists(project_path, new_branch):
+            checkout_existing = self._run(project_path, "checkout", new_branch)
+            if checkout_existing.returncode != 0:
+                return BranchOperationResult(
+                    False,
+                    _sanitize_git_output(checkout_existing.stderr.strip()) or f"Failed to checkout branch: {new_branch}",
+                )
+            return BranchOperationResult(
+                True,
+                f"Switched to existing local branch '{new_branch}' after fetching origin/{source_branch}.",
+                current_branch=new_branch,
+                default_branch=default_branch,
+            )
+
+        create = self._run(project_path, "checkout", "-b", new_branch, f"origin/{source_branch}")
+        if create.returncode != 0:
+            return BranchOperationResult(
+                False,
+                _sanitize_git_output(create.stderr.strip()) or f"Failed to create branch: {new_branch}",
+            )
+        return BranchOperationResult(
+            True,
+            f"Created branch '{new_branch}' from origin/{source_branch}.",
             current_branch=new_branch,
             default_branch=default_branch,
         )

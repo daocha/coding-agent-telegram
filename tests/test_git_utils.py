@@ -267,6 +267,62 @@ def test_checkout_branch_returns_failure_when_git_errors(tmp_path: Path):
     assert result.message  # some error message from git
 
 
+def test_prepare_branch_from_origin_restores_original_branch_when_pull_fails(tmp_path: Path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test")
+    _git(project, "config", "user.email", "t@t.com")
+    (project / "f").write_text("x")
+    _git(project, "add", "f")
+    _git(project, "commit", "-m", "init")
+    _git(project, "checkout", "-b", "enhancements")
+
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", str(origin))
+    _git(project, "remote", "add", "origin", str(origin))
+    _git(project, "push", "-u", "origin", "main")
+    _git(project, "push", "-u", "origin", "enhancements")
+    _git(project, "checkout", "main")
+    _git(project, "push", "origin", "--delete", "enhancements")
+
+    result = manager.prepare_branch_from_source(
+        project,
+        source_kind="origin",
+        source_branch="enhancements",
+        new_branch="enhancements",
+    )
+
+    assert result.success is False
+    assert "enhancements" in result.message
+    assert manager.current_branch(project) == "main"
+
+
+def test_remote_branch_exists_returns_false_for_deleted_remote_branch(tmp_path: Path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test")
+    _git(project, "config", "user.email", "t@t.com")
+    (project / "f").write_text("x")
+    _git(project, "add", "f")
+    _git(project, "commit", "-m", "init")
+    _git(project, "checkout", "-b", "enhancements")
+
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", str(origin))
+    _git(project, "remote", "add", "origin", str(origin))
+    _git(project, "push", "-u", "origin", "main")
+    _git(project, "push", "-u", "origin", "enhancements")
+    _git(project, "push", "origin", "--delete", "enhancements")
+
+    assert manager.remote_branch_exists(project, "enhancements") is False
+
+
 # ---------------------------------------------------------------------------
 # push_branch — success path
 # ---------------------------------------------------------------------------

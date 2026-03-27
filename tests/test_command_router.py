@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import html
+import sqlite3
 import shlex
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from coding_agent_telegram.agent_runner import AgentProgressInfo, AgentRunResult, AgentStallInfo
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
 from coding_agent_telegram.config import AppConfig
@@ -275,6 +278,7 @@ class FakeGitManager:
         default_branch=None,
         local_branches=None,
         prepare_result=None,
+        prepare_from_source_result=None,
         checkout_result=None,
         git_command_results=None,
         push_result=None,
@@ -284,6 +288,7 @@ class FakeGitManager:
         self._default_branch = default_branch
         self._local_branches = local_branches or []
         self.prepare_result = prepare_result
+        self.prepare_from_source_result = prepare_from_source_result
         self.checkout_result = checkout_result
         self.git_command_results = list(git_command_results or [])
         self.push_result = push_result
@@ -291,6 +296,7 @@ class FakeGitManager:
         self.git_commands = []
         self.safe_git_commands = []
         self.push_calls = []
+        self.prepare_from_source_calls = []
 
     def is_git_repo(self, project_path):
         return self._is_git_repo
@@ -304,13 +310,27 @@ class FakeGitManager:
     def list_local_branches(self, project_path):
         return self._local_branches
 
+    def local_branch_exists(self, project_path, branch_name):
+        return branch_name in self._local_branches
+
+    def remote_branch_exists(self, project_path, branch_name):
+        return branch_name in self._local_branches or branch_name == self._default_branch
+
     def refresh_current_branch(self, project_path):
         return self.refresh_result
 
     def prepare_branch(self, project_path, *, origin_branch, new_branch):
         return self.prepare_result
 
+    def prepare_branch_from_source(self, project_path, *, source_kind, source_branch, new_branch):
+        self.prepare_from_source_calls.append((project_path, source_kind, source_branch, new_branch))
+        if self.prepare_from_source_result is not None and getattr(self.prepare_from_source_result, "current_branch", None):
+            self._current_branch = self.prepare_from_source_result.current_branch
+        return self.prepare_from_source_result
+
     def checkout_branch(self, project_path, branch_name):
+        if self.checkout_result is not None and getattr(self.checkout_result, "success", False):
+            self._current_branch = getattr(self.checkout_result, "current_branch", branch_name)
         return self.checkout_result
 
     def run_git_command(self, project_path, args):
@@ -387,6 +407,73 @@ def make_config(tmp_path: Path) -> AppConfig:
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
     )
+
+
+def seed_codex_native_session(
+    home: Path,
+    *,
+    session_id: str,
+    cwd: Path,
+    title: str,
+    branch: str,
+    created_at: int,
+    updated_at: int,
+) -> None:
+    codex_dir = home / ".codex"
+    codex_dir.mkdir(parents=True, exist_ok=True)
+    db_path = codex_dir / "state_5.sqlite"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                cwd TEXT NOT NULL,
+                title TEXT NOT NULL,
+                first_user_message TEXT NOT NULL,
+                git_branch TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO threads (id, cwd, title, first_user_message, git_branch, created_at, updated_at, archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """,
+            (session_id, str(cwd), title, title, branch, created_at, updated_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def seed_copilot_native_session(
+    project_path: Path,
+    *,
+    session_id: str,
+    branch: str,
+    created_at: str,
+    updated_at: str,
+    summary: str,
+) -> None:
+    session_dir = project_path / ".copilot" / "session-state" / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "workspace.yaml").write_text(
+        (
+            f"id: {session_id}\n"
+            f"cwd: {project_path}\n"
+            f"git_root: {project_path}\n"
+            f"branch: {branch}\n"
+            f"created_at: {created_at}\n"
+            f"updated_at: {updated_at}\n"
+            f"summary: {summary}\n"
+        ),
+        encoding="utf-8",
+    )
+    (session_dir / "events.jsonl").write_text("", encoding="utf-8")
 
 
 def test_project_command_rejects_path(tmp_path: Path):
@@ -686,12 +773,14 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
         is_git_repo=True,
-        prepare_result=SimpleNamespace(
+        default_branch="main",
+        local_branches=["main"],
+        prepare_from_source_result=SimpleNamespace(
             success=True,
-            message="Created branch 'feature-1' from 'main'.",
+            message="Created branch 'feature-1' from origin/main.",
             current_branch="feature-1",
             default_branch="main",
-        )
+        ),
     )
 
     update = make_update()
@@ -700,10 +789,37 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert "Created branch" in bot.messages[-1][1]
-    assert "feature-1" in bot.messages[-1][1]
-    assert "main" in bot.messages[-1][1]
-    assert "Current branch: feature-1" in bot.messages[-1][1]
+    assert "Creating a new branch from the following branch source: feature-1" in bot.messages[-1][1]
+    assert "Choose the branch source:" in bot.messages[-1][1]
+    assert "Branch target: feature-1" in bot.messages[-1][1]
+    reply_markup = bot.messages[-1][3]
+    assert reply_markup is not None
+
+    query = SimpleNamespace(
+        data="branchsource:origin:main:feature-1",
+        answer=None,
+        edit_message_text=None,
+    )
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(callback_update, context))
+
+    assert "Created branch" in edited[-1][0]
+    assert "feature-1" in edited[-1][0]
+    assert "Current branch: feature-1" in edited[-1][0]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
 
 
@@ -718,12 +834,13 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
         is_git_repo=True,
-        prepare_result=SimpleNamespace(
+        local_branches=["main", "feature-1"],
+        prepare_from_source_result=SimpleNamespace(
             success=True,
-            message="Switched to existing branch 'main'.",
+            message="Switched to existing local branch 'main'.",
             current_branch="main",
             default_branch="main",
-        )
+        ),
     )
 
     update = make_update()
@@ -732,9 +849,31 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert "Switched to existing branch" in bot.messages[-1][1]
-    assert "main" in bot.messages[-1][1]
-    assert "Current branch: main" in bot.messages[-1][1]
+    assert "Switching branch to main requires choosing a source first." in bot.messages[-1][1]
+    assert "Choose the branch source:" in bot.messages[-1][1]
+    query = SimpleNamespace(
+        data="branchsource:local:main:main",
+        answer=None,
+        edit_message_text=None,
+    )
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+    asyncio.run(router.handle_branch_source_callback(callback_update, context))
+
+    assert "Switched to existing local branch" in edited[-1][0]
+    assert "Current branch: main" in edited[-1][0]
     state = store.get_chat_state("bot-a", 123)
     assert state["current_branch"] == "main"
     assert state["sessions"]["sess_branch"]["branch_name"] == "main"
@@ -828,6 +967,125 @@ class ProgressRunner(DummyRunner):
                     source="stdout",
                 )
             )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="done",
+            error_message=None,
+            raw_events=[],
+        )
+
+
+class BlockingRunner(DummyRunner):
+    def __init__(self):
+        super().__init__()
+        self._condition = threading.Condition()
+        self._started_count = 0
+        self._released_count = 0
+
+    def has_running_process(self, _project_path):
+        with self._condition:
+            return self._started_count > self._released_count
+
+    def wait_started(self, count: int, timeout: float = 1.0) -> bool:
+        with self._condition:
+            return self._condition.wait_for(lambda: self._started_count >= count, timeout=timeout)
+
+    def release_next(self) -> None:
+        with self._condition:
+            self._released_count += 1
+            self._condition.notify_all()
+
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+                "on_stall": on_stall,
+                "on_progress": on_progress,
+            }
+        )
+        with self._condition:
+            self._started_count += 1
+            my_run = self._started_count
+            self._condition.notify_all()
+            self._condition.wait_for(lambda: self._released_count >= my_run, timeout=30)
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="done",
+            error_message=None,
+            raw_events=[],
+        )
+
+
+class AbortableBlockingRunner(BlockingRunner):
+    def __init__(self):
+        super().__init__()
+        self._abort_current = False
+
+    def abort_running_process(self, _project_path):
+        with self._condition:
+            if self._started_count <= self._released_count:
+                return False
+            self._abort_current = True
+            self._released_count += 1
+            self._condition.notify_all()
+            return True
+
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+                "on_stall": on_stall,
+                "on_progress": on_progress,
+            }
+        )
+        with self._condition:
+            self._started_count += 1
+            my_run = self._started_count
+            self._condition.notify_all()
+            self._condition.wait_for(lambda: self._released_count >= my_run, timeout=30)
+            if self._abort_current:
+                self._abort_current = False
+                return AgentRunResult(
+                    session_id=session_id,
+                    success=False,
+                    assistant_text="",
+                    error_message="Agent run aborted by /abort.",
+                    raw_events=[],
+                )
         return AgentRunResult(
             session_id=session_id,
             success=True,
@@ -1196,11 +1454,12 @@ def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
     asyncio.run(router.handle_switch(update, context))
 
     message = bot.messages[-1][1]
-    assert "Available sessions (page 1/2):" in message
-    assert "session-11" in message
-    assert "session-2" in message
-    assert "\n2. session-1 |" not in message
-    assert "Pages: /switch page 1 ... /switch page 2" in message
+    assert "Available sessions (page 1/3):" in message
+    assert "🤖 = Bot managed session" in message
+    assert "session-9" in message
+    assert "session-5" in message
+    assert "session-4" not in message
+    assert "Pages: /switch page 1 ... /switch page 3" in message
     assert "/switch &lt;session_id&gt;" in message
 
 
@@ -1220,10 +1479,96 @@ def test_switch_lists_requested_page(tmp_path: Path):
     asyncio.run(router.handle_switch(update, context))
 
     message = bot.messages[-1][1]
-    assert "Available sessions (page 2/2):" in message
-    assert "session-1" in message
-    assert "session-0" in message
-    assert "session-11" not in message
+    assert "Available sessions (page 2/3):" in message
+    assert "session-4" in message
+    assert "session-2" in message
+    assert "session-9" not in message
+
+
+def test_switch_lists_mixed_bot_and_native_project_sessions_with_legend(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    store.create_session("bot-a", 123, "sess_bot", "bot-session", "backend", "codex", branch_name="feature-1")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="Native codex review",
+        branch="enhancement",
+        created_at=1_700_000_000,
+        updated_at=1_700_000_010,
+    )
+    seed_copilot_native_session(
+        backend,
+        session_id="sess_native_copilot",
+        branch="enhancement",
+        created_at="2026-03-27T01:00:00Z",
+        updated_at="2026-03-27T02:00:00Z",
+        summary="Native copilot review",
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "🤖 = Bot managed session" in message
+    assert "💻 = native CLI session" in message
+    assert "Current project filter for native sessions: <code>backend</code>" in message
+    assert "🤖 bot-session" in message
+    assert "💻 Native codex review" in message
+    assert "initialized: Native codex review" in message
+
+
+def test_switch_lists_only_current_provider_native_sessions(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "copilot")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="Native codex review",
+        branch="enhancement",
+        created_at=1_700_000_000,
+        updated_at=1_700_000_010,
+    )
+    seed_copilot_native_session(
+        backend,
+        session_id="sess_native_copilot",
+        branch="enhancement",
+        created_at="2026-03-27T01:00:00Z",
+        updated_at="2026-03-27T02:00:00Z",
+        summary="Native copilot review",
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "💻 Native copilot review" in message
+    assert "initialized: Native copilot review" in message
+    assert "💻 Native codex review" not in message
 
 
 def test_switch_by_session_id_still_works(tmp_path: Path):
@@ -1243,6 +1588,41 @@ def test_switch_by_session_id_still_works(tmp_path: Path):
     asyncio.run(router.handle_switch(update, context))
 
     assert "Switched to session: session-a" in bot.messages[-1][1]
+
+
+def test_switch_imports_native_session_into_state_json(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="Native codex review",
+        branch="enhancement",
+        created_at=1_700_000_000,
+        updated_at=1_700_000_010,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="/switch sess_native_codex")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess_native_codex"], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_native_codex"
+    assert state["sessions"]["sess_native_codex"]["name"] == "Native codex review"
+    assert "Source: native codex" in bot.messages[-1][1]
+    assert "Imported into state.json." in bot.messages[-1][1]
 
 
 def test_current_requires_active_session(tmp_path: Path):
@@ -1280,7 +1660,7 @@ def test_current_reports_active_session_details(tmp_path: Path):
     assert "Branch: feature-1" in message
 
 
-def test_switch_does_not_persist_if_branch_checkout_fails(tmp_path: Path):
+def test_switch_does_not_checkout_branch_immediately(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
     runner = DummyRunner()
@@ -1291,6 +1671,7 @@ def test_switch_does_not_persist_if_branch_checkout_fails(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
         is_git_repo=True,
+        current_branch="main",
         checkout_result=SimpleNamespace(success=False, message="Failed to checkout branch: missing-branch"),
     )
 
@@ -1300,8 +1681,9 @@ def test_switch_does_not_persist_if_branch_checkout_fails(tmp_path: Path):
 
     asyncio.run(router.handle_switch(update, context))
 
-    assert "Failed to checkout branch: missing-branch" in bot.messages[-1][1]
-    assert store.get_chat_state("bot-a", 123)["active_session_id"] == "sess_b"
+    assert "Switched to session: session-a" in bot.messages[-1][1]
+    assert store.get_chat_state("bot-a", 123)["active_session_id"] == "sess_a"
+    assert router.git.current_branch(backend) == "main"
 
 
 def test_switch_rejects_missing_project_folder(tmp_path: Path):
@@ -1548,6 +1930,431 @@ def test_message_prompts_for_provider_when_not_selected(tmp_path: Path):
     assert store.get_chat_state("bot-a", 123)["pending_action"]["kind"] == "message"
 
 
+def test_message_prompts_for_branch_discrepancy_before_running_bot_managed_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="test_branch")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main", "test_branch"])
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls == []
+    assert "Branch discrepancy detected before running the active session." in bot.messages[-1][1]
+    assert "Stored branch: test_branch" in bot.messages[-1][1]
+    assert "Current branch in repo: main" in bot.messages[-1][1]
+    assert bot.messages[-1][3] is not None
+
+
+def test_message_prefers_branch_discrepancy_prompt_over_creating_new_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="test_branch")
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_current_branch("bot-a", 123, "main")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main", "test_branch"])
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.create_calls == []
+    assert runner.resume_calls == []
+    assert "Branch discrepancy detected before running the active session." in bot.messages[-1][1]
+
+
+def test_branch_discrepancy_current_choice_updates_branch_and_resumes(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="test_branch")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "continue",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "session_id": "sess_md",
+            "stored_branch": "test_branch",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main", "test_branch"])
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:current",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    assert edited[-1][0] == "Using current branch: main"
+    assert runner.resume_calls
+    state = store.get_chat_state("bot-a", 123)
+    assert state["current_branch"] == "main"
+    assert state["sessions"]["sess_md"]["branch_name"] == "main"
+
+
+def test_branch_discrepancy_offers_fallback_when_stored_branch_is_missing(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="enhancements")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {
+            "kind": "message",
+            "user_message": "continue",
+            "branch_resolution": {
+                "kind": "discrepancy",
+                "session_id": "sess_md",
+                "stored_branch": "enhancements",
+                "current_branch": "main",
+            },
+        },
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", default_branch="main", local_branches=["main"])
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:stored",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    assert "Stored branch is no longer available." in edited[-1][0]
+    assert "Missing local/enhancements and origin/enhancements." in edited[-1][0]
+    reply_markup = edited[-1][1]
+    labels = [button.text for row in reply_markup.inline_keyboard for button in row]
+    assert "local/main" in labels
+    assert "origin/main" in labels
+    assert len(labels) == 2
+
+
+def test_branch_discrepancy_fallback_offers_default_and_current_branch_sources(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="enhancements")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {
+            "kind": "message",
+            "user_message": "continue",
+            "branch_resolution": {
+                "kind": "discrepancy",
+                "session_id": "sess_md",
+                "stored_branch": "enhancements",
+                "current_branch": "feature-x",
+            },
+        },
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-x", default_branch="main", local_branches=["main", "feature-x"])
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:stored",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    reply_markup = edited[-1][1]
+    labels = [button.text for row in reply_markup.inline_keyboard for button in row]
+    assert "local/main" in labels
+    assert "origin/main" in labels
+    assert "local/feature-x" in labels
+    assert "origin/feature-x" in labels
+
+
+def test_branch_discrepancy_fallback_branch_source_resumes_pending_run(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="enhancements")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {
+            "kind": "message",
+            "user_message": "continue",
+            "branch_resolution": {
+                "kind": "switch_source",
+                "source_branch": "main",
+                "new_branch": "enhancements",
+            },
+        },
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="main",
+        local_branches=["main"],
+        prepare_from_source_result=SimpleNamespace(
+            success=True,
+            message="Created branch 'enhancements' from origin/main.",
+            current_branch="enhancements",
+            default_branch="main",
+        ),
+    )
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchsource:origin:main:enhancements",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+
+    assert "Created branch 'enhancements' from origin/main." in edited[-1][0]
+    assert runner.resume_calls
+    state = store.get_chat_state("bot-a", 123)
+    assert state["current_branch"] == "enhancements"
+    assert state["sessions"]["sess_md"]["branch_name"] == "enhancements"
+
+
+@pytest.mark.parametrize(
+    ("source_kind", "source_branch"),
+    [
+        ("local", "main"),
+        ("origin", "main"),
+        ("local", "feature-x"),
+        ("origin", "feature-x"),
+    ],
+)
+def test_branch_discrepancy_fallback_source_options_resume_pending_run(
+    tmp_path: Path,
+    source_kind: str,
+    source_branch: str,
+):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="enhancements")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {
+            "kind": "message",
+            "user_message": "continue",
+            "branch_resolution": {
+                "kind": "switch_source",
+                "new_branch": "enhancements",
+            },
+        },
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-x",
+        default_branch="main",
+        local_branches=["main", "feature-x"],
+        prepare_from_source_result=SimpleNamespace(
+            success=True,
+            message=f"Created branch 'enhancements' from {source_kind}/{source_branch}.",
+            current_branch="enhancements",
+            default_branch="main",
+        ),
+    )
+
+    edited = []
+    query = SimpleNamespace(
+        data=f"branchsource:{source_kind}:{source_branch}:enhancements",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+
+    assert f"Created branch 'enhancements' from {source_kind}/{source_branch}." in edited[-1][0]
+    assert router.git.prepare_from_source_calls[-1][1:] == (source_kind, source_branch, "enhancements")
+    assert runner.resume_calls
+    state = store.get_chat_state("bot-a", 123)
+    assert state["current_branch"] == "enhancements"
+    assert state["sessions"]["sess_md"]["branch_name"] == "enhancements"
+
+
+def test_branch_source_failure_during_discrepancy_offers_fallback_prompt(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "codex", branch_name="enhancements")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {
+            "kind": "message",
+            "user_message": "continue",
+            "branch_resolution": {
+                "kind": "switch_source",
+                "source_branch": "enhancements",
+                "new_branch": "enhancements",
+            },
+        },
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="main",
+        local_branches=["main"],
+        prepare_from_source_result=SimpleNamespace(
+            success=False,
+            message="fatal: couldn't find remote ref enhancements",
+            current_branch=None,
+            default_branch="main",
+        ),
+    )
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchsource:origin:enhancements:enhancements",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+
+    assert "fatal: couldn't find remote ref enhancements" in edited[-1][0]
+    assert "Do you want to create branch enhancements from one of these branches instead of origin/enhancements?" in edited[-1][0]
+    labels = [button.text for row in edited[-1][1].inline_keyboard for button in row]
+    assert "local/main" in labels
+    assert "origin/main" in labels
+
+
 def test_current_reports_missing_active_session(tmp_path: Path):
     runner = DummyRunner()
     cfg = make_config(tmp_path)
@@ -1583,6 +2390,62 @@ def test_current_reports_active_session_details(tmp_path: Path):
     assert "Project: backend" in bot.messages[-1][1]
     assert "Provider: codex" in bot.messages[-1][1]
     assert "Branch: feature-1" in bot.messages[-1][1]
+
+
+def test_abort_reports_when_no_project_selected(tmp_path: Path):
+    runner = DummyRunner()
+    runner.abort_running_process = lambda _project_path: False
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/abort")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_abort(update, context))
+
+    assert bot.messages[-1][1] == "No project selected.\nPlease run /project &lt;project_folder&gt; first."
+
+
+def test_abort_reports_when_no_running_process_exists(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    runner.abort_running_process = lambda _project_path: False
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/abort")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_abort(update, context))
+
+    assert bot.messages[-1][1] == "No running agent process was found for the current project."
+
+
+def test_abort_sends_signal_for_current_project_run(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    aborted_paths = []
+    runner.abort_running_process = lambda project_path: aborted_paths.append(project_path) or True
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/abort")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_abort(update, context))
+
+    assert aborted_paths == [backend]
+    assert bot.messages[-1][1] == "Abort signal sent for the current project run."
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
@@ -1718,6 +2581,306 @@ def test_active_session_deletes_live_progress_message_when_final_output_is_sent(
     assert len(bot.deleted_messages) == 1
     assert bot.deleted_messages[0][0] == 123
     assert any("Codex output" in message[1] for message in bot.messages)
+
+
+def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_update = make_update(text="first question")
+        second_update = make_update(text="second question")
+        first_context = SimpleNamespace(args=[], bot=bot)
+        second_context = SimpleNamespace(args=[], bot=bot)
+
+        first_task = asyncio.create_task(router.handle_message(first_update, first_context))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(second_update, second_context)
+
+        assert any("Question queued as Q1." in message for _, message, _, _ in bot.messages)
+        assert not any("Working on queued questions:" in message for _, message, _, _ in bot.messages)
+        assert not any("already running on project" in message for _, message, _, _ in bot.messages)
+        assert not any("Command failed" in message for _, message, _, _ in bot.messages)
+
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await first_task
+
+        assert len(runner.resume_calls) == 2
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[1]["user_message"]
+        queue_file_path = Path(runner.resume_calls[1]["user_message"].splitlines()[-1])
+        assert queue_file_path.is_absolute()
+        assert queue_file_path.name == "sess_queue-queue-0.txt"
+        assert queue_file_path.exists() is False
+        assert any("Working on queued questions:" in message for _, message, _, _ in bot.messages)
+        assert any("1. second question" in message for _, message, _, _ in bot.messages)
+
+    asyncio.run(exercise())
+
+
+def test_new_questions_create_next_queue_file_while_previous_queue_file_is_processing(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_update = make_update(text="first question")
+        second_update = make_update(text="two")
+        third_update = make_update(text="three")
+        fourth_update = make_update(text="four four four four four four four")
+        first_context = SimpleNamespace(args=[], bot=bot)
+
+        first_task = asyncio.create_task(router.handle_message(first_update, first_context))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(second_update, SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(third_update, SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+
+        await router.handle_message(fourth_update, SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        started_third = await asyncio.to_thread(runner.wait_started, 3, 1.0)
+        assert started_third is True
+        runner.release_next()
+        await first_task
+
+        assert len(runner.resume_calls) == 3
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[1]["user_message"]
+        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[2]["user_message"]
+        first_queue_file = Path(runner.resume_calls[1]["user_message"].splitlines()[-1])
+        second_queue_file = Path(runner.resume_calls[2]["user_message"].splitlines()[-1])
+        assert first_queue_file != second_queue_file
+        assert first_queue_file.name == "sess_queue-queue-0.txt"
+        assert second_queue_file.name == "sess_queue-queue-1.txt"
+        assert first_queue_file.exists() is False
+        assert second_queue_file.exists() is False
+        queued_notices = [message for _, message, _, _ in bot.messages if "Working on queued questions:" in message]
+        assert any("1. two" in message and "2. three" in message for message in queued_notices)
+        assert any("1. four four four four four four four" in message for message in queued_notices)
+
+    asyncio.run(exercise())
+
+
+def test_aborted_run_with_pending_queue_prompts_before_continuing(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = AbortableBlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="second question"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_abort(make_update(text="/abort"), SimpleNamespace(args=[], bot=bot))
+        await first_task
+
+        assert len(runner.resume_calls) == 1
+        assert any("aborted" in message.lower() for _, message, _, _ in bot.messages)
+        prompt_messages = [entry for entry in bot.messages if "Do you want to continue processing the pending queued questions?" in entry[1]]
+        assert len(prompt_messages) == 1
+        keyboard = prompt_messages[0][3]
+        assert keyboard is not None
+        buttons = keyboard.inline_keyboard[0]
+        assert buttons[0].callback_data == "queuecontinue:yes"
+        assert buttons[1].callback_data == "queuecontinue:no"
+
+    asyncio.run(exercise())
+
+
+def test_aborted_run_without_pending_queue_does_not_prompt(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = AbortableBlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_abort(make_update(text="/abort"), SimpleNamespace(args=[], bot=bot))
+        await first_task
+
+        assert len(runner.resume_calls) == 1
+        assert any("aborted" in message.lower() for _, message, _, _ in bot.messages)
+        assert not any(
+            "Do you want to continue processing the pending queued questions?" in message
+            for _, message, _, _ in bot.messages
+        )
+
+    asyncio.run(exercise())
+
+
+def test_aborted_run_yes_callback_continues_pending_queue(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = AbortableBlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="second question"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_abort(make_update(text="/abort"), SimpleNamespace(args=[], bot=bot))
+        await first_task
+
+        edited = []
+        answers = []
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(
+                data="queuecontinue:yes",
+                answer=None,
+                edit_message_text=None,
+            ),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        update.callback_query.answer = fake_answer
+        update.callback_query.edit_message_text = fake_edit
+
+        callback_task = asyncio.create_task(router.handle_queue_continue_callback(update, SimpleNamespace(args=[], bot=bot)))
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await callback_task
+
+        assert answers == ["answered"]
+        assert edited == ["Continuing with the pending queued questions."]
+        assert len(runner.resume_calls) == 2
+        assert "Please read the queued questions in this file and answer them in order:" in runner.resume_calls[1]["user_message"]
+        assert any("Working on queued questions:" in message for _, message, _, _ in bot.messages)
+
+    asyncio.run(exercise())
+
+
+def test_aborted_run_no_callback_discards_pending_queue(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = AbortableBlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="second question"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_abort(make_update(text="/abort"), SimpleNamespace(args=[], bot=bot))
+        await first_task
+
+        edited = []
+        answers = []
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(
+                data="queuecontinue:no",
+                answer=None,
+                edit_message_text=None,
+            ),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        update.callback_query.answer = fake_answer
+        update.callback_query.edit_message_text = fake_edit
+
+        await router.handle_queue_continue_callback(update, SimpleNamespace(args=[], bot=bot))
+
+        assert answers == ["answered"]
+        assert edited == ["Pending queued questions were discarded."]
+        assert len(runner.resume_calls) == 1
+        assert not router._chat_message_queue_files.get(123)
+        assert router._chat_processing_queue_files.get(123) is None
+
+    asyncio.run(exercise())
+
+
+def test_completed_run_with_pending_queue_starts_next_file_without_prompt(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="second question"), SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await first_task
+
+        assert len(runner.resume_calls) == 2
+        assert not any(
+            "Do you want to continue processing the pending queued questions?" in message
+            for _, message, _, _ in bot.messages
+        )
+
+    asyncio.run(exercise())
 
 
 def test_assistant_output_is_chunked_by_rendered_html_length(tmp_path: Path):
@@ -3212,7 +4375,7 @@ def test_branch_wrong_arg_count_sends_usage(tmp_path: Path):
     assert "Usage: /branch" in bot.messages[-1][1]
 
 
-def test_branch_prepare_fails_sends_failure_message(tmp_path: Path):
+def test_origin_branch_prepare_failure_offers_fallback_prompt(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
     runner = DummyRunner()
@@ -3222,9 +4385,11 @@ def test_branch_prepare_fails_sends_failure_message(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
         is_git_repo=True,
-        prepare_result=SimpleNamespace(
+        default_branch="main",
+        local_branches=["main"],
+        prepare_from_source_result=SimpleNamespace(
             success=False,
-            message="Branch preparation failed: branch already exists.",
+            message="fatal: couldn't find remote ref main",
             current_branch=None,
             default_branch="main",
         ),
@@ -3236,7 +4401,82 @@ def test_branch_prepare_fails_sends_failure_message(tmp_path: Path):
 
     asyncio.run(router.handle_branch(update, context))
 
-    assert "Branch preparation failed" in bot.messages[-1][1]
+    assert "Choose the branch source:" in bot.messages[-1][1]
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchsource:origin:main:feature-new",
+        answer=None,
+        edit_message_text=None,
+    )
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+    asyncio.run(router.handle_branch_source_callback(callback_update, context))
+
+    assert "fatal: couldn't find remote ref main" in edited[-1][0]
+    assert "Do you want to create branch feature-new from one of these branches instead of origin/main?" in edited[-1][0]
+    labels = [button.text for row in edited[-1][1].inline_keyboard for button in row]
+    assert "local/main" in labels
+    assert "origin/main" in labels
+
+
+def test_local_branch_prepare_failure_still_reports_error(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        default_branch="main",
+        local_branches=["main"],
+        prepare_from_source_result=SimpleNamespace(
+            success=False,
+            message="Failed to checkout source branch: main",
+            current_branch=None,
+            default_branch="main",
+        ),
+    )
+
+    query = SimpleNamespace(
+        data="branchsource:local:main:feature-new",
+        answer=None,
+        edit_message_text=None,
+    )
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(callback_update, context))
+
+    assert edited[-1][0] == "Failed to checkout source branch: main"
+    assert edited[-1][1] is None
 
 
 def _make_trust_callback_update(data: str):

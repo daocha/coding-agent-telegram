@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +14,25 @@ class FakePopen:
         self.stdout = io.StringIO(stdout)
         self.stderr = io.StringIO(stderr)
         self.returncode = returncode
+        self.killed = False
+        self.terminated = False
+
+    def poll(self):
+        return self.returncode
+
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
+
+    def terminate(self):
+        self.terminated = True
+        self.returncode = -15
+
+
+class FakeBlockingPopen(FakePopen):
+    def __init__(self):
+        super().__init__(stdout="", stderr="", returncode=0)
+        self.returncode = None
 
     def poll(self):
         return self.returncode
@@ -24,7 +45,7 @@ def make_fake_popen(
     process_stderr: str = "",
     returncode: int = 0,
 ):
-    def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None):
+    def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None, start_new_session=None):
         calls.append((args, cwd, env))
         return FakePopen(stdout=process_stdout, stderr=process_stderr, returncode=returncode)
 
@@ -573,3 +594,34 @@ def test_parse_jsonl_extracts_success_false_from_error_field(monkeypatch):
     runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
     result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
     assert result.success is False
+
+
+def test_agent_runner_can_abort_registered_process(monkeypatch):
+    captured = {}
+
+    def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None, start_new_session=None):
+        proc = FakeBlockingPopen()
+        captured["proc"] = proc
+        return proc
+
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", fake_popen)
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    thread = threading.Thread(
+        target=lambda: runner.create_session("codex", Path("/tmp/project"), "hello"),
+        daemon=True,
+    )
+    thread.start()
+
+    deadline = time.time() + 1
+    while "/tmp/project" not in runner._running_processes and time.time() < deadline:
+        time.sleep(0.01)
+
+    assert runner.abort_running_process(Path("/tmp/project")) is True
+    assert captured["proc"].killed is True or captured["proc"].terminated is True

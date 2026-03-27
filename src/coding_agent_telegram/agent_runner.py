@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import tempfile
 import threading
@@ -108,6 +109,9 @@ class MultiAgentRunner:
         self.copilot_available_tools = tuple(tool.strip() for tool in copilot_available_tools if tool.strip())
         # 0 = disabled. When > 0, the agent subprocess is killed after this many seconds.
         self.hard_timeout_seconds = max(0, int(hard_timeout_seconds))
+        self._running_processes: dict[str, subprocess.Popen] = {}
+        self._aborted_process_keys: set[str] = set()
+        self._running_processes_lock = threading.Lock()
 
     def _looks_textual_key(self, key: str) -> bool:
         normalized = key.strip().lower()
@@ -280,7 +284,12 @@ class MultiAgentRunner:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
+        process_key = str(cwd.resolve()) if cwd is not None else None
+        if process_key is not None:
+            with self._running_processes_lock:
+                self._running_processes[process_key] = proc
 
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
@@ -363,10 +372,7 @@ class MultiAgentRunner:
                     "Agent command exceeded hard timeout of %ds; terminating process.",
                     _watchdog_timeout,
                 )
-                try:
-                    proc.kill()
-                except OSError:
-                    pass
+                self._terminate_process(proc, force=True)
 
         watchdog_thread = threading.Thread(target=_watchdog, daemon=True, name="agent-watchdog")
         watchdog_thread.start()
@@ -403,6 +409,13 @@ class MultiAgentRunner:
         stderr_thread.join()
         _proc_exited.set()
         watchdog_thread.join()
+        aborted = False
+        if process_key is not None:
+            with self._running_processes_lock:
+                self._running_processes.pop(process_key, None)
+                aborted = process_key in self._aborted_process_keys
+                if aborted:
+                    self._aborted_process_keys.discard(process_key)
         stdout = "".join(stdout_chunks)
         stderr = "".join(stderr_chunks)
         if provider == "codex":
@@ -410,9 +423,14 @@ class MultiAgentRunner:
         else:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_copilot_jsonl(stdout)
 
-        success = proc.returncode == 0 and parsed_success
-        if not success and not error_message:
-            error_message = stderr.strip() or "Agent command failed."
+        if aborted:
+            success = False
+            assistant_text = ""
+            error_message = "Agent run aborted by /abort."
+        else:
+            success = proc.returncode == 0 and parsed_success
+            if not success and not error_message:
+                error_message = stderr.strip() or "Agent command failed."
 
         return AgentRunResult(
             session_id=session_id,
@@ -421,6 +439,48 @@ class MultiAgentRunner:
             error_message=error_message,
             raw_events=events,
         )
+
+    def abort_running_process(self, project_path: Path) -> bool:
+        process_key = str(project_path.resolve())
+        with self._running_processes_lock:
+            proc = self._running_processes.get(process_key)
+            if proc is None:
+                return False
+            self._aborted_process_keys.add(process_key)
+        terminated = self._terminate_process(proc, force=False)
+        if terminated:
+            return True
+        return self._terminate_process(proc, force=True)
+
+    def has_running_process(self, project_path: Path) -> bool:
+        process_key = str(project_path.resolve())
+        with self._running_processes_lock:
+            return process_key in self._running_processes
+
+    def _terminate_process(self, proc: subprocess.Popen, *, force: bool) -> bool:
+        sig = signal.SIGKILL if force else signal.SIGTERM
+        try:
+            pid = getattr(proc, "pid", None)
+            if pid:
+                os.killpg(os.getpgid(pid), sig)
+            elif force:
+                proc.kill()
+            elif hasattr(proc, "terminate"):
+                proc.terminate()
+            else:
+                proc.kill()
+            return True
+        except (OSError, ProcessLookupError):
+            try:
+                if force:
+                    proc.kill()
+                elif hasattr(proc, "terminate"):
+                    proc.terminate()
+                else:
+                    proc.kill()
+                return True
+            except OSError:
+                return False
 
     def _run_with_output_file(
         self,

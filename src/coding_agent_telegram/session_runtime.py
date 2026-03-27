@@ -12,7 +12,7 @@ from typing import Awaitable, Callable, Optional, Sequence
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from coding_agent_telegram.agent_runner import MultiAgentRunner
+from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
 from coding_agent_telegram.config import AppConfig, DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES
 from coding_agent_telegram.diff_utils import (
     INTERNAL_APP_DIR,
@@ -206,11 +206,11 @@ class SessionRuntime:
         *,
         user_message: str,
         image_paths: Sequence[Path] = (),
-    ) -> None:
+    ) -> AgentRunResult | None:
         chat_id = update.effective_chat.id
         active_id, session, project_path = await self._active_session_or_notify(update, context)
         if active_id is None or session is None or project_path is None:
-            return
+            return None
 
         project_folder = session["project_folder"]
         provider = session.get("provider", "codex")
@@ -229,7 +229,7 @@ class SessionRuntime:
         if branch_name and self.git.is_git_repo(project_path):
             checkout = await self._checkout_branch(update, context, project_path, branch_name)
             if not checkout:
-                return
+                return None
 
         before_snapshot = snapshot_project_files(
             project_path,
@@ -251,6 +251,13 @@ class SessionRuntime:
             stall_message=ACTIVE_RUN_STALL_MESSAGE,
             progress_label="Live agent output",
         )
+        if result is None:
+            logger.info(
+                "Agent run was not started for chat %s on project '%s' because the workspace is busy.",
+                chat_id,
+                project_folder,
+            )
+            return None
         session_name = session["name"]
         result, active_id, session_name = await self._replace_invalid_session_if_needed(
             update,
@@ -268,7 +275,7 @@ class SessionRuntime:
             image_paths=image_paths,
         )
         if result is None:
-            return
+            return None
         if not result.success:
             logger.warning(
                 "Agent run failed for chat %s on session '%s' (%s): %s",
@@ -279,7 +286,7 @@ class SessionRuntime:
             )
             error_text = _sanitize_agent_error(result.error_message) if result.error_message else "Agent run failed."
             await send_text(update, context, error_text)
-            return
+            return result
 
         if result.session_id and result.session_id != active_id:
             switched_session_name = self._next_rotated_session_name(chat_id, session_name)
@@ -324,6 +331,7 @@ class SessionRuntime:
             before_snapshot=before_snapshot,
             before=before,
         )
+        return result
 
     async def _checkout_branch(
         self,
@@ -377,6 +385,8 @@ class SessionRuntime:
             stall_message=REPLACEMENT_SESSION_STALL_MESSAGE,
             progress_label="Live agent output",
         )
+        if create_result is None:
+            return None, active_id, session_name
         if not create_result.success or not create_result.session_id:
             return create_result, active_id, session_name
 

@@ -23,7 +23,7 @@ def test_runner_reports_stall_without_killing_process(monkeypatch):
     captured: list[AgentStallInfo] = []
     monotonic_values = iter([0.0, 70.0, 70.0])
 
-    def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None):
+    def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None, start_new_session=None):
         return process
 
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", fake_popen)

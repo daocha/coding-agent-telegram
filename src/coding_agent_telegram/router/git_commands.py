@@ -13,6 +13,8 @@ from .base import require_allowed_chat
 class GitCommandMixin:
     @require_allowed_chat()
     async def handle_commit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self._notify_if_current_project_busy(update, context):
+            return
         if not self.deps.cfg.enable_commit_command:
             await send_text(
                 update,
@@ -70,6 +72,8 @@ class GitCommandMixin:
 
     @require_allowed_chat()
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self._notify_if_current_project_busy(update, context):
+            return
         if context.args:
             await send_text(update, context, "Usage: /push")
             return

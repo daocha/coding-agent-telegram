@@ -4,11 +4,14 @@ import asyncio
 import html
 import logging
 import os
+import re
 import shlex
+from collections import deque
 from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Awaitable, Callable, Optional, Tuple
 
 from telegram import Update
@@ -29,6 +32,7 @@ logger = logging.getLogger(__name__)
 TYPING_REFRESH_TIMEOUT_SECONDS = 4
 ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
 PROGRESS_PREVIEW_MAX_CHARS = 600
+QUEUED_QUESTIONS_DIR = "queued_questions"
 
 
 def require_allowed_chat(*, answer_callback: bool = False):
@@ -60,7 +64,7 @@ class RouterDeps:
 
 
 class CommandRouterBase:
-    SWITCH_PAGE_SIZE = 10
+    SWITCH_PAGE_SIZE = 5
     ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "restore", "rm", "status"}
     TRUST_REQUIRED_COMMIT_SUBCOMMANDS = {"add", "restore", "rm"}
     ENFORCED_COMMIT_ARGS = ["--no-verify", "--no-post-rewrite", "--no-gpg-sign"]
@@ -119,6 +123,11 @@ class CommandRouterBase:
         # which chat ID or session triggers the run.
         # These are in-memory only — no stale locks survive a server restart.
         self._workspace_locks: dict[str, asyncio.Lock] = {}
+        self._chat_message_queue_files: dict[int, deque[Path]] = {}
+        self._chat_processing_queue_files: dict[int, Path] = {}
+        self._chat_next_queue_file_index: dict[int, int] = {}
+        self._chat_message_queue_draining: set[int] = set()
+        self._last_run_results: dict[int, object] = {}
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         return sorted(
@@ -162,6 +171,221 @@ class CommandRouterBase:
             lines.append(f"Pages: /switch page 1 ... /switch page {total_pages}")
 
         return "\n".join(lines).strip()
+
+    def _current_project_path(self, chat_id: int) -> Path | None:
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        project_folder = str(chat_state.get("current_project_folder") or "").strip()
+        if not project_folder:
+            return None
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        if not project_path.exists() or not project_path.is_dir():
+            return None
+        return project_path
+
+    def _current_project_folder(self, chat_id: int) -> str:
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        return str(chat_state.get("current_project_folder") or "").strip()
+
+    def _is_project_busy(self, chat_id: int) -> bool:
+        project_folder = self._current_project_folder(chat_id)
+        if not project_folder:
+            return False
+        lock = self._workspace_locks.get(project_folder)
+        if lock is not None and lock.locked():
+            return True
+        project_path = self._current_project_path(chat_id)
+        if project_path is None:
+            return False
+        has_running_process = getattr(self.deps.agent_runner, "has_running_process", None)
+        return bool(has_running_process is not None and has_running_process(project_path))
+
+    def _queue_dir(self, chat_id: int) -> Path:
+        queue_dir = self.deps.cfg.workspace_root / ".coding-agent-telegram" / QUEUED_QUESTIONS_DIR / str(chat_id)
+        queue_dir.mkdir(parents=True, exist_ok=True)
+        return queue_dir
+
+    def _queue_lock_path(self, queue_file: Path) -> Path:
+        return queue_file.with_suffix(queue_file.suffix + ".lock")
+
+    def _sanitize_queue_session_id(self, session_id: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", session_id.strip())
+        return cleaned or "session"
+
+    def _next_queue_file_path(self, chat_id: int) -> Path:
+        queue_dir = self._queue_dir(chat_id)
+        if chat_id not in self._chat_message_queue_files and chat_id not in self._chat_processing_queue_files:
+            next_index = 0
+        else:
+            next_index = self._chat_next_queue_file_index.get(chat_id, -1) + 1
+        self._chat_next_queue_file_index[chat_id] = next_index
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        session_id = self._sanitize_queue_session_id(str(chat_state.get("active_session_id") or "session"))
+        return queue_dir / f"{session_id}-queue-{next_index}.txt"
+
+    def _read_queue_questions(self, queue_file: Path) -> list[str]:
+        if not queue_file.exists():
+            return []
+        raw = queue_file.read_text(encoding="utf-8")
+        pattern = re.compile(r"^\[Question (\d+)\]\n(.*?)\n\[End Question \1\]\s*$", re.MULTILINE | re.DOTALL)
+        return [match.group(2).strip() for match in pattern.finditer(raw) if match.group(2).strip()]
+
+    def _append_question_to_queue_file(self, queue_file: Path, user_message: str) -> int:
+        questions = self._read_queue_questions(queue_file)
+        next_number = len(questions) + 1
+        with queue_file.open("a", encoding="utf-8") as fh:
+            if queue_file.stat().st_size > 0:
+                fh.write("\n")
+            fh.write(f"[Question {next_number}]\n{user_message.strip()}\n[End Question {next_number}]\n")
+        return next_number
+
+    def _enqueue_chat_message(self, chat_id: int, user_message: str) -> tuple[Path, int]:
+        queue = self._chat_message_queue_files.setdefault(chat_id, deque())
+        queue_file = queue[-1] if queue else self._next_queue_file_path(chat_id)
+        if not queue:
+            queue.append(queue_file)
+        question_number = self._append_question_to_queue_file(queue_file, user_message)
+        return queue_file, question_number
+
+    def _dequeue_chat_message_file(self, chat_id: int) -> tuple[Path | None, list[str]]:
+        queue = self._chat_message_queue_files.get(chat_id)
+        if not queue:
+            return None, []
+        queue_file = queue.popleft()
+        questions = self._read_queue_questions(queue_file)
+        if not questions:
+            if not queue:
+                self._chat_message_queue_files.pop(chat_id, None)
+            return None, []
+        if not queue:
+            self._chat_message_queue_files.pop(chat_id, None)
+        return queue_file, questions
+
+    def _queued_file_prompt(self, queue_file: Path) -> str:
+        return (
+            "Please read the queued questions in this file and answer them in order:\n"
+            f"{queue_file.resolve()}"
+        )
+
+    def _preview_queued_message(self, message: str, *, max_chars: int = 100) -> str:
+        stripped = " ".join(message.split())
+        if len(stripped) <= max_chars:
+            return stripped
+        if max_chars <= 3:
+            return stripped[:max_chars]
+        return f"{stripped[: max_chars - 3]}..."
+
+    def _queued_batch_notice(self, queued_messages: list[str]) -> str:
+        lines = ["Working on queued questions:"]
+        for index, message in enumerate(queued_messages, start=1):
+            lines.append(f"{index}. {self._preview_queued_message(message)}")
+        return "\n".join(lines)
+
+    def _run_result_was_aborted(self, result: object) -> bool:
+        error_message = getattr(result, "error_message", None)
+        return isinstance(error_message, str) and error_message.strip() == "Agent run aborted by /abort."
+
+    def _has_pending_queue_files(self, chat_id: int) -> bool:
+        queue = self._chat_message_queue_files.get(chat_id)
+        return bool(queue)
+
+    async def _prompt_continue_queued_questions(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not hasattr(context.bot, "send_message"):
+            return
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="The previous run was aborted. Do you want to continue processing the pending queued questions?",
+            reply_markup=InlineKeyboardMarkup(
+                [[
+                    InlineKeyboardButton("Yes", callback_data="queuecontinue:yes"),
+                    InlineKeyboardButton("No", callback_data="queuecontinue:no"),
+                ]]
+            ),
+        )
+
+    def _clear_chat_message_queue(self, chat_id: int) -> None:
+        queue = self._chat_message_queue_files.pop(chat_id, deque())
+        for queue_file in queue:
+            queue_file.unlink(missing_ok=True)
+            self._queue_lock_path(queue_file).unlink(missing_ok=True)
+        processing_file = self._chat_processing_queue_files.pop(chat_id, None)
+        if processing_file is not None:
+            processing_file.unlink(missing_ok=True)
+            self._queue_lock_path(processing_file).unlink(missing_ok=True)
+        self._chat_next_queue_file_index.pop(chat_id, None)
+
+    async def _drain_chat_message_queue(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if chat_id in self._chat_message_queue_draining:
+            return
+        self._chat_message_queue_draining.add(chat_id)
+        try:
+            while True:
+                if self._is_project_busy(chat_id):
+                    return
+                last_result = self._last_run_results.pop(chat_id, None)
+                if self._run_result_was_aborted(last_result) and self._has_pending_queue_files(chat_id):
+                    processing_file = self._chat_processing_queue_files.get(chat_id)
+                    if processing_file is not None:
+                        processing_file.unlink(missing_ok=True)
+                        self._queue_lock_path(processing_file).unlink(missing_ok=True)
+                        self._chat_processing_queue_files.pop(chat_id, None)
+                    await self._prompt_continue_queued_questions(chat_id, context)
+                    return
+                processing_file = self._chat_processing_queue_files.get(chat_id)
+                if processing_file is not None:
+                    processing_file.unlink(missing_ok=True)
+                    self._queue_lock_path(processing_file).unlink(missing_ok=True)
+                    self._chat_processing_queue_files.pop(chat_id, None)
+                queue_file, queued_messages = self._dequeue_chat_message_file(chat_id)
+                if queue_file is None or not queued_messages:
+                    if chat_id not in self._chat_processing_queue_files and chat_id not in self._chat_message_queue_files:
+                        self._chat_next_queue_file_index.pop(chat_id, None)
+                    return
+                self._chat_processing_queue_files[chat_id] = queue_file
+                self._queue_lock_path(queue_file).write_text("", encoding="utf-8")
+                queued_notice = self._queued_batch_notice(queued_messages)
+                queued_update = SimpleNamespace(
+                    effective_chat=SimpleNamespace(id=chat_id, type="private"),
+                    message=SimpleNamespace(text=queued_notice, photo=None, caption=None),
+                )
+                await send_text(queued_update, context, queued_notice)
+                combined_message = self._queued_file_prompt(queue_file)
+                queued_update = SimpleNamespace(
+                    effective_chat=SimpleNamespace(id=chat_id, type="private"),
+                    message=SimpleNamespace(text=combined_message, photo=None, caption=None),
+                )
+                self.deps.store.set_pending_action(
+                    self.deps.bot_id,
+                    chat_id,
+                    {
+                        "kind": "message",
+                        "user_message": combined_message,
+                    },
+                )
+                continued = await self._continue_pending_action(queued_update, context)
+                if not continued:
+                    self._queue_lock_path(queue_file).unlink(missing_ok=True)
+                    self._chat_processing_queue_files.pop(chat_id, None)
+                    queue = self._chat_message_queue_files.setdefault(chat_id, deque())
+                    queue.appendleft(queue_file)
+                    return
+        finally:
+            self._chat_message_queue_draining.discard(chat_id)
+
+    async def _notify_if_current_project_busy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        chat = update.effective_chat
+        if chat is None:
+            return False
+        project_folder = self._current_project_folder(chat.id)
+        if not project_folder or not self._is_project_busy(chat.id):
+            return False
+        await send_text(
+            update,
+            context,
+            f"An agent is currently running on project '{project_folder}'.\nOnly /current and /abort are supported until it finishes.",
+        )
+        return True
 
     async def _run_with_typing(self, update: Update, context: ContextTypes.DEFAULT_TYPE, fn, *args, **kwargs):
         chat = update.effective_chat
