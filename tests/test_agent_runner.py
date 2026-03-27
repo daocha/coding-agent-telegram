@@ -459,3 +459,117 @@ def test_parse_jsonl_accepts_valid_session_id(monkeypatch):
     )
     result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
     assert result.session_id == "valid-sess-123"
+
+
+# ---------------------------------------------------------------------------
+# Unsupported provider
+# ---------------------------------------------------------------------------
+
+
+def test_create_session_returns_failure_for_unsupported_provider(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("badprovider", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert "Unsupported provider" in (result.error_message or "")
+    assert calls == []  # no subprocess launched
+
+
+def test_resume_session_returns_failure_for_unsupported_provider(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.resume_session("badprovider", "sess_1", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert "Unsupported provider" in (result.error_message or "")
+    assert calls == []
+
+
+def test_copilot_resume_rejects_image_attachments(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.resume_session(
+        "copilot",
+        "sess_1",
+        Path("/tmp/project"),
+        "hello",
+        image_paths=[Path("/tmp/image.png")],
+    )
+
+    assert result.success is False
+    assert "not supported" in (result.error_message or "").lower()
+    assert calls == []  # no subprocess launched
+
+
+# ---------------------------------------------------------------------------
+# _collect_text_fragments / _looks_textual_key heuristics
+# ---------------------------------------------------------------------------
+
+
+def test_looks_textual_key_matches_known_tokens():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    assert runner._looks_textual_key("message") is True
+    assert runner._looks_textual_key("content") is True
+    assert runner._looks_textual_key("delta") is True
+    assert runner._looks_textual_key("id") is False
+    assert runner._looks_textual_key("") is False
+
+
+def test_looks_metadata_key_matches_id_timestamp():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    assert runner._looks_metadata_key("session_id") is True
+    assert runner._looks_metadata_key("timestamp") is True
+    assert runner._looks_metadata_key("text") is False
+    assert runner._looks_metadata_key("") is False
+
+
+def test_collect_text_fragments_extracts_from_nested_dict():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    event = {"message": {"content": "hello from agent"}, "session_id": "ignored"}
+    fragments = runner._collect_text_fragments(event)
+    assert "hello from agent" in fragments
+
+
+def test_extract_codex_assistant_text_handles_list_of_strings():
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    result = runner._extract_codex_assistant_text(["line 1", "line 2"])
+    assert "line 1" in result
+    assert "line 2" in result
+
+
+# ---------------------------------------------------------------------------
+# _parse_jsonl: error and session success fields
+# ---------------------------------------------------------------------------
+
+
+def test_parse_jsonl_extracts_success_false_from_error_field(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"error": "agent crashed"}\n', returncode=1),
+    )
+    runner = MultiAgentRunner("codex", "copilot", "never", "workspace-write")
+    result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    assert result.success is False
