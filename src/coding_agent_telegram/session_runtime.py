@@ -12,10 +12,9 @@ from typing import Awaitable, Callable, Optional, Sequence
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from coding_agent_telegram.agent_runner import MultiAgentRunner
+from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
 from coding_agent_telegram.config import AppConfig, DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES
 from coding_agent_telegram.diff_utils import (
-    INTERNAL_APP_DIR,
     TEXTUAL_DIFF_UNAVAILABLE,
     build_summary,
     changed_files,
@@ -82,18 +81,21 @@ def _scrub_secrets(text: str) -> str:
 
 def _sanitize_agent_error(text: str) -> str:
     """Remove absolute filesystem paths from agent error messages before sending to users."""
+    normalized = " ".join((text or "").split())
+    if re.match(r"^Agent run aborted by .+", normalized):
+        return "Agent run aborted by /abort."
     return _ABSOLUTE_PATH_RE.sub("<path>", text)
 
 
 class PhotoAttachmentStore:
     MAX_PHOTO_BYTES = DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES  # Telegram photos are capped to keep local storage bounded.
 
-    def __init__(self, workspace_root: Path) -> None:
-        self.workspace_root = workspace_root
+    def __init__(self, app_internal_root: Path) -> None:
+        self.app_internal_root = app_internal_root
 
     def attachments_root(self, project_folder: str) -> Path:
         safe_project_folder = Path(project_folder).name
-        return self.workspace_root / INTERNAL_APP_DIR / PHOTO_ATTACHMENTS_DIR / safe_project_folder
+        return self.app_internal_root / PHOTO_ATTACHMENTS_DIR / safe_project_folder
 
     async def store_photo(self, update: Update, project_folder: str) -> Path:
         if update.message is None or not update.message.photo:
@@ -206,11 +208,11 @@ class SessionRuntime:
         *,
         user_message: str,
         image_paths: Sequence[Path] = (),
-    ) -> None:
+    ) -> AgentRunResult | None:
         chat_id = update.effective_chat.id
         active_id, session, project_path = await self._active_session_or_notify(update, context)
         if active_id is None or session is None or project_path is None:
-            return
+            return None
 
         project_folder = session["project_folder"]
         provider = session.get("provider", "codex")
@@ -229,7 +231,7 @@ class SessionRuntime:
         if branch_name and self.git.is_git_repo(project_path):
             checkout = await self._checkout_branch(update, context, project_path, branch_name)
             if not checkout:
-                return
+                return None
 
         before_snapshot = snapshot_project_files(
             project_path,
@@ -251,6 +253,13 @@ class SessionRuntime:
             stall_message=ACTIVE_RUN_STALL_MESSAGE,
             progress_label="Live agent output",
         )
+        if result is None:
+            logger.info(
+                "Agent run was not started for chat %s on project '%s' because the workspace is busy.",
+                chat_id,
+                project_folder,
+            )
+            return None
         session_name = session["name"]
         result, active_id, session_name = await self._replace_invalid_session_if_needed(
             update,
@@ -268,7 +277,7 @@ class SessionRuntime:
             image_paths=image_paths,
         )
         if result is None:
-            return
+            return None
         if not result.success:
             logger.warning(
                 "Agent run failed for chat %s on session '%s' (%s): %s",
@@ -279,7 +288,7 @@ class SessionRuntime:
             )
             error_text = _sanitize_agent_error(result.error_message) if result.error_message else "Agent run failed."
             await send_text(update, context, error_text)
-            return
+            return result
 
         if result.session_id and result.session_id != active_id:
             switched_session_name = self._next_rotated_session_name(chat_id, session_name)
@@ -324,6 +333,7 @@ class SessionRuntime:
             before_snapshot=before_snapshot,
             before=before,
         )
+        return result
 
     async def _checkout_branch(
         self,
@@ -377,6 +387,8 @@ class SessionRuntime:
             stall_message=REPLACEMENT_SESSION_STALL_MESSAGE,
             progress_label="Live agent output",
         )
+        if create_result is None:
+            return None, active_id, session_name
         if not create_result.success or not create_result.session_id:
             return create_result, active_id, session_name
 

@@ -75,8 +75,7 @@ cd coding-agent-telegram
 
 What `startup.sh` does:
 
-- creates `.env_coding_agent_telegram` from `src/coding_agent_telegram/resources/.env.example` if missing
-- falls back to legacy `.env` if it already exists
+- creates `~/.coding-agent-telegram/.env_coding_agent_telegram` from `src/coding_agent_telegram/resources/.env.example` if neither that file nor `./.env_coding_agent_telegram` exists
 - creates the state files if missing
 - creates `.venv` if missing
 - installs the package into the virtual environment
@@ -84,7 +83,11 @@ What `startup.sh` does:
 
 #### 3. Update The Env File
 
-On first run, update the required fields in `.env_coding_agent_telegram`:
+On first run, update the required fields in the env file the app is using:
+
+- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
+- `~/.coding-agent-telegram/.env_coding_agent_telegram` by default
+- or `./.env_coding_agent_telegram` if that local file already exists
 
 - `WORKSPACE_ROOT`
 - `TELEGRAM_BOT_TOKENS`
@@ -105,8 +108,7 @@ coding-agent-telegram
 
 What happens on first run:
 
-- the command creates `.env_coding_agent_telegram` in your current working directory if missing
-- if legacy `.env` already exists, it reuses that instead
+- the command creates `~/.coding-agent-telegram/.env_coding_agent_telegram` if neither that file nor `./.env_coding_agent_telegram` exists
 - it tells you which required fields to update
 - after updating the env file, run `coding-agent-telegram` again
 
@@ -119,7 +121,7 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-Then update `.env_coding_agent_telegram` and run:
+Then update the env file the app created or selected and run:
 
 ```bash
 coding-agent-telegram
@@ -145,7 +147,11 @@ If an unsupported message type is sent, the bot replies with a short error inste
 
 ## ⚙️ Environment Variables
 
-These are the main fields in the resolved env file, which defaults to `.env_coding_agent_telegram` and falls back to legacy `.env`.
+These are the main fields in the env file the app uses:
+
+- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
+- `~/.coding-agent-telegram/.env_coding_agent_telegram` by default
+- or `./.env_coding_agent_telegram` if that local file already exists
 
 ### Required
 
@@ -163,21 +169,14 @@ These are the main fields in the resolved env file, which defaults to `.env_codi
 
 ### State and Logging
 
-- `STATE_FILE`
-  JSON file used to store session state.
-  Default: `./state.json`
-
-- `STATE_BACKUP_FILE`
-  Backup copy of the state file.
-  Default: `./state.json.bak`
+- Session state files are stored at:
+  - `~/.coding-agent-telegram/state.json`
+  - `~/.coding-agent-telegram/state.json.bak`
+  Backward compatibility: if `./state.json` or `./state.json.bak` already exists and the home file does not, the app keeps using the local file.
 
 - `LOG_LEVEL`
   Python app log level.
   Default: `INFO`
-
-- `LOG_DIR`
-  Directory for application logs.
-  Default: `./logs`
 
 ### Agent Configuration
 
@@ -306,7 +305,6 @@ ENABLE_COMMIT_COMMAND=false
 
 SNAPSHOT_TEXT_FILE_MAX_BYTES=200000
 LOG_LEVEL=INFO
-LOG_DIR=./logs
 ```
 
 ## 🤖 Telegram Commands
@@ -314,34 +312,50 @@ LOG_DIR=./logs
 - `/project <project_folder>`
   Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If the folder already exists and is still untrusted, the app reminds you to trust it explicitly.
 
-- `/new <session_name> [provider]`
-  Create a new session for the current project.
+- `/provider`
+  Choose the provider for new sessions. Provider selection is stored per bot/chat and reused until you change it.
+
+- `/new [session_name]`
+  Create a new session for the current project. If you omit the name, the bot uses the real session ID as the session name.
+  If provider, project, or branch is still missing, the bot prompts you for the missing prerequisite instead of failing immediately.
 
 - `/branch <new_branch>`
-  Create a new branch from the repository default branch, after fetching and pulling first.
+  Prepare or switch a branch for the current project. The bot asks you to choose the source explicitly:
+  - if `<new_branch>` already exists locally or on origin, the bot treats that same branch as the source candidate
+  - otherwise the bot uses the repository default branch as the source candidate
 
 - `/branch <origin_branch> <new_branch>`
-  Create a new branch from a specific base branch, after fetching and pulling first.
+  Prepare or switch a branch using `<origin_branch>` as the source candidate.
+
+For both forms, the bot then offers the source choices that actually exist:
+
+- `local/<branch>`
+- `origin/<branch>`
+
+If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.
 
 - `/switch`
-  Show the latest 10 sessions, newest first.
+  Show the latest sessions, newest first. The list mixes bot-managed sessions and native Codex/Copilot CLI sessions for the current project.
 
 - `/switch page <number>`
   Show another page of stored sessions.
 
 - `/switch <session_id>`
-  Switch to a specific session by ID.
+  Switch to a specific session by ID. If you select a native CLI session, the bot imports it into its own state and continues from there.
 
 - `/current`
   Show the active session for the current bot and chat.
+
+- `/abort`
+  Abort the current agent run for the current project. If that run was processing while other queued questions were waiting, the bot asks whether to continue with the remaining queued questions.
 
 - `/commit <git commands>`
   Run validated git commit-related commands inside the active session project. This command is available only when `ENABLE_COMMIT_COMMAND=true`. The app splits chained input such as `git add ... && git commit ...`, executes only allowed `git` commands, and ignores non-git segments instead of shelling the raw message. Mutating git commands such as `add`, `restore`, and `rm` require the project to be trusted.
 
 - `/push`
-  Push `origin <branch>` for the current active session. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
+  Push `origin <branch>` for the current active session. The bot asks for confirmation before actually pushing. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
 
-## 🧠 Session Model
+## 🧠 Session Management
 
 Sessions are scoped by:
 
@@ -356,6 +370,12 @@ Example:
 - Bot B + your chat -> frontend work
 - Bot C + your chat -> infra work
 
+The active session is also tied to:
+
+- project folder
+- provider
+- branch name when available
+
 Each session stores:
 
 - session name
@@ -365,15 +385,46 @@ Each session stores:
 - timestamps
 - active session selection for that bot/chat scope
 
+### Switching between Telegram and native CLI
+
+`/switch` is designed to let you move between:
+
+- sessions created from Telegram
+- sessions created directly in Codex CLI or Copilot CLI
+
+For the current project, the bot lists both kinds together, sorts them by newest activity first, and marks the source with a small icon:
+
+- `🤖` Bot managed session
+- `💻` native CLI session
+
+If you select a native CLI session, the bot imports it into `state.json` and then resumes it like a normal Telegram-managed session. This is what makes cross-device or cross-entry-point continuation possible.
+
 ### Workspace concurrency lock
 
 Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
+
+This is different from “an agent is still processing the current question”:
+
+- **project is busy** means the workspace already has one live agent run
+- **agent is busy** means that one live run is still working on the current request
+
+The bot enforces one active run per project on purpose so two agents do not write to the same workspace at the same time. That avoids conflicting edits and reduces the chance of data corruption.
 
 If a message arrives while an agent is already running on the same project, the bot immediately replies:
 
 > ⏳ An agent is already running on project '…'. Please wait for it to finish.
 
 The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
+
+### Queued questions
+
+If the current project already has one live agent run, later text messages are not rejected. They are queued instead:
+
+- the new question is appended to a queued-questions file on disk
+- the current agent keeps working on the earlier request
+- when that run finishes normally, the bot automatically starts processing the queued questions next
+
+If the current run is aborted and there are queued questions waiting, the bot does **not** auto-continue. It asks whether you want to continue processing the remaining queued questions.
 
 ## ⚠  Diff (file changes)
 
@@ -408,23 +459,25 @@ You can override those defaults in the env file without editing the installed pa
 
 If both include and exclude rules match, the include rule wins.
 
-## 🌿 Branch Workflow
+## 🌿 Branch Behavior
 
-If the selected project is a Git repository, `/project` reports the current branch and reminds you that:
+The bot treats project and branch as a bundle.
 
-- you can keep working on the current branch
-- or create a dedicated work branch with `/branch`
+- choosing a project does not silently choose an unrelated branch
+- if branch input is needed, the bot asks you to pick it
+- when branch information is printed in session-related messages, project and branch are shown together
 
-When you run `/branch`, the app:
+When you create or change a branch, the bot guides you through the source explicitly:
 
-- requires `/project` to be set first
-- detects the default branch if you do not specify one
-- runs `git fetch origin`
-- checks out the base branch
-- runs `git pull --ff-only origin <base-branch>`
-- creates and switches to the new branch
+- `local/<branch>` means use the local branch as the source
+- `origin/<branch>` means update from the remote branch first and then switch
 
-The chosen branch is stored with the session, so switching sessions restores the expected branch before the agent continues work.
+If the bot sees that the stored session branch and the repository's current branch do not match, it does not blindly continue. It asks which branch you want to use:
+
+- keep the stored session branch
+- keep the current repository branch
+
+If your preferred source branch is missing, the bot offers fallback source choices based on the default branch and current branch instead of leaving you at a raw git error.
 
 ## 🔐 Git Trust Behavior
 
@@ -437,7 +490,9 @@ The chosen branch is stored with the session, so switching sessions restores the
 
 ## 🪵 Logs
 
-Logs are written to **both stdout and a rotating log file** under `LOG_DIR`.
+Logs are written to **both stdout and a rotating log file** under:
+
+- `~/.coding-agent-telegram/logs`
 
 Main log file:
 

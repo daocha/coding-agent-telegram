@@ -15,6 +15,14 @@ class MessageCommandMixin:
             return
         user_message = update.message.text
         chat_id = update.effective_chat.id
+        if self._is_project_busy(chat_id):
+            _queue_file, question_number = self._enqueue_chat_message(chat_id, user_message)
+            await send_text(
+                update,
+                context,
+                f"Question queued as Q{question_number}. It will run after the current agent task finishes.",
+            )
+            return
         self._store_pending_action(
             chat_id,
             {
@@ -22,8 +30,11 @@ class MessageCommandMixin:
                 "user_message": user_message,
             },
         )
-        if await self._continue_pending_action(update, context):
-            return
+        try:
+            if await self._continue_pending_action(update, context):
+                return
+        finally:
+            await self._drain_chat_message_queue(chat_id, context)
 
     @require_allowed_chat()
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
