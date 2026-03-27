@@ -13,6 +13,82 @@ from .base import logger, require_allowed_chat
 
 
 class ProjectCommandMixin:
+    def _branch_source_intro_lines(self, *, target_exists: bool, new_branch: str) -> list[str]:
+        if target_exists:
+            return [f"Switching branch to {new_branch} requires choosing a source first.", ""]
+        return [f"Creating a new branch from the following branch source: {new_branch}", ""]
+
+    def _branch_source_keyboard(
+        self,
+        *,
+        source_branch: str,
+        new_branch: str,
+        allow_local: bool,
+        allow_origin: bool,
+    ) -> InlineKeyboardMarkup:
+        buttons: list[InlineKeyboardButton] = []
+        if allow_local:
+            buttons.append(
+                InlineKeyboardButton(
+                    f"local/{source_branch}",
+                    callback_data=f"branchsource:local:{source_branch}:{new_branch}",
+                )
+            )
+        if allow_origin:
+            buttons.append(
+                InlineKeyboardButton(
+                    f"origin/{source_branch}",
+                    callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
+                )
+            )
+        return InlineKeyboardMarkup([buttons])
+
+    async def _prompt_for_branch_source(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        project_folder: str,
+        project_path,
+        source_branch: str,
+        new_branch: str,
+        intro_lines: list[str] | None = None,
+    ) -> bool:
+        allow_local = self.git.local_branch_exists(project_path, source_branch)
+        allow_origin = self.git.remote_branch_exists(project_path, source_branch)
+        if not allow_local and not allow_origin:
+            await send_text(
+                update,
+                context,
+                (
+                    f"Branch source not found for project '{project_folder}'.\n"
+                    f"Missing local/{source_branch} and origin/{source_branch}."
+                ),
+            )
+            return False
+
+        lines = list(intro_lines or [])
+        lines.extend(
+            [
+                f"Project: {project_folder}",
+                f"Branch target: {new_branch}",
+                "",
+                "Choose the branch source:",
+            ]
+        )
+        if update.effective_chat is not None:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="\n".join(lines),
+                reply_markup=self._branch_source_keyboard(
+                    source_branch=source_branch,
+                    new_branch=new_branch,
+                    allow_local=allow_local,
+                    allow_origin=allow_origin,
+                ),
+            )
+        return True
+
     async def _send_branch_selection_prompt(
         self,
         update: Update,
@@ -71,6 +147,8 @@ class ProjectCommandMixin:
 
     @require_allowed_chat()
     async def handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self._notify_if_current_project_busy(update, context):
+            return
         if len(context.args) != 1:
             await send_text(update, context, "Usage: /project <project_folder>\nExample: /project backend")
             return
@@ -219,6 +297,8 @@ class ProjectCommandMixin:
 
     @require_allowed_chat()
     async def handle_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self._notify_if_current_project_busy(update, context):
+            return
         chat_id = update.effective_chat.id
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
@@ -248,35 +328,96 @@ class ProjectCommandMixin:
             )
             return
 
-        origin_branch = None
-        new_branch = context.args[0].strip()
         if len(context.args) == 2:
-            origin_branch = context.args[0].strip()
+            source_branch = context.args[0].strip()
             new_branch = context.args[1].strip()
+        else:
+            new_branch = context.args[0].strip()
+            if self.git.local_branch_exists(project_path, new_branch) or self.git.remote_branch_exists(project_path, new_branch):
+                source_branch = new_branch
+            else:
+                source_branch = self.git.default_branch(project_path) or ""
+                if not source_branch:
+                    await send_text(update, context, "Could not determine the default branch for this repository.")
+                    return
+
+        target_exists = self.git.local_branch_exists(project_path, new_branch) or self.git.remote_branch_exists(project_path, new_branch)
+
+        await self._prompt_for_branch_source(
+            update,
+            context,
+            project_folder=project_folder,
+            project_path=project_path,
+            source_branch=source_branch,
+            new_branch=new_branch,
+            intro_lines=self._branch_source_intro_lines(target_exists=target_exists, new_branch=new_branch),
+        )
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_branch_source_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+
+        await query.answer()
+        parts = query.data.split(":", 3)
+        if len(parts) != 4:
+            return
+        _, source_kind, source_branch, new_branch = parts
+        if source_kind not in {"local", "origin"}:
+            return
+
+        chat_id = update.effective_chat.id
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        project_folder = chat_state.get("current_project_folder")
+        if not project_folder:
+            await query.edit_message_text("No project selected.\nPlease run /project <project_folder> first.")
+            return
+
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        if not project_path.exists() or not project_path.is_dir():
+            await query.edit_message_text(f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            return
 
         result = await asyncio.to_thread(
-            self.git.prepare_branch,
+            self.git.prepare_branch_from_source,
             project_path,
-            origin_branch=origin_branch,
+            source_kind=source_kind,
+            source_branch=source_branch,
             new_branch=new_branch,
         )
         if not result.success:
-            await send_text(update, context, result.message)
+            if hasattr(self, "_offer_branch_source_fallback"):
+                handled = await self._offer_branch_source_fallback(
+                    query,
+                    project_folder=project_folder,
+                    project_path=project_path,
+                    source_kind=source_kind,
+                    source_branch=source_branch,
+                    new_branch=new_branch,
+                    error_message=result.message,
+                )
+                if handled:
+                    return
+            await query.edit_message_text(result.message)
             return
 
         self.deps.store.set_current_branch(self.deps.bot_id, chat_id, result.current_branch)
         self.deps.store.set_active_session_branch(self.deps.bot_id, chat_id, result.current_branch or "")
+        if hasattr(self, "_pending_action") and hasattr(self, "_store_pending_action"):
+            pending_action = self._pending_action(chat_id)
+            if isinstance(pending_action, dict) and pending_action.get("branch_resolution"):
+                pending_action = dict(pending_action)
+                pending_action.pop("branch_resolution", None)
+                self._store_pending_action(chat_id, pending_action)
         logger.info(
-            "Prepared branch '%s' for chat %s in project '%s' from base '%s'.",
+            "Prepared branch '%s' for chat %s in project '%s' from %s/%s.",
             result.current_branch,
             chat_id,
             project_folder,
-            origin_branch or result.default_branch or "unknown",
+            source_kind,
+            source_branch,
         )
-        await send_text(
-            update,
-            context,
-            f"{result.message}\nCurrent branch: {result.current_branch}",
-        )
+        await query.edit_message_text(f"{result.message}\nCurrent branch: {result.current_branch}")
         if hasattr(self, "_continue_pending_action"):
             await self._continue_pending_action(update, context)

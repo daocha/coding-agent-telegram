@@ -81,3 +81,8 @@ def test_sanitize_agent_error_leaves_relative_paths_unchanged():
 def test_sanitize_agent_error_leaves_plain_messages_unchanged():
     text = "Agent timed out after 300 seconds."
     assert _sanitize_agent_error(text) == text
+
+
+def test_sanitize_agent_error_normalizes_abort_message_with_path():
+    text = "Agent run aborted by /Users/daocha/.coding-agent-telegram/queued_questions/abc.txt"
+    assert _sanitize_agent_error(text) == "Agent run aborted by /abort."

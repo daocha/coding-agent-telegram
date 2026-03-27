@@ -144,6 +144,9 @@ class SessionStore:
         project_folder: str,
         provider: str,
         branch_name: Optional[str],
+        origin: str = "bot",
+        origin_label: Optional[str] = None,
+        initialized_from: Optional[str] = None,
     ) -> dict[str, str]:
         now = self._now()
         sessions[session_id] = {
@@ -151,6 +154,9 @@ class SessionStore:
             "project_folder": project_folder,
             "provider": provider,
             "branch_name": branch_name or "",
+            "origin": origin,
+            "origin_label": origin_label or ("Bot managed session" if origin == "bot" else origin),
+            "initialized_from": initialized_from or ("Bot-managed session from state.json" if origin == "bot" else session_name),
             "created_at": now,
             "updated_at": now,
         }
@@ -209,6 +215,10 @@ class SessionStore:
         project_folder: str,
         provider: str,
         branch_name: Optional[str] = None,
+        *,
+        origin: str = "bot",
+        origin_label: Optional[str] = None,
+        initialized_from: Optional[str] = None,
     ) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
             sessions = chat_data.setdefault("sessions", {})
@@ -219,6 +229,9 @@ class SessionStore:
                 project_folder=project_folder,
                 provider=provider,
                 branch_name=branch_name,
+                origin=origin,
+                origin_label=origin_label,
+                initialized_from=initialized_from,
             )
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = project_folder
@@ -238,6 +251,10 @@ class SessionStore:
         project_folder: str,
         provider: str,
         branch_name: Optional[str] = None,
+        *,
+        origin: str = "bot",
+        origin_label: Optional[str] = None,
+        initialized_from: Optional[str] = None,
     ) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
             sessions = chat_data.setdefault("sessions", {})
@@ -249,6 +266,9 @@ class SessionStore:
                 project_folder=project_folder,
                 provider=provider,
                 branch_name=branch_name,
+                origin=origin,
+                origin_label=origin_label,
+                initialized_from=initialized_from,
             )
             chat_data["active_session_id"] = new_session_id
             chat_data["current_project_folder"] = project_folder

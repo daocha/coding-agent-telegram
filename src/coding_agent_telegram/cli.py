@@ -102,7 +102,6 @@ def main() -> None:
         print("- WORKSPACE_ROOT", file=sys.stderr)
         print("- TELEGRAM_BOT_TOKENS", file=sys.stderr)
         print("- ALLOWED_CHAT_IDS", file=sys.stderr)
-        print("- LOG_DIR", file=sys.stderr)
         print("", file=sys.stderr)
         print("Then run: coding-agent-telegram", file=sys.stderr)
         raise SystemExit(1)

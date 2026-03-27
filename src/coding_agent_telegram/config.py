@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
 DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
 DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES = 5 * 1024 * 1024
+DEFAULT_INTERNAL_APP_DIR_NAME = ".coding-agent-telegram"
 DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
-LEGACY_ENV_FILE_NAME = ".env"
 # 0 = disabled. Set to a positive value to kill runaway agent processes.
 DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 
@@ -47,6 +47,7 @@ class AppConfig:
     enable_sensitive_diff_filter: bool
     default_agent_provider: str
     agent_hard_timeout_seconds: int
+    app_internal_root: Path
 
 
 def _parse_bool(value: str, default: bool = False) -> bool:
@@ -75,6 +76,10 @@ def _parse_bot_tokens() -> tuple[str, ...]:
     return tuple(_parse_csv_env("TELEGRAM_BOT_TOKENS"))
 
 
+def default_app_internal_root() -> Path:
+    return Path.home() / DEFAULT_INTERNAL_APP_DIR_NAME
+
+
 def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file is not None:
         return env_file
@@ -83,14 +88,38 @@ def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file_override:
         return Path(env_file_override).expanduser()
 
+    home_default_env = default_app_internal_root() / DEFAULT_ENV_FILE_NAME
     cwd = Path.cwd()
     default_env = cwd / DEFAULT_ENV_FILE_NAME
-    legacy_env = cwd / LEGACY_ENV_FILE_NAME
+    if home_default_env.exists():
+        return home_default_env
     if default_env.exists():
         return default_env
-    if legacy_env.exists():
-        return legacy_env
-    return default_env
+    return home_default_env
+
+
+def resolve_app_internal_root(workspace_root: Path) -> Path:
+    home_root = default_app_internal_root()
+    workspace_root_candidate = workspace_root / DEFAULT_INTERNAL_APP_DIR_NAME
+    if home_root.exists():
+        return home_root
+    if workspace_root_candidate.exists():
+        return workspace_root_candidate
+    return home_root
+
+
+def resolve_default_state_file_path(file_name: str) -> Path:
+    home_path = default_app_internal_root() / file_name
+    cwd_path = Path.cwd() / file_name
+    if home_path.exists():
+        return home_path
+    if cwd_path.exists():
+        return cwd_path
+    return home_path
+
+
+def default_log_dir_path() -> Path:
+    return default_app_internal_root() / "logs"
 
 
 def load_config(env_file: Optional[Path] = None) -> AppConfig:
@@ -112,13 +141,14 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         raise ValueError("DEFAULT_AGENT_PROVIDER must be either codex or copilot")
 
     workspace_root = Path(workspace_root_raw).expanduser().resolve()
+    app_internal_root = resolve_app_internal_root(workspace_root)
 
     return AppConfig(
         workspace_root=workspace_root,
-        state_file=Path(os.getenv("STATE_FILE", "./state.json")),
-        state_backup_file=Path(os.getenv("STATE_BACKUP_FILE", "./state.json.bak")),
+        state_file=resolve_default_state_file_path("state.json"),
+        state_backup_file=resolve_default_state_file_path("state.json.bak"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        log_dir=Path(os.getenv("LOG_DIR", "./logs")),
+        log_dir=default_log_dir_path(),
         telegram_bot_tokens=tokens,
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),
@@ -147,4 +177,5 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         agent_hard_timeout_seconds=int(
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
         ),
+        app_internal_root=app_internal_root,
     )
