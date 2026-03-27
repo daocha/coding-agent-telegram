@@ -15,8 +15,9 @@ resolve_path() {
 }
 
 DEFAULT_ENV_FILE=".env_coding_agent_telegram"
-LEGACY_ENV_FILE=".env"
-ENV_FILE="${ENV_FILE:-$DEFAULT_ENV_FILE}"
+APP_HOME_DIR="${HOME}/.coding-agent-telegram"
+HOME_ENV_FILE="$APP_HOME_DIR/$DEFAULT_ENV_FILE"
+ENV_FILE="${ENV_FILE:-}"
 ENV_TEMPLATE_FILE="${ENV_TEMPLATE_FILE:-src/coding_agent_telegram/resources/.env.example}"
 VENV_DIR="${VENV_DIR:-.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -47,12 +48,19 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "${ENV_FILE}" == "$DEFAULT_ENV_FILE" && ! -f "$ENV_FILE" && -f "$LEGACY_ENV_FILE" ]]; then
-  ENV_FILE="$LEGACY_ENV_FILE"
+if [[ -z "$ENV_FILE" ]]; then
+  if [[ -f "$HOME_ENV_FILE" ]]; then
+    ENV_FILE="$HOME_ENV_FILE"
+  elif [[ -f "$DEFAULT_ENV_FILE" ]]; then
+    ENV_FILE="$DEFAULT_ENV_FILE"
+  else
+    ENV_FILE="$HOME_ENV_FILE"
+  fi
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   if [[ -f "$ENV_TEMPLATE_FILE" ]]; then
+    mkdir -p "$(dirname "$ENV_FILE")"
     cp "$ENV_TEMPLATE_FILE" "$ENV_FILE"
     echo "Created $ENV_FILE from $ENV_TEMPLATE_FILE."
   else

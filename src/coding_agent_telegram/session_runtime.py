@@ -15,7 +15,6 @@ from telegram.ext import ContextTypes
 from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
 from coding_agent_telegram.config import AppConfig, DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES
 from coding_agent_telegram.diff_utils import (
-    INTERNAL_APP_DIR,
     TEXTUAL_DIFF_UNAVAILABLE,
     build_summary,
     changed_files,
@@ -88,12 +87,12 @@ def _sanitize_agent_error(text: str) -> str:
 class PhotoAttachmentStore:
     MAX_PHOTO_BYTES = DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES  # Telegram photos are capped to keep local storage bounded.
 
-    def __init__(self, workspace_root: Path) -> None:
-        self.workspace_root = workspace_root
+    def __init__(self, app_internal_root: Path) -> None:
+        self.app_internal_root = app_internal_root
 
     def attachments_root(self, project_folder: str) -> Path:
         safe_project_folder = Path(project_folder).name
-        return self.workspace_root / INTERNAL_APP_DIR / PHOTO_ATTACHMENTS_DIR / safe_project_folder
+        return self.app_internal_root / PHOTO_ATTACHMENTS_DIR / safe_project_folder
 
     async def store_photo(self, update: Update, project_folder: str) -> Path:
         if update.message is None or not update.message.photo:

@@ -75,8 +75,7 @@ cd coding-agent-telegram
 
 What `startup.sh` does:
 
-- creates `.env_coding_agent_telegram` from `src/coding_agent_telegram/resources/.env.example` if missing
-- falls back to legacy `.env` if it already exists
+- creates `~/.coding-agent-telegram/.env_coding_agent_telegram` from `src/coding_agent_telegram/resources/.env.example` if neither that file nor `./.env_coding_agent_telegram` exists
 - creates the state files if missing
 - creates `.venv` if missing
 - installs the package into the virtual environment
@@ -84,7 +83,11 @@ What `startup.sh` does:
 
 #### 3. Update The Env File
 
-On first run, update the required fields in `.env_coding_agent_telegram`:
+On first run, update the required fields in the env file the app is using:
+
+- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
+- `~/.coding-agent-telegram/.env_coding_agent_telegram` by default
+- or `./.env_coding_agent_telegram` if that local file already exists
 
 - `WORKSPACE_ROOT`
 - `TELEGRAM_BOT_TOKENS`
@@ -105,8 +108,7 @@ coding-agent-telegram
 
 What happens on first run:
 
-- the command creates `.env_coding_agent_telegram` in your current working directory if missing
-- if legacy `.env` already exists, it reuses that instead
+- the command creates `~/.coding-agent-telegram/.env_coding_agent_telegram` if neither that file nor `./.env_coding_agent_telegram` exists
 - it tells you which required fields to update
 - after updating the env file, run `coding-agent-telegram` again
 
@@ -119,7 +121,7 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-Then update `.env_coding_agent_telegram` and run:
+Then update the env file the app created or selected and run:
 
 ```bash
 coding-agent-telegram
@@ -145,7 +147,11 @@ If an unsupported message type is sent, the bot replies with a short error inste
 
 ## ⚙️ Environment Variables
 
-These are the main fields in the resolved env file, which defaults to `.env_coding_agent_telegram` and falls back to legacy `.env`.
+These are the main fields in the env file the app uses:
+
+- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
+- `~/.coding-agent-telegram/.env_coding_agent_telegram` by default
+- or `./.env_coding_agent_telegram` if that local file already exists
 
 ### Required
 

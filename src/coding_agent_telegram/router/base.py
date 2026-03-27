@@ -109,7 +109,7 @@ class CommandRouterBase:
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
         self.git = GitWorkspaceManager()
-        self.photo_attachments = PhotoAttachmentStore(deps.cfg.workspace_root)
+        self.photo_attachments = PhotoAttachmentStore(deps.cfg.app_internal_root)
         self.runtime = SessionRuntime(
             cfg=deps.cfg,
             store=deps.store,
@@ -200,7 +200,7 @@ class CommandRouterBase:
         return bool(has_running_process is not None and has_running_process(project_path))
 
     def _queue_dir(self, chat_id: int) -> Path:
-        queue_dir = self.deps.cfg.workspace_root / ".coding-agent-telegram" / QUEUED_QUESTIONS_DIR / str(chat_id)
+        queue_dir = self.deps.cfg.app_internal_root / QUEUED_QUESTIONS_DIR / str(chat_id)
         queue_dir.mkdir(parents=True, exist_ok=True)
         return queue_dir
 

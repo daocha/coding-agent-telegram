@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
 DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
 DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES = 5 * 1024 * 1024
+DEFAULT_INTERNAL_APP_DIR_NAME = ".coding-agent-telegram"
 DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
-LEGACY_ENV_FILE_NAME = ".env"
 # 0 = disabled. Set to a positive value to kill runaway agent processes.
 DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 
@@ -47,6 +47,7 @@ class AppConfig:
     enable_sensitive_diff_filter: bool
     default_agent_provider: str
     agent_hard_timeout_seconds: int
+    app_internal_root: Path
 
 
 def _parse_bool(value: str, default: bool = False) -> bool:
@@ -75,6 +76,10 @@ def _parse_bot_tokens() -> tuple[str, ...]:
     return tuple(_parse_csv_env("TELEGRAM_BOT_TOKENS"))
 
 
+def default_app_internal_root() -> Path:
+    return Path.home() / DEFAULT_INTERNAL_APP_DIR_NAME
+
+
 def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file is not None:
         return env_file
@@ -83,14 +88,24 @@ def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file_override:
         return Path(env_file_override).expanduser()
 
+    home_default_env = default_app_internal_root() / DEFAULT_ENV_FILE_NAME
     cwd = Path.cwd()
     default_env = cwd / DEFAULT_ENV_FILE_NAME
-    legacy_env = cwd / LEGACY_ENV_FILE_NAME
+    if home_default_env.exists():
+        return home_default_env
     if default_env.exists():
         return default_env
-    if legacy_env.exists():
-        return legacy_env
-    return default_env
+    return home_default_env
+
+
+def resolve_app_internal_root(workspace_root: Path) -> Path:
+    home_root = default_app_internal_root()
+    workspace_root_candidate = workspace_root / DEFAULT_INTERNAL_APP_DIR_NAME
+    if home_root.exists():
+        return home_root
+    if workspace_root_candidate.exists():
+        return workspace_root_candidate
+    return home_root
 
 
 def load_config(env_file: Optional[Path] = None) -> AppConfig:
@@ -112,6 +127,7 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         raise ValueError("DEFAULT_AGENT_PROVIDER must be either codex or copilot")
 
     workspace_root = Path(workspace_root_raw).expanduser().resolve()
+    app_internal_root = resolve_app_internal_root(workspace_root)
 
     return AppConfig(
         workspace_root=workspace_root,
@@ -147,4 +163,5 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         agent_hard_timeout_seconds=int(
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
         ),
+        app_internal_root=app_internal_root,
     )

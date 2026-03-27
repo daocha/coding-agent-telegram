@@ -406,6 +406,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
+        app_internal_root=tmp_path / ".coding-agent-telegram",
     )
 
 

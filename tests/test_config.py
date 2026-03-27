@@ -7,6 +7,7 @@ from coding_agent_telegram.config import (
     DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
     DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
     load_config,
+    resolve_app_internal_root,
     resolve_env_file_path,
 )
 
@@ -130,22 +131,32 @@ def test_resolve_env_file_path_uses_explicit_env_override(monkeypatch, tmp_path)
     assert resolve_env_file_path() == env_path
 
 
+def test_resolve_env_file_path_prefers_home_app_specific_file(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    home_env_path = home / ".coding-agent-telegram" / ".env_coding_agent_telegram"
+    home_env_path.parent.mkdir(parents=True, exist_ok=True)
+    home_env_path.write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_env_file_path() == home_env_path
+
+
 def test_resolve_env_file_path_prefers_app_specific_file(monkeypatch, tmp_path):
     app_env_path = tmp_path / ".env_coding_agent_telegram"
-    legacy_env_path = tmp_path / ".env"
     app_env_path.write_text("", encoding="utf-8")
-    legacy_env_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
     monkeypatch.chdir(tmp_path)
 
     assert resolve_env_file_path() == app_env_path
 
 
-def test_resolve_env_file_path_falls_back_to_legacy_dotenv(monkeypatch, tmp_path):
-    legacy_env_path = tmp_path / ".env"
-    legacy_env_path.write_text("", encoding="utf-8")
+def test_resolve_env_file_path_uses_home_default_when_cwd_file_is_missing(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
     monkeypatch.chdir(tmp_path)
 
-    assert resolve_env_file_path() == legacy_env_path
+    assert resolve_env_file_path() == home / ".coding-agent-telegram" / ".env_coding_agent_telegram"
 
 
 def test_load_config_uses_env_file_and_overrides_empty_process_values(monkeypatch, tmp_path):
@@ -169,6 +180,45 @@ def test_load_config_uses_env_file_and_overrides_empty_process_values(monkeypatc
     assert cfg.workspace_root.name == "git"
     assert cfg.telegram_bot_tokens == ("token-a",)
     assert cfg.allowed_chat_ids == {123}
+
+
+def test_load_config_prefers_home_internal_app_root(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    home_internal_root = home / ".coding-agent-telegram"
+    home_internal_root.mkdir(parents=True)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path / "workspace"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+
+    cfg = load_config()
+
+    assert cfg.app_internal_root == home_internal_root
+
+
+def test_load_config_falls_back_to_workspace_internal_app_root(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    workspace_root = tmp_path / "workspace"
+    workspace_internal_root = workspace_root / ".coding-agent-telegram"
+    workspace_internal_root.mkdir(parents=True)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace_root))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+
+    cfg = load_config()
+
+    assert cfg.app_internal_root == workspace_internal_root
+
+
+def test_resolve_app_internal_root_defaults_to_home_when_neither_exists(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    workspace_root = tmp_path / "workspace"
+    monkeypatch.setattr(Path, "home", lambda: home)
+
+    assert resolve_app_internal_root(workspace_root) == home / ".coding-agent-telegram"
 
 
 # ---------------------------------------------------------------------------
@@ -197,14 +247,12 @@ def test_parse_bool_rejects_unknown_string():
     assert _parse_bool("0") is False
 
 
-# ---------------------------------------------------------------------------
-# resolve_env_file_path: legacy fallback
-# ---------------------------------------------------------------------------
-
-
 def test_resolve_env_file_path_returns_default_path_when_neither_file_exists(tmp_path, monkeypatch):
     from coding_agent_telegram.config import resolve_env_file_path, DEFAULT_ENV_FILE_NAME
 
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.chdir(tmp_path)
     path = resolve_env_file_path()
     assert path.name == DEFAULT_ENV_FILE_NAME
+    assert path.parent == home / ".coding-agent-telegram"
