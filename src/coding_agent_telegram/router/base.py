@@ -114,6 +114,11 @@ class CommandRouterBase:
             git=self.git,
             run_with_typing=self._run_with_typing,
         )
+        # Per-workspace asyncio locks keyed by project_folder name.
+        # Prevents concurrent agent runs on the same workspace regardless of
+        # which chat ID or session triggers the run.
+        # These are in-memory only — no stale locks survive a server restart.
+        self._workspace_locks: dict[str, asyncio.Lock] = {}
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         return sorted(
@@ -162,6 +167,29 @@ class CommandRouterBase:
         chat = update.effective_chat
         if chat is None:
             return await asyncio.to_thread(fn, *args, **kwargs)
+
+        # workspace_lock_key is supplied by callers that invoke the agent on a
+        # specific project folder. When set, only one agent run per workspace is
+        # allowed at a time — regardless of which chat ID or session triggers it.
+        workspace_lock_key: str | None = kwargs.pop("workspace_lock_key", None)
+        is_agent_call = isinstance(getattr(fn, "__self__", None), MultiAgentRunner)
+
+        if is_agent_call and workspace_lock_key:
+            lock = self._workspace_locks.setdefault(workspace_lock_key, asyncio.Lock())
+            if lock.locked():
+                await send_text(
+                    update,
+                    context,
+                    f"⏳ An agent is already running on project '{workspace_lock_key}'. "
+                    "Please wait for it to finish.",
+                )
+                return None
+            async with lock:
+                return await self._execute_with_typing(update, context, chat, fn, *args, **kwargs)
+
+        return await self._execute_with_typing(update, context, chat, fn, *args, **kwargs)
+
+    async def _execute_with_typing(self, update: Update, context: ContextTypes.DEFAULT_TYPE, chat, fn, *args, **kwargs):
 
         stall_message = kwargs.pop("stall_message", None)
         progress_label = kwargs.pop("progress_label", None)
@@ -521,6 +549,16 @@ class CommandRouterBase:
             return False
         if any(part == ".." for part in normalized.parts):
             return False
+
+        # Resolve symlinks to prevent escaping the project root via in-project symlinks.
+        try:
+            resolved = (project_path / candidate).resolve()
+            project_resolved = project_path.resolve()
+            if not str(resolved).startswith(str(project_resolved) + os.sep) and resolved != project_resolved:
+                return False
+        except (OSError, ValueError):
+            return False
+
         return True
 
     @classmethod

@@ -14,6 +14,8 @@ DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
 DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES = 5 * 1024 * 1024
 DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
 LEGACY_ENV_FILE_NAME = ".env"
+# 0 = disabled. Set to a positive value to kill runaway agent processes.
+DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,7 @@ class AppConfig:
     max_telegram_message_length: int
     enable_sensitive_diff_filter: bool
     default_agent_provider: str
+    agent_hard_timeout_seconds: int
 
 
 def _parse_bool(value: str, default: bool = False) -> bool:
@@ -141,4 +144,7 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         ),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),
         default_agent_provider=provider,
+        agent_hard_timeout_seconds=int(
+            os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
+        ),
     )

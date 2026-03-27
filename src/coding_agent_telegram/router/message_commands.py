@@ -13,12 +13,13 @@ class MessageCommandMixin:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or not update.message.text:
             return
+        user_message = update.message.text
         chat_id = update.effective_chat.id
         self._store_pending_action(
             chat_id,
             {
                 "kind": "message",
-                "user_message": update.message.text,
+                "user_message": user_message,
             },
         )
         if await self._continue_pending_action(update, context):
@@ -37,12 +38,13 @@ class MessageCommandMixin:
             await send_text(update, context, "Photo attachments are currently supported only for codex sessions.")
             return
 
+        caption = update.message.caption or ""
         try:
             attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
         except ValueError as exc:
             await send_text(update, context, str(exc))
             return
-        prompt = self.photo_attachments.build_prompt(attachment_path, project_path, update.message.caption or "")
+        prompt = self.photo_attachments.build_prompt(attachment_path, project_path, caption)
         await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
 
     @require_allowed_chat()

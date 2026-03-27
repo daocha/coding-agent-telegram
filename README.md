@@ -258,6 +258,14 @@ GitHub documents these Copilot CLI approval controls here:
   If `true`, enable the `/commit` Telegram command.
   Default: `false`
 
+- `AGENT_HARD_TIMEOUT_SECONDS`
+  Hard time limit in seconds for a single agent run.
+  When the agent subprocess is still running after this many seconds, the bot sends a timeout message and terminates the process.
+  Set to `0` (the default) to disable the limit entirely.
+  Disabling is recommended for Copilot, which can legitimately take over an hour on complex tasks.
+  Set a value (e.g. `600`) only when you want a hard cap — typically for shorter, bounded Codex jobs.
+  Default: `0` (disabled)
+
 ### Telegram Behavior
 
 - `SNAPSHOT_TEXT_FILE_MAX_BYTES`
@@ -357,7 +365,18 @@ Each session stores:
 - timestamps
 - active session selection for that bot/chat scope
 
-## ⚠️ Diff (file changes)
+### Workspace concurrency lock
+
+Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
+
+If a message arrives while an agent is already running on the same project, the bot immediately replies:
+
+> ⏳ An agent is already running on project '…'. Please wait for it to finish.
+
+The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
+
+## ⚠  Diff (file changes)
+
 _During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
 
 **Snapshot notes:**
@@ -418,11 +437,16 @@ The chosen branch is stored with the session, so switching sessions restores the
 
 ## 🪵 Logs
 
-Logs are written under `LOG_DIR`.
+Logs are written to **both stdout and a rotating log file** under `LOG_DIR`.
 
 Main log file:
 
-- `coding-agent-telegram.log`
+- `coding-agent-telegram.log` (rotated at 10 MB, 3 backups kept)
+
+> **Note:** Because messages go to both stdout and the log file, watching the terminal
+> **and** tailing the log file at the same time (e.g. `tail -f logs/coding-agent-telegram.log`)
+> will make each message appear twice — once from each sink. This is expected behavior.
+> View one or the other, not both simultaneously.
 
 Typical logged events:
 
@@ -431,7 +455,7 @@ Typical logged events:
 - session creation
 - session switching
 - active session reporting
-- normal run execution
+- normal run execution (includes an audit log line with the truncated prompt)
 - session replacement after resume failure
 - warnings and runtime errors
 

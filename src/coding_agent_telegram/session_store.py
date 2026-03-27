@@ -11,6 +11,10 @@ import portalocker
 T = TypeVar("T")
 
 
+class SessionStoreError(Exception):
+    """Raised when the session store cannot be accessed due to a file-lock conflict."""
+
+
 class SessionStore:
     """Persist per-chat session state with file locking and crash-safe writes."""
 
@@ -81,8 +85,11 @@ class SessionStore:
 
     def load(self) -> dict[str, Any]:
         self._ensure_paths()
-        with portalocker.Lock(str(self.lock_file), timeout=5):
-            return self._load_unlocked()
+        try:
+            with portalocker.Lock(str(self.lock_file), timeout=5):
+                return self._load_unlocked()
+        except portalocker.LockException as exc:
+            raise SessionStoreError("Session data is temporarily locked. Please try again in a moment.") from exc
 
     def _save_unlocked(self, state: dict[str, Any]) -> None:
         serialized = json.dumps(state, indent=2, ensure_ascii=False)
@@ -93,16 +100,22 @@ class SessionStore:
 
     def save(self, state: dict[str, Any]) -> None:
         self._ensure_paths()
-        with portalocker.Lock(str(self.lock_file), timeout=5):
-            self._save_unlocked(state)
+        try:
+            with portalocker.Lock(str(self.lock_file), timeout=5):
+                self._save_unlocked(state)
+        except portalocker.LockException as exc:
+            raise SessionStoreError("Session data is temporarily locked. Please try again in a moment.") from exc
 
     def _mutate_state(self, fn: Callable[[dict[str, Any]], T]) -> T:
         self._ensure_paths()
-        with portalocker.Lock(str(self.lock_file), timeout=5):
-            state = self._load_unlocked()
-            result = fn(state)
-            self._save_unlocked(state)
-            return result
+        try:
+            with portalocker.Lock(str(self.lock_file), timeout=5):
+                state = self._load_unlocked()
+                result = fn(state)
+                self._save_unlocked(state)
+                return result
+        except portalocker.LockException as exc:
+            raise SessionStoreError("Session data is temporarily locked. Please try again in a moment.") from exc
 
     def _mutate_chat_data(
         self,
@@ -274,12 +287,15 @@ class SessionStore:
 
     def list_sessions(self, bot_id: str, chat_id: int) -> dict[str, dict[str, str]]:
         self._ensure_paths()
-        with portalocker.Lock(str(self.lock_file), timeout=5):
-            state = self._load_unlocked()
-            chat_data, migrated = self._get_chat_data(state, bot_id, chat_id)
-            if migrated:
-                self._save_unlocked(state)
-            return {} if chat_data is None else dict(chat_data.get("sessions", {}))
+        try:
+            with portalocker.Lock(str(self.lock_file), timeout=5):
+                state = self._load_unlocked()
+                chat_data, migrated = self._get_chat_data(state, bot_id, chat_id)
+                if migrated:
+                    self._save_unlocked(state)
+                return {} if chat_data is None else dict(chat_data.get("sessions", {}))
+        except portalocker.LockException as exc:
+            raise SessionStoreError("Session data is temporarily locked. Please try again in a moment.") from exc
 
     def set_active_session_branch(self, bot_id: str, chat_id: int, branch_name: str) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
@@ -297,12 +313,15 @@ class SessionStore:
 
     def get_chat_state(self, bot_id: str, chat_id: int) -> dict[str, Any]:
         self._ensure_paths()
-        with portalocker.Lock(str(self.lock_file), timeout=5):
-            state = self._load_unlocked()
-            chat_data, migrated = self._get_chat_data(state, bot_id, chat_id)
-            if migrated:
-                self._save_unlocked(state)
-            return {} if chat_data is None else dict(chat_data)
+        try:
+            with portalocker.Lock(str(self.lock_file), timeout=5):
+                state = self._load_unlocked()
+                chat_data, migrated = self._get_chat_data(state, bot_id, chat_id)
+                if migrated:
+                    self._save_unlocked(state)
+                return {} if chat_data is None else dict(chat_data)
+        except portalocker.LockException as exc:
+            raise SessionStoreError("Session data is temporarily locked. Please try again in a moment.") from exc
 
     def get_session(self, bot_id: str, chat_id: int, session_id: str) -> Optional[dict[str, str]]:
         return self.list_sessions(bot_id, chat_id).get(session_id)

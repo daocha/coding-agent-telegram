@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import fnmatch
 import importlib.resources
+import logging
 import os
 import subprocess
 from functools import lru_cache
@@ -14,6 +15,8 @@ from coding_agent_telegram.config import DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
 
 INTERNAL_APP_DIR = ".coding-agent-telegram"
 TEXTUAL_DIFF_UNAVAILABLE = "Binary or large file changed; textual diff unavailable."
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -116,7 +119,8 @@ def is_snapshot_excluded_path(path: str) -> bool:
 def _read_snapshot_text(file_path: Path, *, max_text_file_bytes: int) -> Optional[str]:
     try:
         data = file_path.read_bytes()
-    except OSError:
+    except OSError as exc:
+        logger.debug("Could not read snapshot file %s: %s", file_path, exc)
         return None
     if len(data) > max_text_file_bytes:
         return None

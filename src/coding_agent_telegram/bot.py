@@ -7,6 +7,7 @@ from telegram.request import HTTPXRequest
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters as tg_filters
 
 from coding_agent_telegram.command_router import CommandRouter
+from coding_agent_telegram.session_store import SessionStoreError
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,14 @@ async def initialize_bot_commands(app: Application, *, enable_commit_command: bo
 
 
 async def handle_error(update, context) -> None:
+    if isinstance(context.error, SessionStoreError):
+        logger.warning("Session store lock conflict: %s", context.error)
+        if update is not None and getattr(update, "effective_chat", None) is not None:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"⚠️ {context.error}",
+            )
+        return
     logger.exception("Telegram handler failed.", exc_info=context.error)
     if update is not None and getattr(update, "effective_chat", None) is not None:
         await context.bot.send_message(

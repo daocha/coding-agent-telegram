@@ -125,6 +125,7 @@ def main() -> None:
         copilot_allow_tools=cfg.copilot_allow_tools,
         copilot_deny_tools=cfg.copilot_deny_tools,
         copilot_available_tools=cfg.copilot_available_tools,
+        hard_timeout_seconds=cfg.agent_hard_timeout_seconds,
     )
     try:
         asyncio.run(_run(cfg, store, runner))

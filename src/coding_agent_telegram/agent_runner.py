@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -15,6 +16,27 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 logger = logging.getLogger(__name__)
 
 AssistantEvent = Union[dict[str, Any], list[Any], str]
+
+# Only allow alphanumeric, hyphens, underscores, and dots — must not start with "-"
+# to prevent a crafted LLM session_id from injecting CLI flags.
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+
+
+def _validate_session_id(raw: str) -> Optional[str]:
+    """Return ``raw`` only if it looks like a legitimate session identifier.
+
+    Rejects values that could be used to inject CLI flags (e.g. ``--exec``)
+    into subsequent subprocess calls that pass the session ID as an argument.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    if raw.startswith("-"):
+        logger.warning("Rejected session_id starting with '-' from agent output: %r", raw[:64])
+        return None
+    if _SESSION_ID_RE.match(raw):
+        return raw
+    logger.warning("Rejected suspicious session_id from agent output: %r", raw[:64])
+    return None
 
 
 @dataclass
@@ -69,6 +91,7 @@ class MultiAgentRunner:
         copilot_allow_tools: tuple[str, ...] = (),
         copilot_deny_tools: tuple[str, ...] = (),
         copilot_available_tools: tuple[str, ...] = (),
+        hard_timeout_seconds: int = 0,
     ) -> None:
         self.codex_bin = codex_bin
         self.copilot_bin = copilot_bin
@@ -83,6 +106,8 @@ class MultiAgentRunner:
         self.copilot_allow_tools = tuple(tool.strip() for tool in copilot_allow_tools if tool.strip())
         self.copilot_deny_tools = tuple(tool.strip() for tool in copilot_deny_tools if tool.strip())
         self.copilot_available_tools = tuple(tool.strip() for tool in copilot_available_tools if tool.strip())
+        # 0 = disabled. When > 0, the agent subprocess is killed after this many seconds.
+        self.hard_timeout_seconds = max(0, int(hard_timeout_seconds))
 
     def _looks_textual_key(self, key: str) -> bool:
         normalized = key.strip().lower()
@@ -185,7 +210,9 @@ class MultiAgentRunner:
         for ev in events:
             for key in ("session_id", "thread_id", "sessionId", "threadId"):
                 if isinstance(ev.get(key), str):
-                    session_id = ev[key]
+                    validated = _validate_session_id(ev[key])
+                    if validated:
+                        session_id = validated
             extracted_text = assistant_text_extractor(ev)
             if extracted_text:
                 assistant_text = extracted_text
@@ -323,6 +350,27 @@ class MultiAgentRunner:
         stdout_thread.start()
         stderr_thread.start()
 
+        # Watchdog: kills the process if it exceeds the hard timeout.
+        # Uses threading.Event (not time.monotonic or proc.poll) so it does not
+        # interfere with existing stall-detection logic or test mocks.
+        # A timeout of 0 means disabled — the process can run indefinitely.
+        _proc_exited = threading.Event()
+        _watchdog_timeout = self.hard_timeout_seconds if self.hard_timeout_seconds > 0 else None
+
+        def _watchdog() -> None:
+            if not _proc_exited.wait(timeout=_watchdog_timeout):
+                logger.warning(
+                    "Agent command exceeded hard timeout of %ds; terminating process.",
+                    _watchdog_timeout,
+                )
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+
+        watchdog_thread = threading.Thread(target=_watchdog, daemon=True, name="agent-watchdog")
+        watchdog_thread.start()
+
         stall_reported = False
         while proc.poll() is None:
             if on_stall and not stall_reported:
@@ -353,6 +401,8 @@ class MultiAgentRunner:
 
         stdout_thread.join()
         stderr_thread.join()
+        _proc_exited.set()
+        watchdog_thread.join()
         stdout = "".join(stdout_chunks)
         stderr = "".join(stderr_chunks)
         if provider == "codex":
