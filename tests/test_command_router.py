@@ -385,6 +385,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         max_telegram_message_length=3000,
         enable_sensitive_diff_filter=True,
         default_agent_provider="codex",
+        agent_hard_timeout_seconds=0,
     )
 
 
@@ -2236,3 +2237,123 @@ def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):
 
     assert router.git.push_calls == []
     assert "Project folder no longer exists for this session: backend" in bot.messages[-1][1]
+
+
+# ---------------------------------------------------------------------------
+# _path_within_project — symlink traversal guard
+# ---------------------------------------------------------------------------
+
+
+def test_path_within_project_allows_normal_files(tmp_path: Path):
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "src").mkdir()
+    (project / "src" / "file.py").write_text("x")
+
+    assert CommandRouterBase._path_within_project(project, "src/file.py")
+    assert CommandRouterBase._path_within_project(project, "README.md")
+
+
+def test_path_within_project_blocks_symlink_escape(tmp_path: Path):
+    """A symlink inside the project pointing outside must be rejected."""
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+
+    # Create a symlink inside the project that points outside
+    link = project / "external_link"
+    link.symlink_to(outside)
+
+    assert not CommandRouterBase._path_within_project(project, "external_link/secret.txt")
+
+
+def test_path_within_project_blocks_symlink_to_file_outside(tmp_path: Path):
+    """A symlink to a single file outside the project must also be rejected."""
+    from coding_agent_telegram.router.base import CommandRouterBase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("secret")
+
+    link = project / "linked_secret.txt"
+    link.symlink_to(secret)
+
+    assert not CommandRouterBase._path_within_project(project, "linked_secret.txt")
+
+
+# ---------------------------------------------------------------------------
+# Workspace lock — concurrent agent runs on the same project are blocked
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_lock_blocks_second_call_on_same_project(tmp_path: Path):
+    """When a workspace lock is held, a second _run_with_typing call on the same
+    project must be rejected immediately with an 'already running' message."""
+    from coding_agent_telegram.agent_runner import MultiAgentRunner
+
+    runner_real = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner_real, bot_id="bot-a"))
+
+    messages_sent: list = []
+
+    async def run():
+        # Manually hold the workspace lock to simulate an in-flight agent run.
+        lock = router._workspace_locks.setdefault("myproject", asyncio.Lock())
+        async with lock:
+            bot = FakeBot()
+            update = make_update()
+            context = SimpleNamespace(args=[], bot=bot)
+            result = await router._run_with_typing(
+                update,
+                context,
+                runner_real.resume_session,
+                "codex",
+                "sess_1",
+                tmp_path,
+                "hello",
+                workspace_lock_key="myproject",
+            )
+            assert result is None
+            messages_sent.extend(bot.messages)
+
+    asyncio.run(run())
+    assert any("already running" in msg[1] for msg in messages_sent)
+
+
+def test_workspace_lock_allows_different_projects_concurrently(tmp_path: Path):
+    """Two calls with different workspace_lock_keys must not block each other."""
+    from coding_agent_telegram.agent_runner import MultiAgentRunner
+
+    runner_real = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner_real, bot_id="bot-a"))
+
+    async def run():
+        # Hold the lock for "project-a"
+        lock_a = router._workspace_locks.setdefault("project-a", asyncio.Lock())
+        async with lock_a:
+            # "project-b" lock should be free — lock.locked() returns False
+            lock_b = router._workspace_locks.setdefault("project-b", asyncio.Lock())
+            assert not lock_b.locked()
+
+    asyncio.run(run())

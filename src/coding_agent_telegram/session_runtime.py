@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import html
 import logging
+import re
 from pathlib import Path
 import os
 from typing import Awaitable, Callable, Optional, Sequence
@@ -55,6 +56,33 @@ REPLACEMENT_SESSION_STALL_MESSAGE = (
     "The local agent process is still running but has not produced output.\n"
     "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
 )
+
+# Patterns for secrets that the agent might echo back from files it has read.
+# Matches are replaced with a placeholder before sending to Telegram.
+_SECRET_SCRUB_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\d{9,10}:[A-Za-z0-9_-]{35}"), "<telegram-token>"),
+    (re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"), "<github-token>"),
+    (re.compile(r"sk-[A-Za-z0-9]{20,}T3BlbkFJ[A-Za-z0-9]{20,}"), "<openai-key>"),
+    (re.compile(r"glpat-[A-Za-z0-9\-_]{20,}"), "<gitlab-token>"),
+    (re.compile(r"xox[baprs]-[A-Za-z0-9\-]{10,}"), "<slack-token>"),
+    (re.compile(r"AIza[A-Za-z0-9\-_]{35}"), "<gcp-api-key>"),
+    (re.compile(r"AKIA[A-Z0-9]{16}"), "<aws-access-key>"),
+)
+
+# Matches absolute filesystem paths (Unix and Windows styles) in error messages.
+_ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
+
+
+def _scrub_secrets(text: str) -> str:
+    """Replace known secret patterns in *text* with redaction placeholders."""
+    for pattern, replacement in _SECRET_SCRUB_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _sanitize_agent_error(text: str) -> str:
+    """Remove absolute filesystem paths from agent error messages before sending to users."""
+    return _ABSOLUTE_PATH_RE.sub("<path>", text)
 
 
 class PhotoAttachmentStore:
@@ -188,12 +216,14 @@ class SessionRuntime:
         provider = session.get("provider", "codex")
         branch_name = session.get("branch_name", "")
         logger.info(
-            "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'.",
+            "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'. "
+            "Prompt (first 200 chars): %.200r",
             chat_id,
             session["name"],
             active_id,
             project_folder,
             provider,
+            user_message,
         )
 
         if branch_name and self.git.is_git_repo(project_path):
@@ -215,6 +245,7 @@ class SessionRuntime:
             active_id,
             project_path,
             user_message,
+            workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
             stall_message=ACTIVE_RUN_STALL_MESSAGE,
@@ -246,7 +277,8 @@ class SessionRuntime:
                 active_id,
                 result.error_message or "unknown error",
             )
-            await send_text(update, context, result.error_message or "Agent run failed.")
+            error_text = _sanitize_agent_error(result.error_message) if result.error_message else "Agent run failed."
+            await send_text(update, context, error_text)
             return
 
         if result.session_id and result.session_id != active_id:
@@ -339,6 +371,7 @@ class SessionRuntime:
             provider,
             project_path,
             user_message,
+            workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
             stall_message=REPLACEMENT_SESSION_STALL_MESSAGE,
@@ -441,6 +474,7 @@ class SessionRuntime:
         *,
         provider: str,
     ) -> None:
+        assistant_text = _scrub_secrets(assistant_text)
         segments = split_assistant_output(assistant_text)
         if not segments:
             return

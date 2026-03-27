@@ -160,3 +160,83 @@ def test_run_safe_commit_command_prefers_explicit_git_identity_env(tmp_path: Pat
         .stdout.strip()
     )
     assert name == "Env User <env@example.com>"
+
+
+# ---------------------------------------------------------------------------
+# _validate_branch_name
+# ---------------------------------------------------------------------------
+
+
+def test_validate_branch_name_accepts_valid_names():
+    from coding_agent_telegram.git_utils import _validate_branch_name
+
+    assert _validate_branch_name("main") is True
+    assert _validate_branch_name("feature/TICKET-123") is True
+    assert _validate_branch_name("hotfix-1.0") is True
+    assert _validate_branch_name("origin/main") is True
+    assert _validate_branch_name("A" * 200) is True
+
+
+def test_validate_branch_name_rejects_flag_like():
+    from coding_agent_telegram.git_utils import _validate_branch_name
+
+    assert _validate_branch_name("-b") is False
+    assert _validate_branch_name("--exec") is False
+    assert _validate_branch_name("") is False
+
+
+def test_validate_branch_name_rejects_special_chars():
+    from coding_agent_telegram.git_utils import _validate_branch_name
+
+    assert _validate_branch_name("branch;rm") is False
+    assert _validate_branch_name("branch name") is False  # space
+    assert _validate_branch_name("branch\x00null") is False
+    assert _validate_branch_name("a" * 201) is False  # too long
+
+
+def test_checkout_branch_rejects_invalid_name(tmp_path: Path):
+    """checkout_branch must reject branch names that fail validation without making git calls."""
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    result = manager.checkout_branch(project, "--malicious")
+
+    assert result.success is False
+    assert "Invalid branch name" in result.message
+
+
+def test_prepare_branch_rejects_invalid_new_branch(tmp_path: Path):
+    """prepare_branch must reject an invalid new_branch without making git calls."""
+    project = tmp_path / "repo"
+    project.mkdir()
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test")
+    _git(project, "config", "user.email", "t@t.com")
+    (project / "f").write_text("x")
+    _git(project, "add", "f")
+    _git(project, "commit", "-m", "init")
+
+    manager = GitWorkspaceManager()
+    result = manager.prepare_branch(project, origin_branch=None, new_branch="-exec")
+
+    assert result.success is False
+    assert "Invalid branch name" in result.message
+
+
+def test_prepare_branch_rejects_invalid_origin_branch(tmp_path: Path):
+    """prepare_branch must reject an invalid origin_branch without making git calls."""
+    project = tmp_path / "repo"
+    project.mkdir()
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test")
+    _git(project, "config", "user.email", "t@t.com")
+    (project / "f").write_text("x")
+    _git(project, "add", "f")
+    _git(project, "commit", "-m", "init")
+
+    manager = GitWorkspaceManager()
+    result = manager.prepare_branch(project, origin_branch="--bad", new_branch="good-branch")
+
+    assert result.success is False
+    assert "Invalid" in result.message

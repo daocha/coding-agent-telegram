@@ -240,6 +240,7 @@ class SessionCommandMixin:
             provider,
             project_path,
             f"Create session: {creation_label}",
+            workspace_lock_key=project_folder,
             skip_git_repo_check=self.runtime.should_skip_git_repo_check(project_folder),
             stall_message=(
                 "Session creation appears stuck.\n"

@@ -12,3 +12,4 @@ state.json.bak
 logs/
 .codex
 .copilot
+.env

@@ -154,3 +154,64 @@ def test_rebind_session_returns_false_when_chat_state_is_missing(tmp_path: Path)
     store = SessionStore(state, backup)
 
     assert store.rebind_session("bot-a", 123, "old", "new") is False
+
+
+# ---------------------------------------------------------------------------
+# SessionStoreError — lock-timeout handling
+# ---------------------------------------------------------------------------
+
+
+def test_load_raises_session_store_error_on_lock_timeout(tmp_path, monkeypatch):
+    """load() must raise SessionStoreError when portalocker cannot acquire the lock."""
+    import portalocker
+
+    from coding_agent_telegram.session_store import SessionStoreError
+
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    class _FailingLock:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            raise portalocker.LockException("simulated timeout")
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(portalocker, "Lock", _FailingLock)
+
+    import pytest
+
+    with pytest.raises(SessionStoreError, match="temporarily locked"):
+        store.load()
+
+
+def test_save_raises_session_store_error_on_lock_timeout(tmp_path, monkeypatch):
+    """save() must raise SessionStoreError when portalocker cannot acquire the lock."""
+    import portalocker
+
+    from coding_agent_telegram.session_store import SessionStoreError
+
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    class _FailingLock:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            raise portalocker.LockException("simulated timeout")
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(portalocker, "Lock", _FailingLock)
+
+    import pytest
+
+    with pytest.raises(SessionStoreError, match="temporarily locked"):
+        store.save({})

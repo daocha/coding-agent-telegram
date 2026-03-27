@@ -390,3 +390,72 @@ def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
     assert "--allow-tool" not in calls[0][0]
     assert "--deny-tool" not in calls[0][0]
     assert "--available-tools" not in calls[0][0]
+
+
+# ---------------------------------------------------------------------------
+# _validate_session_id
+# ---------------------------------------------------------------------------
+
+
+def test_validate_session_id_accepts_valid_ids():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("abc123") == "abc123"
+    assert _validate_session_id("sess-1.0_abc") == "sess-1.0_abc"
+    assert _validate_session_id("A" * 128) == "A" * 128
+
+
+def test_validate_session_id_rejects_flag_like():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("--exec") is None
+    assert _validate_session_id("-c") is None
+
+
+def test_validate_session_id_rejects_special_chars():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("sess;rm -rf") is None
+    assert _validate_session_id("sess\x00null") is None
+    assert _validate_session_id("a" * 129) is None  # too long
+
+
+def test_validate_session_id_rejects_empty_and_none():
+    from coding_agent_telegram.agent_runner import _validate_session_id
+
+    assert _validate_session_id("") is None
+    assert _validate_session_id(None) is None  # type: ignore[arg-type]
+
+
+def test_parse_jsonl_rejects_flag_session_id(monkeypatch):
+    """A session_id starting with '--' emitted by the LLM must not be stored."""
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"session_id": "--malicious"}\n'),
+    )
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    assert result.session_id is None
+
+
+def test_parse_jsonl_accepts_valid_session_id(monkeypatch):
+    """A well-formed session_id from the LLM must be stored and returned."""
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"session_id": "valid-sess-123"}\n'),
+    )
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    assert result.session_id == "valid-sess-123"
