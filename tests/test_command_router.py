@@ -2561,6 +2561,42 @@ def test_abort_sends_signal_for_current_project_run(tmp_path: Path):
     assert bot.messages[-1][1] == "Abort signal sent for the current project run."
 
 
+def test_compact_reports_usage_when_args_are_passed(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/compact extra")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["extra"], bot=bot)
+
+    asyncio.run(router.handle_compact(update, context))
+
+    assert bot.messages[-1][1] == "Usage: /compact"
+
+
+def test_compact_runs_active_session_with_compact_prompt(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "copilot")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="/compact")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_compact(update, context))
+
+    assert runner.resume_calls[-1]["provider"] == "copilot"
+    assert runner.resume_calls[-1]["session_id"] == "sess_current"
+    assert runner.resume_calls[-1]["user_message"] == "/compact"
+
+
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()

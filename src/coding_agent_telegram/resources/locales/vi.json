@@ -168,5 +168,7 @@
   "diff.changed_file_header": "{file_path} (+{additions} -{deletions}) ({index}/{total})",
   "cli.created_env_if_missing": "Created {env_path} if it did not already exist.",
   "cli.update_fields_in_env": "Update these fields in {env_path}:",
-  "cli.then_run": "Then run: coding-agent-telegram"
+  "cli.then_run": "Then run: coding-agent-telegram",
+  "bot.command.compact": "Thu gọn session đang hoạt động",
+  "status.usage_compact": "Cách dùng: /compact"
 }

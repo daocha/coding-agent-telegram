@@ -180,53 +180,56 @@ The bot currently accepts:
 
 <table>
   <tr>
+    <td width="250"><code>/provider</code></td>
+    <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
+  </tr>
+  <tr>
     <td width="250"><code>/project &lt;project_folder&gt;</code></td>
     <td>Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If it already exists and is still untrusted, the app asks you to trust it explicitly.</td>
   </tr>
   <tr>
-    <td><code>/provider</code></td>
-    <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
-  </tr>
-  <tr>
-    <td><code>/new [session_name]</code></td>
-    <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
-  </tr>
-  <tr>
-    <td><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
     <td>Prepare or switch a branch for the current project. If the branch already exists, the bot treats that branch as the source candidate. Otherwise it uses the repository default branch as the source candidate.</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch using <code>&lt;origin_branch&gt;</code> as the source candidate. <br /> For both forms, the bot then offers the source choices that actually exist: <code>local/&lt;branch&gt;</code> <code>origin/&lt;branch&gt;</code>
-       <br />If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.</td>
+    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>Prepare or switch a branch using <code>&lt;origin_branch&gt;</code> as the source candidate. <br /> For both forms, the bot then offers the source choices that actually exist: <code>local/&lt;branch&gt;</code> <code>origin/&lt;branch&gt;</code> <br />If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.</td>
   </tr>
   <tr>
-    <td><code>/switch</code></td>
-    <td>Show the latest sessions, newest first. The list includes both bot-managed sessions and local Codex/Copilot CLI sessions for the current project.</td>
-  </tr>
-  <tr>
-    <td><code>/switch page &lt;number&gt;</code></td>
-    <td>Show another page of stored sessions.</td>
-  </tr>
-  <tr>
-    <td><code>/switch &lt;session_id&gt;</code></td>
-    <td>Switch to a specific session by ID. If you choose a local CLI session, the bot imports it and continues from there.</td>
-  </tr>
-  <tr>
-    <td><code>/current</code></td>
+    <td width="250"><code>/current</code></td>
     <td>Show the active session for the current bot and chat.</td>
   </tr>
   <tr>
-    <td><code>/abort</code></td>
-    <td>Abort the current agent run for the current project. If queued questions are waiting, the bot asks whether to continue them.</td>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
   </tr>
   <tr>
-    <td><code>/commit &lt;git commands&gt;</code></td>
+    <td width="250"><code>/switch</code></td>
+    <td>Show the latest sessions, newest first. The list includes both bot-managed sessions and local Codex/Copilot CLI sessions for the current project.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td>Show another page of stored sessions.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td>Switch to a specific session by ID. If you choose a local CLI session, the bot imports it and continues from there.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/compact</code></td>
+    <td>Compact the active session and ask the provider to compress the current conversation state.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
     <td>Run validated git commit-related commands inside the active session project. Available only when <code>ENABLE_COMMIT_COMMAND=true</code>. Mutating git commands require a trusted project.</td>
   </tr>
   <tr>
-    <td><code>/push</code></td>
+    <td width="250"><code>/push</code></td>
     <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>Abort the current agent run for the current project. If queued questions are waiting, the bot asks whether to continue them.</td>
   </tr>
 </table>
 <h2>⚙️ Environment Variables</h2>

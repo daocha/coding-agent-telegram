@@ -170,16 +170,12 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>设置当前 project 文件夹。如果文件夹不存在，应用会创建并标记为 trusted；如果已存在但仍是 untrusted，应用会明确要求确认 trust。</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>为新 session 选择 provider。该选择会按 bot 和 chat 保存，直到你手动修改。</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>为当前 project 创建新 session。如果省略名称，bot 会使用真实的 session ID。若缺少 provider、project 或 branch，bot 会引导你完成缺失步骤。</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>设置当前 project 文件夹。如果文件夹不存在，应用会创建并标记为 trusted；如果已存在但仍是 untrusted，应用会明确要求确认 trust。</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>使用 `<origin_branch>` 作为 source candidate 来准备或切换 branch。无论哪种形式，bot 之后只会提供实际存在的 source choices：`local/<branch>` 和 `origin/<branch>`。如果只存在其中一个，就只显示那个；如果两个都不存在，bot 会提示缺少 branch source。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>显示当前 bot 和 chat 的 active session。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>为当前 project 创建新 session。如果省略名称，bot 会使用真实的 session ID。若缺少 provider、project 或 branch，bot 会引导你完成缺失步骤。</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>通过 ID 切换到指定 session。如果你选择本地 CLI session，bot 会把它导入 state 并从那里继续。</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>显示当前 bot 和 chat 的 active session。</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>中止当前 project 的 agent run。如果还有 queued questions 在等待，bot 会询问是否继续处理。</td>
+    <td width="250"><code>/compact</code></td>
+    <td>压缩当前活动 session，并要求 provider 对当前对话状态进行精简。</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/push</code></td>
     <td>为当前 active session 执行 `origin <branch>` push。push 前 bot 会要求确认。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>中止当前 project 的 agent run。如果还有 queued questions 在等待，bot 会询问是否继续处理。</td>
   </tr>
 </table>
 

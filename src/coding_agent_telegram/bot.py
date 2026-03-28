@@ -22,17 +22,18 @@ TELEGRAM_GET_UPDATES_CONNECTION_POOL_SIZE = 2
 
 def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_LOCALE) -> list[BotCommand]:
     commands = [
+        BotCommand("provider", translate(locale, "bot.command.provider")),
         BotCommand("project", translate(locale, "bot.command.project")),
         BotCommand("branch", translate(locale, "bot.command.branch")),
-        BotCommand("provider", translate(locale, "bot.command.provider")),
+        BotCommand("current", translate(locale, "bot.command.current")),
         BotCommand("new", translate(locale, "bot.command.new")),
         BotCommand("switch", translate(locale, "bot.command.switch")),
-        BotCommand("current", translate(locale, "bot.command.current")),
-        BotCommand("abort", translate(locale, "bot.command.abort")),
+        BotCommand("compact", translate(locale, "bot.command.compact")),
     ]
     if enable_commit_command:
         commands.append(BotCommand("commit", translate(locale, "bot.command.commit")))
     commands.append(BotCommand("push", translate(locale, "bot.command.push")))
+    commands.append(BotCommand("abort", translate(locale, "bot.command.abort")))
     return commands
 
 
@@ -108,15 +109,16 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
         | tg_filters.VOICE
     )
 
+    app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
     app.add_handler(CommandHandler("project", router.handle_project, filters=allowed_private))
     app.add_handler(CommandHandler("branch", router.handle_branch, filters=allowed_private))
-    app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
+    app.add_handler(CommandHandler("current", router.handle_current, filters=allowed_private))
     app.add_handler(CommandHandler("new", router.handle_new, filters=allowed_private, block=False))
     app.add_handler(CommandHandler("switch", router.handle_switch, filters=allowed_private))
-    app.add_handler(CommandHandler("current", router.handle_current, filters=allowed_private))
-    app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
+    app.add_handler(CommandHandler("compact", router.handle_compact, filters=allowed_private))
     app.add_handler(CommandHandler("commit", router.handle_commit, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
+    app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
     app.add_handler(CallbackQueryHandler(router.handle_provider_callback, pattern=r"^provider:set:(codex|copilot)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_batch_callback, pattern=r"^queuebatch:(group|single|cancel)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_continue_callback, pattern=r"^queuecontinue:(yes|no)$", block=False))

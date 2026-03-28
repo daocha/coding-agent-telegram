@@ -170,16 +170,12 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>ตั้งค่าโฟลเดอร์ project ปัจจุบัน หากโฟลเดอร์ยังไม่มี แอปจะสร้างและทำเครื่องหมายว่า trusted หากมีอยู่แล้วแต่ยัง untrusted แอปจะถามยืนยัน trust ก่อน</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>เลือก provider สำหรับ session ใหม่ โดยค่าที่เลือกจะถูกเก็บแยกตาม bot และ chat จนกว่าคุณจะเปลี่ยน</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>สร้าง session ใหม่สำหรับ project ปัจจุบัน หากไม่ระบุชื่อ บอตจะใช้ session ID จริง หากยังไม่มี provider, project หรือ branch บอตจะพาคุณไปยังขั้นตอนที่ขาดอยู่</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>ตั้งค่าโฟลเดอร์ project ปัจจุบัน หากโฟลเดอร์ยังไม่มี แอปจะสร้างและทำเครื่องหมายว่า trusted หากมีอยู่แล้วแต่ยัง untrusted แอปจะถามยืนยัน trust ก่อน</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>เตรียมหรือสลับ branch โดยใช้ `<origin_branch>` เป็น source candidate สำหรับทั้งสองรูปแบบ บอตจะแสดงเฉพาะ source choices ที่มีอยู่จริงเท่านั้น: `local/<branch>` และ `origin/<branch>` หากมีเพียงตัวเดียวก็จะแสดงเพียงตัวนั้น หากไม่มีเลย บอตจะแจ้งว่าไม่พบ branch source</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>แสดง active session ของ bot และ chat ปัจจุบัน</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>สร้าง session ใหม่สำหรับ project ปัจจุบัน หากไม่ระบุชื่อ บอตจะใช้ session ID จริง หากยังไม่มี provider, project หรือ branch บอตจะพาคุณไปยังขั้นตอนที่ขาดอยู่</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>สลับไปยัง session ที่ระบุด้วย ID หากเลือก local CLI session บอตจะ import เข้าสู่ state แล้วทำงานต่อจากตรงนั้น</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>แสดง active session ของ bot และ chat ปัจจุบัน</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>ยกเลิก agent run ปัจจุบันของ project นี้ หากมี queued questions รออยู่ บอตจะถามว่าจะให้ประมวลผลต่อหรือไม่</td>
+    <td width="250"><code>/compact</code></td>
+    <td>ย่อ session ที่กำลังใช้งาน และให้ provider บีบอัดสถานะบทสนทนาปัจจุบัน</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/push</code></td>
     <td>push `origin <branch>` สำหรับ active session ปัจจุบัน โดยบอตจะขอการยืนยันก่อน push</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>ยกเลิก agent run ปัจจุบันของ project นี้ หากมี queued questions รออยู่ บอตจะถามว่าจะให้ประมวลผลต่อหรือไม่</td>
   </tr>
 </table>
 

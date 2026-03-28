@@ -170,16 +170,12 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>현재 project folder를 설정합니다. 폴더가 없으면 앱이 만들고 trusted 로 표시합니다. 이미 존재하지만 아직 untrusted 이면 trust 확인을 요청합니다.</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>새 session용 provider 를 선택합니다. 선택 내용은 바꿀 때까지 bot/chat 단위로 저장됩니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>현재 project에 새 session을 만듭니다. 이름을 생략하면 실제 session ID를 사용합니다. provider, project, branch 가 없으면 bot 이 필요한 단계를 안내합니다.</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>현재 project folder를 설정합니다. 폴더가 없으면 앱이 만들고 trusted 로 표시합니다. 이미 존재하지만 아직 untrusted 이면 trust 확인을 요청합니다.</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>`<origin_branch>` 를 source candidate 로 사용해 branch 를 준비하거나 전환합니다. 두 형식 모두 bot 은 실제로 존재하는 source choice 만 보여줍니다: `local/<branch>`, `origin/<branch>`. 하나만 있으면 그것만 보이고, 둘 다 없으면 branch source 가 없다고 알립니다.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>현재 bot/chat 의 active session 을 보여줍니다.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>현재 project에 새 session을 만듭니다. 이름을 생략하면 실제 session ID를 사용합니다. provider, project, branch 가 없으면 bot 이 필요한 단계를 안내합니다.</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>ID 로 특정 session 으로 전환합니다. 로컬 CLI session 을 선택하면 bot 이 state 에 가져와 이어서 진행합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>현재 bot/chat 의 active session 을 보여줍니다.</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>현재 project 의 agent run 을 중단합니다. 대기 중인 queued question 이 있으면 계속할지 묻습니다.</td>
+    <td width="250"><code>/compact</code></td>
+    <td>활성 session 을 compact 하고 provider 에게 현재 대화 상태를 압축하도록 요청합니다.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/push</code></td>
     <td>현재 active session 에 대해 `origin <branch>` 를 push 합니다. push 전에 bot 이 확인합니다.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>현재 project 의 agent run 을 중단합니다. 대기 중인 queued question 이 있으면 계속할지 묻습니다.</td>
   </tr>
 </table>
 

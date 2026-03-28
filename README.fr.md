@@ -170,16 +170,12 @@ Remarques :
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Définir le dossier de projet courant. Si le dossier n’existe pas, l’app le crée et le marque trusted. S’il existe déjà mais reste untrusted, l’app vous demande une confirmation.</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>Choisir le provider pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si provider, projet ou branch manque, le bot vous guide.</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>Définir le dossier de projet courant. Si le dossier n’existe pas, l’app le crée et le marque trusted. S’il existe déjà mais reste untrusted, l’app vous demande une confirmation.</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ Remarques :
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Préparer ou changer une branch en utilisant `<origin_branch>` comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : `local/<branch>` et `origin/<branch>`. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>Afficher la session active pour le bot et le chat courants.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si provider, projet ou branch manque, le bot vous guide.</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ Remarques :
     <td>Basculer vers une session précise via son ID. Si vous choisissez une session CLI locale, le bot l’importe et reprend à partir d’elle.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>Afficher la session active pour le bot et le chat courants.</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>Annuler l’exécution d’agent en cours pour le projet courant. Si des questions attendent dans la file, le bot demande si elles doivent continuer.</td>
+    <td width="250"><code>/compact</code></td>
+    <td>Compacter la session active et demander au provider de condenser l'état actuel de la conversation.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ Remarques :
   <tr>
     <td width="250"><code>/push</code></td>
     <td>Pousser `origin <branch>` pour la session active courante. Le bot demande une confirmation avant le push.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>Annuler l’exécution d’agent en cours pour le projet courant. Si des questions attendent dans la file, le bot demande si elles doivent continuer.</td>
   </tr>
 </table>
 

@@ -64,6 +64,20 @@ class SessionStatusCommandMixin:
             return
         await send_text(update, context, self._t(update, "status.abort_signal_sent"))
 
+    @require_allowed_chat()
+    async def handle_compact(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if context.args:
+            await send_text(update, context, self._t(update, "status.usage_compact"))
+            return
+
+        active_id, session = await self._active_session_or_notify(update, context)
+        if active_id is None or session is None:
+            return
+        if await self._notify_if_current_project_busy(update, context):
+            return
+
+        await self.runtime.run_active_session(update, context, user_message="/compact")
+
     @require_allowed_chat(answer_callback=True)
     async def handle_queue_continue_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query

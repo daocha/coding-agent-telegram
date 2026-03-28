@@ -170,16 +170,12 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>現在のプロジェクトフォルダを設定します。フォルダが存在しない場合は作成して trusted として扱います。既存で untrusted の場合は明示的に trust を確認します。</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>新しい session 用の provider を選択します。選択は変更するまで bot と chat ごとに保存されます。</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>現在のプロジェクトに新しい session を作成します。名前を省略すると実際の session ID を使います。provider、project、branch が不足している場合は bot が不足分を案内します。</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>現在のプロジェクトフォルダを設定します。フォルダが存在しない場合は作成して trusted として扱います。既存で untrusted の場合は明示的に trust を確認します。</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>`<origin_branch>` を source candidate として branch を準備または切り替えます。どちらの形式でも bot は実在する source choice のみを提示します: `local/<branch>` と `origin/<branch>`。片方だけ存在する場合はその選択肢だけが表示され、どちらも無い場合は branch source が無いと通知します。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>現在の bot と chat の active session を表示します。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>現在のプロジェクトに新しい session を作成します。名前を省略すると実際の session ID を使います。provider、project、branch が不足している場合は bot が不足分を案内します。</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>ID を指定して特定の session に切り替えます。ローカル CLI session を選ぶと bot がそれを取り込み、そこから続行します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>現在の bot と chat の active session を表示します。</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>現在のプロジェクトで実行中の agent run を中断します。queued questions がある場合は続行するか確認します。</td>
+    <td width="250"><code>/compact</code></td>
+    <td>アクティブな session を compact し、provider に現在の会話状態を圧縮させます。</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="250"><code>/push</code></td>
     <td>現在の active session に対して `origin <branch>` を push します。push 前に bot が確認します。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>現在のプロジェクトで実行中の agent run を中断します。queued questions がある場合は続行するか確認します。</td>
   </tr>
 </table>
 

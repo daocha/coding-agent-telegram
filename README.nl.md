@@ -170,16 +170,12 @@ Opmerkingen:
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Stel de huidige projectmap in. Bestaat de map niet, dan maakt de app die aan en markeert hem trusted. Bestaat hij al maar is hij nog untrusted, dan vraagt de app expliciet om trust.</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>Kies de provider voor nieuwe sessies. De keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte session ID. Als provider, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>Stel de huidige projectmap in. Bestaat de map niet, dan maakt de app die aan en markeert hem trusted. Bestaat hij al maar is hij nog untrusted, dan vraagt de app expliciet om trust.</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ Opmerkingen:
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Bereid een branch voor of wissel ernaar met `<origin_branch>` als source candidate. Voor beide vormen biedt de bot daarna alleen de source choices aan die echt bestaan: `local/<branch>` en `origin/<branch>`. Als er maar één bestaat, zie je alleen die. Als geen van beide bestaat, meldt de bot dat de branch-source ontbreekt.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>Toon de actieve sessie voor de huidige bot en chat.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte session ID. Als provider, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ Opmerkingen:
     <td>Schakel naar een specifieke sessie via ID. Kies je een lokale CLI-sessie, dan importeert de bot die en gaat daar verder.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>Toon de actieve sessie voor de huidige bot en chat.</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>Breek de huidige agent-run voor het huidige project af. Als er vragen in de wachtrij staan, vraagt de bot of die verder verwerkt moeten worden.</td>
+    <td width="250"><code>/compact</code></td>
+    <td>De actieve session compacten en de provider vragen de huidige gespreksstatus samen te vatten.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ Opmerkingen:
   <tr>
     <td width="250"><code>/push</code></td>
     <td>Push `origin <branch>` voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>Breek de huidige agent-run voor het huidige project af. Als er vragen in de wachtrij staan, vraagt de bot of die verder verwerkt moeten worden.</td>
   </tr>
 </table>
 

@@ -176,16 +176,12 @@ Der Bot akzeptiert derzeit:
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Aktuellen Projektordner setzen. Falls der Ordner nicht existiert, erstellt die App ihn und markiert ihn als vertrauenswürdig. Wenn er bereits existiert und noch nicht vertraut ist, fragt die App nach einer Bestätigung.</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>Provider für neue Sessions wählen. Die Auswahl wird pro Bot und Chat gespeichert, bis du sie änderst.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Eine neue Session für das aktuelle Projekt erstellen. Wenn du keinen Namen angibst, verwendet der Bot die echte Session-ID. Fehlen Provider, Projekt oder branch, führt dich der Bot durch den fehlenden Schritt.</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>Aktuellen Projektordner setzen. Falls der Ordner nicht existiert, erstellt die App ihn und markiert ihn als vertrauenswürdig. Wenn er bereits existiert und noch nicht vertraut ist, fragt die App nach einer Bestätigung.</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -194,6 +190,14 @@ Der Bot akzeptiert derzeit:
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Eine branch mit `<origin_branch>` als Quellkandidaten vorbereiten oder wechseln. Für beide Formen bietet der Bot anschließend nur die Quelloptionen an, die tatsächlich existieren: `local/<branch>` und `origin/<branch>`. Wenn nur eine davon existiert, wird nur diese angezeigt. Wenn keine existiert, meldet der Bot, dass die branch-Quelle fehlt.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>Die aktive Session für den aktuellen Bot und Chat anzeigen.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>Eine neue Session für das aktuelle Projekt erstellen. Wenn du keinen Namen angibst, verwendet der Bot die echte Session-ID. Fehlen Provider, Projekt oder branch, führt dich der Bot durch den fehlenden Schritt.</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -208,12 +212,8 @@ Der Bot akzeptiert derzeit:
     <td>Zu einer bestimmten Session per ID wechseln. Wenn du eine lokale CLI-Session auswählst, importiert der Bot sie und setzt dort fort.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>Die aktive Session für den aktuellen Bot und Chat anzeigen.</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>Den aktuellen Agentenlauf für das aktuelle Projekt abbrechen. Wenn Fragen in der Queue warten, fragt der Bot, ob sie weiter verarbeitet werden sollen.</td>
+    <td width="250"><code>/compact</code></td>
+    <td>Die aktive Session compacten und den Provider bitten, den aktuellen Gesprächszustand zu verdichten.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -222,6 +222,10 @@ Der Bot akzeptiert derzeit:
   <tr>
     <td width="250"><code>/push</code></td>
     <td>`origin <branch>` für die aktuelle aktive Session pushen. Der Bot fragt vor dem Push nach einer Bestätigung.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>Den aktuellen Agentenlauf für das aktuelle Projekt abbrechen. Wenn Fragen in der Queue warten, fragt der Bot, ob sie weiter verarbeitet werden sollen.</td>
   </tr>
 </table>
 

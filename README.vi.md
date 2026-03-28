@@ -170,16 +170,12 @@ Lưu ý:
 
 <table>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Đặt thư mục project hiện tại. Nếu thư mục chưa tồn tại, app sẽ tạo và đánh dấu là trusted. Nếu đã tồn tại nhưng vẫn untrusted, app sẽ yêu cầu xác nhận trust rõ ràng.</td>
-  </tr>
-  <tr>
     <td width="250"><code>/provider</code></td>
     <td>Chọn provider cho các session mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu provider, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
+    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td>Đặt thư mục project hiện tại. Nếu thư mục chưa tồn tại, app sẽ tạo và đánh dấu là trusted. Nếu đã tồn tại nhưng vẫn untrusted, app sẽ yêu cầu xác nhận trust rõ ràng.</td>
   </tr>
   <tr>
     <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
@@ -188,6 +184,14 @@ Lưu ý:
   <tr>
     <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Chuẩn bị hoặc chuyển branch bằng cách dùng `<origin_branch>` làm source candidate. Với cả hai dạng, bot chỉ đưa ra các source choice thật sự tồn tại: `local/<branch>` và `origin/<branch>`. Nếu chỉ có một lựa chọn thì chỉ hiện lựa chọn đó. Nếu không có lựa chọn nào, bot sẽ báo thiếu branch source.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/current</code></td>
+    <td>Hiển thị active session cho bot và chat hiện tại.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu provider, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>
   <tr>
     <td width="250"><code>/switch</code></td>
@@ -202,12 +206,8 @@ Lưu ý:
     <td>Chuyển sang một session cụ thể bằng ID. Nếu bạn chọn local CLI session, bot sẽ import nó và tiếp tục từ đó.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>Hiển thị active session cho bot và chat hiện tại.</td>
-  </tr>
-  <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>Hủy agent run hiện tại của project hiện tại. Nếu còn queued questions chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
+    <td width="250"><code>/compact</code></td>
+    <td>Thu gọn session đang hoạt động và yêu cầu provider nén trạng thái hội thoại hiện tại.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>
@@ -216,6 +216,10 @@ Lưu ý:
   <tr>
     <td width="250"><code>/push</code></td>
     <td>Push `origin <branch>` cho active session hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>/abort</code></td>
+    <td>Hủy agent run hiện tại của project hiện tại. Nếu còn queued questions chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
   </tr>
 </table>
 
