@@ -326,7 +326,7 @@ def test_prepare_branch_from_origin_sets_upstream_for_new_branch(tmp_path: Path)
 
     assert result.success is True
     assert manager.current_branch(project) == "feature-upstream"
-    assert manager.branch_upstream(project, "feature-upstream") == "origin/main"
+    assert manager.branch_upstream(project, "feature-upstream") == "origin/feature-upstream"
 
 
 def test_prepare_branch_from_local_copies_source_upstream(tmp_path: Path):
@@ -355,7 +355,7 @@ def test_prepare_branch_from_local_copies_source_upstream(tmp_path: Path):
 
     assert result.success is True
     assert manager.current_branch(project) == "feature-local-upstream"
-    assert manager.branch_upstream(project, "feature-local-upstream") == "origin/main"
+    assert manager.branch_upstream(project, "feature-local-upstream") == "origin/feature-local-upstream"
 
 
 def test_remote_branch_exists_returns_false_for_deleted_remote_branch(tmp_path: Path):
