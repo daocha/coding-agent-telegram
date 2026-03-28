@@ -504,7 +504,8 @@ class SessionRuntime:
         *,
         provider: str,
     ) -> None:
-        assistant_text = _scrub_secrets(assistant_text)
+        if self.cfg.enable_secret_scrub_filter:
+            assistant_text = _scrub_secrets(assistant_text)
         segments = split_assistant_output(assistant_text)
         if not segments:
             return

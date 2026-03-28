@@ -404,6 +404,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         snapshot_text_file_max_bytes=200000,
         max_telegram_message_length=3000,
         enable_sensitive_diff_filter=True,
+        enable_secret_scrub_filter=True,
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
         app_internal_root=tmp_path / ".coding-agent-telegram",
@@ -2693,22 +2694,14 @@ def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Pat
 
         assert len(runner.resume_calls) == 2
         assert runner.resume_calls[0]["user_message"] == "first question"
-        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[1]["user_message"]
-        queue_file_path = next(
-            Path(line.strip())
-            for line in runner.resume_calls[1]["user_message"].splitlines()
-            if line.strip().startswith("/")
-        )
-        assert queue_file_path.is_absolute()
-        assert queue_file_path.name == "sess_queue-queue-0.txt"
-        assert queue_file_path.exists() is False
+        assert runner.resume_calls[1]["user_message"] == "second question"
         assert any("Working on queued questions:" in message for _, message, _, _ in bot.messages)
         assert any("1. second question" in message for _, message, _, _ in bot.messages)
 
     asyncio.run(exercise())
 
 
-def test_new_questions_create_next_queue_file_while_previous_queue_file_is_processing(tmp_path: Path):
+def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_queue(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
     runner = BlockingRunner()
@@ -2733,35 +2726,50 @@ def test_new_questions_create_next_queue_file_while_previous_queue_file_is_proce
         await router.handle_message(second_update, SimpleNamespace(args=[], bot=bot))
         await router.handle_message(third_update, SimpleNamespace(args=[], bot=bot))
         runner.release_next()
+        await first_task
+
+        prompt_messages = [entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]
+        assert len(prompt_messages) == 1
+        keyboard = prompt_messages[0][3]
+        assert keyboard is not None
+        buttons = keyboard.inline_keyboard[0]
+        assert buttons[0].callback_data == "queuebatch:group"
+        assert buttons[1].callback_data == "queuebatch:single"
+
+        answers = []
+        edited = []
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(data="queuebatch:group", answer=None, edit_message_text=None),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        callback_update.callback_query.answer = fake_answer
+        callback_update.callback_query.edit_message_text = fake_edit
+
+        callback_task = asyncio.create_task(router.handle_queue_batch_callback(callback_update, SimpleNamespace(args=[], bot=bot)))
         started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
         assert started_second is True
-
         await router.handle_message(fourth_update, SimpleNamespace(args=[], bot=bot))
         runner.release_next()
+        await callback_task
         started_third = await asyncio.to_thread(runner.wait_started, 3, 1.0)
         assert started_third is True
         runner.release_next()
-        await first_task
 
         assert len(runner.resume_calls) == 3
         assert runner.resume_calls[0]["user_message"] == "first question"
-        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[1]["user_message"]
-        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[2]["user_message"]
-        first_queue_file = next(
-            Path(line.strip())
-            for line in runner.resume_calls[1]["user_message"].splitlines()
-            if line.strip().startswith("/")
-        )
-        second_queue_file = next(
-            Path(line.strip())
-            for line in runner.resume_calls[2]["user_message"].splitlines()
-            if line.strip().startswith("/")
-        )
-        assert first_queue_file != second_queue_file
-        assert first_queue_file.name == "sess_queue-queue-0.txt"
-        assert second_queue_file.name == "sess_queue-queue-1.txt"
-        assert first_queue_file.exists() is False
-        assert second_queue_file.exists() is False
+        assert "Answer the following queued user questions in order." in runner.resume_calls[1]["user_message"]
+        assert "[Question 1]\ntwo\n[End Question 1]" in runner.resume_calls[1]["user_message"]
+        assert "[Question 2]\nthree\n[End Question 2]" in runner.resume_calls[1]["user_message"]
+        assert runner.resume_calls[2]["user_message"] == "four four four four four four four"
+        assert answers == ["answered"]
+        assert edited == ["Processing the queued questions as one batch."]
         queued_notices = [message for _, message, _, _ in bot.messages if "Working on queued questions:" in message]
         assert any("1. two" in message and "2. three" in message for message in queued_notices)
         assert any("1. four four four four four four four" in message for message in queued_notices)
@@ -2880,7 +2888,7 @@ def test_aborted_run_yes_callback_continues_pending_queue(tmp_path: Path):
         assert answers == ["answered"]
         assert edited == ["Continuing with the pending queued questions."]
         assert len(runner.resume_calls) == 2
-        assert "Queued-question handoff. Do not answer this handoff message itself." in runner.resume_calls[1]["user_message"]
+        assert runner.resume_calls[1]["user_message"] == "second question"
         assert any("Working on queued questions:" in message for _, message, _, _ in bot.messages)
 
     asyncio.run(exercise())
