@@ -32,19 +32,19 @@
    <td border="0">
 
    ## ✨ Pourquoi l’utiliser
-- ✅ Léger : pas de framework lourd, transparence totale
-- ✅ Multi-bot : plusieurs chats, plusieurs sessions
-- ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
-- ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
-- ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
-- ✅ Prend en charge le texte et les images
+  - ✅ Léger : pas de framework lourd, transparence totale
+  - ✅ Multi-bot : plusieurs chats, plusieurs sessions
+  - ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
+  - ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
+  - ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
+  - ✅ Prend en charge le texte et les images
 
    ## 🔁 Changement fluide entre appareils et sessions
 
-Démarrez une session dans Telegram, puis reprenez la même session Codex/Copilot CLI plus tard sur votre ordinateur sans friction. Avec `/switch`, vous pouvez aussi repasser simplement de Telegram à la ligne de commande.
-
-- Utilisez `/switch` pour reprendre une session locale
-- Les sessions historiques sont également prises en charge
+  Démarrez une session dans Telegram, puis reprenez la même session Codex/Copilot CLI plus tard sur votre ordinateur sans friction. Avec `/switch`, vous pouvez aussi repasser simplement de Telegram à la ligne de commande.
+  
+  - Utilisez `/switch` pour reprendre une session locale
+  - Les sessions historiques sont également prises en charge
 
    ## 🛠️ Flux local typique
    ```bash
