@@ -23,20 +23,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.release.tag_name }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
       - name: Verify PyPI version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          python -m pip install setuptools-scm
+          python -m pip install setuptools-scm packaging
           VERSION="$(python -m setuptools_scm)"
           echo "Derived version: $VERSION"
-          if [[ "$VERSION" == *".dev"* ]]; then
-            echo "PyPI publishing does not allow .dev versions." >&2
-            exit 1
-          fi
+          VERSION="$VERSION" RELEASE_TAG="$RELEASE_TAG" python - <<'PY'
+          import os
+          from packaging.version import Version
+
+          version = Version(os.environ["VERSION"])
+          release_tag = os.environ["RELEASE_TAG"].strip()
+          expected_version = release_tag[1:] if release_tag.startswith("v") else release_tag
+
+          if str(version) != expected_version:
+              raise SystemExit(
+                  f"Derived version {version} does not match release tag {release_tag}."
+              )
+          if version.is_devrelease:
+              raise SystemExit("PyPI publishing does not allow .dev versions.")
+          if version.pre and version.pre[0] != "rc":
+              raise SystemExit("PyPI publishing only allows final releases or rc prereleases.")
+          PY
 
       - name: Run tests
         run: |
