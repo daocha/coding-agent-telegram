@@ -1696,7 +1696,7 @@ def test_switch_imports_native_session_into_state_json(tmp_path: Path, monkeypat
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_native_codex"
     assert state["sessions"]["sess_native_codex"]["name"] == "Native codex review"
-    assert "Source: native codex" in bot.messages[-1][1]
+    assert "Source: native CLI session" in bot.messages[-1][1]
     assert "Imported into state.json." in bot.messages[-1][1]
 
 

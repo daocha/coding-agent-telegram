@@ -76,6 +76,7 @@ cd coding-agent-telegram
 What `startup.sh` does:
 
 - creates `~/.coding-agent-telegram/.env_coding_agent_telegram` from `src/coding_agent_telegram/resources/.env.example` if neither that file nor `./.env_coding_agent_telegram` exists
+- when that env file is created for the first time, initializes `APP_LOCALE` from the system language and tells you where to change it later
 - creates the state files if missing
 - creates `.venv` if missing
 - installs the package into the virtual environment
@@ -109,6 +110,7 @@ coding-agent-telegram
 What happens on first run:
 
 - the command creates `~/.coding-agent-telegram/.env_coding_agent_telegram` if neither that file nor `./.env_coding_agent_telegram` exists
+- when that env file is created for the first time, `APP_LOCALE` is initialized from the system language and the command tells you where to change it later
 - it tells you which required fields to update
 - after updating the env file, run `coding-agent-telegram` again
 
@@ -177,6 +179,13 @@ These are the main fields in the env file the app uses:
 - `LOG_LEVEL`
   Python app log level.
   Default: `INFO`
+
+- `APP_LOCALE`
+  Locale used for shared bot messages and Telegram command descriptions.
+  Default: `en`
+  Supported values: `en`, `de`, `fr`, `ja`, `ko`, `nl`, `th`, `vi`, `zh-CN`, `zh-HK`, `zh-TW`
+  When a brand-new env file is created from the example, this value is initialized from the system language.
+  To switch languages later, edit `APP_LOCALE` in the env file the app is using.
 
 ### Agent Configuration
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.session_runtime import PhotoAttachmentError
 from coding_agent_telegram.telegram_sender import send_text
 
 from .base import require_allowed_chat
@@ -20,7 +21,7 @@ class MessageCommandMixin:
             await send_text(
                 update,
                 context,
-                f"Question queued as Q{question_number}. It will run after the current agent task finishes.",
+                self._t(update, "message.question_queued", question_number=question_number),
             )
             return
         self._store_pending_action(
@@ -46,14 +47,15 @@ class MessageCommandMixin:
             return
 
         if session.get("provider", "codex") != "codex":
-            await send_text(update, context, "Photo attachments are currently supported only for codex sessions.")
+            await send_text(update, context, self._t(update, "message.photo_only_codex"))
             return
 
         caption = update.message.caption or ""
         try:
             attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
-        except ValueError as exc:
-            await send_text(update, context, str(exc))
+        except PhotoAttachmentError as exc:
+            error_text = self._t(update, "runtime.photo_too_large") if exc.code == "photo_too_large" else str(exc)
+            await send_text(update, context, error_text)
             return
         prompt = self.photo_attachments.build_prompt(attachment_path, project_path, caption)
         await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
@@ -63,5 +65,5 @@ class MessageCommandMixin:
         await send_text(
             update,
             context,
-            "Unsupported message type.\nThis bot currently accepts only text messages and photos.",
+            self._t(update, "message.unsupported_message_type"),
         )

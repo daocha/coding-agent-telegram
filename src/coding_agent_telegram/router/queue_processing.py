@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.telegram_sender import send_text
 
 
@@ -96,8 +97,8 @@ class QueueProcessingMixin:
             return stripped[:max_chars]
         return f"{stripped[: max_chars - 3]}..."
 
-    def _queued_batch_notice(self, queued_messages: list[str]) -> str:
-        lines = ["Working on queued questions:"]
+    def _queued_batch_notice(self, chat_id: int, queued_messages: list[str]) -> str:
+        lines = [translate(self._chat_locale(chat_id), "queue.working_on_queued")]
         for index, message in enumerate(queued_messages, start=1):
             lines.append(f"{index}. {self._preview_queued_message(message)}")
         return "\n".join(lines)
@@ -107,7 +108,7 @@ class QueueProcessingMixin:
 
     def _run_result_was_aborted(self, result: object) -> bool:
         error_message = getattr(result, "error_message", None)
-        return isinstance(error_message, str) and error_message.strip() == "Agent run aborted by /abort."
+        return isinstance(error_message, str) and error_message.strip().startswith("Agent run aborted by")
 
     def _has_pending_queue_files(self, chat_id: int) -> bool:
         queue = self._chat_message_queue_files.get(chat_id)
@@ -118,13 +119,14 @@ class QueueProcessingMixin:
             return
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+        locale = self._chat_locale(chat_id)
         await context.bot.send_message(
             chat_id=chat_id,
-            text="The previous run was aborted. Do you want to continue processing the pending queued questions?",
+            text=translate(locale, "queue.continue_prompt"),
             reply_markup=InlineKeyboardMarkup(
                 [[
-                    InlineKeyboardButton("Yes", callback_data="queuecontinue:yes"),
-                    InlineKeyboardButton("No", callback_data="queuecontinue:no"),
+                    InlineKeyboardButton(translate(locale, "queue.button_yes"), callback_data="queuecontinue:yes"),
+                    InlineKeyboardButton(translate(locale, "queue.button_no"), callback_data="queuecontinue:no"),
                 ]]
             ),
         )
@@ -139,19 +141,20 @@ class QueueProcessingMixin:
             return
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+        locale = self._chat_locale(chat_id)
         lines = [
-            "Multiple queued questions are ready.",
+            translate(locale, "queue.multiple_ready"),
             "",
-            "Here are the queued questions:",
+            translate(locale, "queue.here_are_questions"),
         ]
         for index, message in enumerate(queued_messages, start=1):
             lines.append(f"Q{index}: {self._preview_queued_message(message)}")
         lines.extend(
             [
                 "",
-                "Choose how to process them.",
-                "Group questions only when they are closely related and each question is reasonably short.",
-                "Combining too many questions can make the prompt too large or reduce the agent's focus.",
+                translate(locale, "queue.choose_how"),
+                translate(locale, "queue.group_guidance_1"),
+                translate(locale, "queue.group_guidance_2"),
             ]
         )
         await context.bot.send_message(
@@ -159,8 +162,8 @@ class QueueProcessingMixin:
             text="\n".join(lines),
             reply_markup=InlineKeyboardMarkup(
                 [[
-                    InlineKeyboardButton("Group the questions", callback_data="queuebatch:group"),
-                    InlineKeyboardButton("Process one by one", callback_data="queuebatch:single"),
+                    InlineKeyboardButton(translate(locale, "queue.button_group"), callback_data="queuebatch:group"),
+                    InlineKeyboardButton(translate(locale, "queue.button_single"), callback_data="queuebatch:single"),
                 ]]
             ),
         )
@@ -192,7 +195,7 @@ class QueueProcessingMixin:
         self._chat_processing_queue_files[chat_id] = queue_file
         self._queue_lock_path(queue_file).write_text("", encoding="utf-8")
         current_batch = queued_messages if grouped or len(queued_messages) <= 1 else queued_messages[:1]
-        queued_notice = self._queued_batch_notice(current_batch)
+        queued_notice = self._queued_batch_notice(chat_id, current_batch)
         queued_update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=chat_id, type="private"),
             message=SimpleNamespace(text=queued_notice, photo=None, caption=None),

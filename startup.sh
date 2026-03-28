@@ -51,9 +51,18 @@ fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   if [[ -f "$ENV_TEMPLATE_FILE" ]]; then
-    mkdir -p "$(dirname "$ENV_FILE")"
-    cp "$ENV_TEMPLATE_FILE" "$ENV_FILE"
-    echo "Created $ENV_FILE from $ENV_TEMPLATE_FILE."
+    ENV_FILE_TARGET="$ENV_FILE" ENV_TEMPLATE_SOURCE="$ENV_TEMPLATE_FILE" PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY'
+from pathlib import Path
+import os
+from coding_agent_telegram.config import create_initial_env_file
+from coding_agent_telegram.i18n import translate
+
+env_path = Path(os.environ["ENV_FILE_TARGET"]).expanduser()
+template_path = Path(os.environ["ENV_TEMPLATE_SOURCE"]).expanduser()
+app_locale = create_initial_env_file(env_path, template_path)
+print(translate(app_locale, "bootstrap.env_created_locale_line", env_path=env_path, app_locale=app_locale))
+print(translate(app_locale, "bootstrap.env_created_change_line", env_path=env_path))
+PY
   else
     echo "Error: $ENV_FILE is missing and $ENV_TEMPLATE_FILE was not found." >&2
     exit 1

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import importlib.resources
 import logging
 import sys
 from pathlib import Path
@@ -11,7 +10,8 @@ from typing import Sequence
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.bot import build_application, default_bot_commands, initialize_bot_commands
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
-from coding_agent_telegram.config import load_config, resolve_env_file_path
+from coding_agent_telegram.config import create_initial_env_file, load_config, resolve_env_file_path
+from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.logging_utils import setup_logging
 from coding_agent_telegram.session_store import SessionStore
 
@@ -20,15 +20,12 @@ logger = logging.getLogger(__name__)
 BOT_ID_HASH_PREFIX_LENGTH = 12
 
 
-def _ensure_env_file() -> Path:
+def _ensure_env_file() -> tuple[Path, str | None]:
     env_path = resolve_env_file_path()
     env_path.parent.mkdir(parents=True, exist_ok=True)
     if not env_path.exists():
-        template = importlib.resources.files("coding_agent_telegram").joinpath("resources/.env.example").read_text(
-            encoding="utf-8"
-        )
-        env_path.write_text(template, encoding="utf-8")
-    return env_path
+        return env_path, create_initial_env_file(env_path)
+    return env_path, None
 
 
 def _bot_id_from_token(token: str) -> str:
@@ -53,10 +50,11 @@ async def _run_polling_apps(apps: Sequence) -> None:
                 app,
                 enable_commit_command=enable_commit_command,
                 allowed_chat_ids=allowed_chat_ids,
+                locale=app.bot_data.get("locale", "en"),
             )
             logger.info(
                 "Registered %d Telegram commands for %d allowed chat(s) on @%s",
-                len(default_bot_commands(enable_commit_command=enable_commit_command)),
+                len(default_bot_commands(enable_commit_command=enable_commit_command, locale=app.bot_data.get("locale", "en"))),
                 len(allowed_chat_ids),
                 me.username or "unknown",
             )
@@ -84,6 +82,7 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
         app = build_application(token, router, allowed_chat_ids=cfg.allowed_chat_ids)
         app.bot_data["enable_commit_command"] = cfg.enable_commit_command
         app.bot_data["allowed_chat_ids"] = set(cfg.allowed_chat_ids)
+        app.bot_data["locale"] = cfg.locale
         app.bot_data["max_telegram_message_length"] = cfg.max_telegram_message_length
         apps.append(app)
 
@@ -91,7 +90,25 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
 
 
 def main() -> None:
-    env_path = _ensure_env_file()
+    env_path, created_locale = _ensure_env_file()
+    if created_locale is not None:
+        print(
+            translate(
+                created_locale,
+                "bootstrap.env_created_locale_line",
+                env_path=env_path,
+                app_locale=created_locale,
+            ),
+            file=sys.stderr,
+        )
+        print(
+            translate(
+                created_locale,
+                "bootstrap.env_created_change_line",
+                env_path=env_path,
+            ),
+            file=sys.stderr,
+        )
     try:
         cfg = load_config(env_path)
     except ValueError as exc:

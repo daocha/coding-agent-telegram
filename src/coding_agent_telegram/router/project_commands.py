@@ -248,8 +248,8 @@ class ProjectCommandMixin:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Yes", callback_data=f"trustproject:yes:{folder}"),
-                        InlineKeyboardButton("No", callback_data=f"trustproject:no:{folder}"),
+                        InlineKeyboardButton(self._t(update, "queue.button_yes"), callback_data=f"trustproject:yes:{folder}"),
+                        InlineKeyboardButton(self._t(update, "queue.button_no"), callback_data=f"trustproject:no:{folder}"),
                     ]
                 ]
             )

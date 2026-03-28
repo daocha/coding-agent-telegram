@@ -75,7 +75,7 @@ class GitCommandMixin:
         if await self._notify_if_current_project_busy(update, context):
             return
         if context.args:
-            await send_text(update, context, "Usage: /push")
+            await send_text(update, context, self._t(update, "git.usage_push"))
             return
 
         session, project_path = await self._active_session_project_or_notify(
@@ -88,20 +88,20 @@ class GitCommandMixin:
 
         branch_name = session.get("branch_name") or self.git.current_branch(project_path)
         if not branch_name:
-            await send_text(update, context, "⚠️ Could not determine the branch for the current session.")
+            await send_text(update, context, self._t(update, "git.branch_unknown"))
             return
 
         confirm_markup = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Confirm push", callback_data="push:confirm"),
-                    InlineKeyboardButton("Cancel", callback_data="push:cancel"),
+                    InlineKeyboardButton(self._t(update, "git.push_confirm_button"), callback_data="push:confirm"),
+                    InlineKeyboardButton(self._t(update, "git.cancel_button"), callback_data="push:cancel"),
                 ]
             ]
         )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"Push branch `{branch_name}` to `origin`?",
+            text=self._t(update, "git.push_confirm_prompt", branch_name=branch_name),
             parse_mode="Markdown",
             reply_markup=confirm_markup,
         )
@@ -114,7 +114,7 @@ class GitCommandMixin:
 
         action = (query.data or "").strip()
         if action == "push:cancel":
-            await query.edit_message_text("Push cancelled.")
+            await query.edit_message_text(self._t(update, "git.push_cancelled"))
             return
         if action != "push:confirm":
             return
@@ -129,18 +129,21 @@ class GitCommandMixin:
 
         branch_name = session.get("branch_name") or self.git.current_branch(project_path)
         if not branch_name:
-            await query.edit_message_text("⚠️ Could not determine the branch for the current session.")
+            await query.edit_message_text(self._t(update, "git.branch_unknown"))
             return
 
         current_branch = self.git.current_branch(project_path)
         if current_branch != branch_name:
             checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
             if not checkout.success:
-                await query.edit_message_text(f"Push cancelled. Failed to switch to `{branch_name}` first.", parse_mode="Markdown")
+                await query.edit_message_text(
+                    self._t(update, "git.push_cancelled_checkout_failed", branch_name=branch_name),
+                    parse_mode="Markdown",
+                )
                 await send_html_text(update, context, self._bash_block(self._format_git_response([(["checkout", branch_name], checkout)], [])))
                 return
 
-        await query.edit_message_text(f"Pushing branch `{branch_name}` to `origin`...", parse_mode="Markdown")
+        await query.edit_message_text(self._t(update, "git.push_in_progress", branch_name=branch_name), parse_mode="Markdown")
         result = await asyncio.to_thread(self.git.push_branch, project_path, branch_name)
         await send_html_text(
             update,
