@@ -14,8 +14,8 @@
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-HK.md">繁體中文（香港）</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-TW.md">繁體中文（台灣）</a>
   </p>
-  <p><strong>Léger, multi-bots, multi-sessions, multitâche, agent IA de code 24/7</strong></p>
-  <p>Contrôlez votre agent IA local depuis n’importe où avec Telegram.</p>
+  <p><strong>Léger, multi-bots, multi-sessions, multitâche, agent de code IA 24/7</strong></p>
+  <p>Contrôlez votre agent de code IA local depuis n’importe où avec Telegram.</p>
   <p>
     <img src="https://img.shields.io/badge/stability-experimental-orange.svg" alt="Experimental" />
     <a href="https://opensource.org/licenses/MIT">
@@ -30,35 +30,35 @@
 <table border="0">
    <tr>
    <td border="0">
-   
+
    ## ✨ Pourquoi l’utiliser
-   - ✅ Lightweight: no heavy frameworks, full transparency
-   - ✅ Multi-bot: multiple chats, multiple sessions
-   - ✅ Easily review files changed by agent in code block
-   - ✅ Vérification facile : réponses de l’agent et fichiers modifiés directement en bloc de code
-   - ✅ Queue follow-up messages while the agent is working
-   - ✅ Accepte le texte et les images
+- ✅ Léger : pas de framework lourd, transparence totale
+- ✅ Multi-bot : plusieurs chats, plusieurs sessions
+- ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
+- ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
+- ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
+- ✅ Prend en charge le texte et les images
 
    ## 🔁 Changement fluide entre appareils et sessions
-   
-   Commencez une session sur Telegram, reprenez ensuite la même session Codex/Copilot CLI sur votre ordinateur et revenez sans friction.
-   
-   - Use `/switch` in Telegram to continue a local session
-   - Prend aussi en charge les sessions historiques
+
+Démarrez une session dans Telegram, puis reprenez la même session Codex/Copilot CLI plus tard sur votre ordinateur sans friction. Avec `/switch`, vous pouvez aussi repasser simplement de Telegram à la ligne de commande.
+
+- Utilisez `/switch` pour reprendre une session locale
+- Les sessions historiques sont également prises en charge
 
    ## 🛠️ Flux local typique
    ```bash
    coding-agent-telegram # or run ./startup.sh
    ```
-   
-   ##### In Telegram:
-   
+
+   ##### Dans Telegram :
+
    ```text
    /project my-project
    /new
    Fix the failing API test in the current project
    ```
-   
+
    </td>
    <td width="350" border="0">
    <img src="https://github.com/user-attachments/assets/cecb6de6-ecf0-4bf4-af70-b98071c68885" />
@@ -66,7 +66,7 @@
    </tr>
 </table>
 
-→ Setup with one-liner: 
+→ Installation en une ligne : 
 ```
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
@@ -74,50 +74,47 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 <table>
    <tr>
    <td width="50%" valign="top">
-      
+
    ## 🔐 Sécurité
-      
-   - Private chat allowlist with `ALLOWED_CHAT_IDS`
-   - One active agent per project to reduce conflicting writes
-   - Sensitive file diffs are hidden
-   - API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
-   - Runtime app data stays under `~/.coding-agent-telegram`
-   - Existing folders can require trust before mutating git operations
-   - Server makes `NO hidden external call`. Everything is under your control.      
+
+- Liste blanche des chats privés via `ALLOWED_CHAT_IDS`
+- Un seul agent actif par projet pour réduire les écritures concurrentes
+- Les diffs de fichiers sensibles sont masqués
+- Les clés API, tokens, valeurs `.env`, certificats, clés SSH et autres contenus sensibles similaires sont masqués avant l’envoi vers Telegram
+- Les données d’exécution restent sous `~/.coding-agent-telegram`
+- Les dossiers existants peuvent exiger une confirmation de confiance avant les opérations Git modifiantes
+- Aucun appel externe caché : vous gardez le contrôle
    </td>
    <td width="50%" valign="top">
-      
+
    ## ✅ Prérequis
 
-   Avant de démarrer le serveur, assurez-vous d’avoir :
-   
-   - Python 3.9 or newer
-   - Telegram bot token created from _@BotFather_
-   - Your Telegram chat ID
-   - Codex CLI and/or Copilot CLI installed locally
-   - [Codex CLI install](https://developers.openai.com/codex/cli)
-   - [Copilot CLI install](https://github.com/features/copilot/cli)
+Avant de démarrer le serveur, assurez-vous d’avoir :
+
+- Python 3.9 ou plus récent
+- Un token de bot Telegram créé via _@BotFather_
+- Votre identifiant de chat Telegram
+- Codex CLI et/ou Copilot CLI installés localement
+- [Installation Codex CLI](https://developers.openai.com/codex/cli)
+- [Installation Copilot CLI](https://github.com/features/copilot/cli)
    </td>
    </tr>
 </table>
 
 ## 🚀 Démarrage rapide
 
-### Option A : démarrer avec un script en une ligne
-
+### Option A : Script bootstrap en une ligne
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B : installer depuis PyPI avec `pip`
-
+### Option B : Installation depuis PyPI avec `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C : exécuter depuis un dépôt cloné
-
+### Option C : Exécution depuis un dépôt cloné
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
@@ -125,9 +122,8 @@ cd coding-agent-telegram
 ```
 
 ### Démarrer le serveur du bot
-##### Au premier lancement, l’application crée le fichier env et indique quoi remplir.
-##### Après avoir mis à jour le fichier d’environnement, relancez :
-
+##### Au premier lancement, l’application crée le fichier env et vous indique quels champs remplir.
+##### Après avoir mis à jour le fichier env, relancez :
 ```bash
 # if you follow Option A or Option B, then run
 coding-agent-telegram
@@ -138,97 +134,91 @@ coding-agent-telegram
 
 ## 🔑 Configuration Telegram
 
-### Obtenir un token de bot
+### Obtenir un Bot Token
 
-1. Open Telegram and start a chat with `@BotFather`.
-2. Send `/newbot`.
-3. Follow the prompts to choose:
-   - a display name
-   - a bot username ending in `bot`
-4. BotFather will return an HTTP API token.
-5. Put that token into `TELEGRAM_BOT_TOKENS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`.
+1. Ouvrez Telegram et démarrez une conversation avec `@BotFather`.
+2. Envoyez `/newbot`.
+3. Suivez les étapes pour choisir :
+   - un nom d'affichage
+   - un nom d'utilisateur de bot se terminant par `bot`
+4. BotFather vous renverra un token HTTP API.
+5. Ajoutez ce token dans `TELEGRAM_BOT_TOKENS` dans `~/.coding-agent-telegram/.env_coding_agent_telegram`.
 
-### Obtenir votre ID de chat
+### Obtenir votre Chat ID
 
-The most reliable way is to use Telegram's `getUpdates` API with your own bot token.
+La méthode la plus fiable consiste à utiliser l'API Telegram `getUpdates` avec votre propre bot token.
 
-1. Start a chat with your bot and send it a message such as `/start`.
-2. Open this URL in your browser, replacing `<BOT_TOKEN>`:
+1. Démarrez une conversation avec votre bot et envoyez un message comme `/start`.
+2. Ouvrez cette URL dans votre navigateur en remplaçant `<BOT_TOKEN>` :
 
 ```text
 https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 ```
 
-3. Find the `chat` object in the JSON response.
-4. Copy the numeric `id` field from that object.
-5. Put that value into `ALLOWED_CHAT_IDS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`
+3. Recherchez l'objet `chat` dans la réponse JSON.
+4. Copiez la valeur numérique du champ `id`.
+5. Ajoutez cette valeur dans `ALLOWED_CHAT_IDS` dans `~/.coding-agent-telegram/.env_coding_agent_telegram`.
 
 Remarques :
 
-- For private chats, the chat ID is usually a positive integer.
-- If `getUpdates` returns an empty result, send another message to the bot and try again.
+- Dans une conversation privée, le chat ID est généralement un entier positif.
+- Si `getUpdates` renvoie une réponse vide, envoyez un autre message au bot puis réessayez.
 
 ## 📨 Types de messages pris en charge
-
-Le bot accepte actuellement :
-
-- Messages texte
-- Photos
-- Codex et Copilot prennent actuellement en charge uniquement le texte et les images, pas la vidéo.
 
 ## 🤖 Commandes Telegram
 
 <table>
   <tr>
     <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If it already exists and is still untrusted, the app asks you to trust it explicitly.</td>
+    <td>Définir le dossier de projet courant. Si le dossier n’existe pas, l’app le crée et le marque trusted. S’il existe déjà mais reste untrusted, l’app vous demande une confirmation.</td>
   </tr>
   <tr>
-    <td><code>/provider</code></td>
-    <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
+    <td width="250"><code>/provider</code></td>
+    <td>Choisir le provider pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>
   <tr>
-    <td><code>/new [session_name]</code></td>
-    <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si provider, projet ou branch manque, le bot vous guide.</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch for the current project. If the branch already exists, the bot treats that branch as the source candidate. Otherwise it uses the repository default branch as the source candidate.</td>
+    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td>Préparer ou changer une branch pour le projet courant. Si la branch existe déjà, le bot la traite comme source candidate. Sinon il utilise la branch par défaut du dépôt.</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch using <code>&lt;origin_branch&gt;</code> as the source candidate. <br /> For both forms, the bot then offers the source choices that actually exist: <code>local/&lt;branch&gt;</code> <code>origin/&lt;branch&gt;</code>
-       <br />If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.</td>
+    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>Préparer ou changer une branch en utilisant `<origin_branch>` comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : `local/<branch>` et `origin/<branch>`. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
   </tr>
   <tr>
-    <td><code>/switch</code></td>
-    <td>Show the latest sessions, newest first. The list includes both bot-managed sessions and local Codex/Copilot CLI sessions for the current project.</td>
+    <td width="250"><code>/switch</code></td>
+    <td>Afficher les sessions les plus récentes, de la plus récente à la plus ancienne. La liste inclut les sessions gérées par le bot et les sessions locales Codex/Copilot CLI du projet courant.</td>
   </tr>
   <tr>
-    <td><code>/switch page &lt;number&gt;</code></td>
-    <td>Show another page of stored sessions.</td>
+    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td>Afficher une autre page des sessions enregistrées.</td>
   </tr>
   <tr>
-    <td><code>/switch &lt;session_id&gt;</code></td>
-    <td>Switch to a specific session by ID. If you choose a local CLI session, the bot imports it and continues from there.</td>
+    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td>Basculer vers une session précise via son ID. Si vous choisissez une session CLI locale, le bot l’importe et reprend à partir d’elle.</td>
   </tr>
   <tr>
-    <td><code>/current</code></td>
-    <td>Show the active session for the current bot and chat.</td>
+    <td width="250"><code>/current</code></td>
+    <td>Afficher la session active pour le bot et le chat courants.</td>
   </tr>
   <tr>
-    <td><code>/abort</code></td>
-    <td>Abort the current agent run for the current project. If queued questions are waiting, the bot asks whether to continue them.</td>
+    <td width="250"><code>/abort</code></td>
+    <td>Annuler l’exécution d’agent en cours pour le projet courant. Si des questions attendent dans la file, le bot demande si elles doivent continuer.</td>
   </tr>
   <tr>
-    <td><code>/commit &lt;git commands&gt;</code></td>
-    <td>Run validated git commit-related commands inside the active session project. Available only when <code>ENABLE_COMMIT_COMMAND=true</code>. Mutating git commands require a trusted project.</td>
+    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td>Exécuter des commandes liées à `git commit` validées dans le projet de la session active. Disponible uniquement si `ENABLE_COMMIT_COMMAND=true`. Les commandes Git mutantes exigent un projet trusted.</td>
   </tr>
   <tr>
-    <td><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
+    <td width="250"><code>/push</code></td>
+    <td>Pousser `origin <branch>` pour la session active courante. Le bot demande une confirmation avant le push.</td>
   </tr>
 </table>
+
 <h2>⚙️ Variables d’environnement</h2>
 
 <h3>Chemin principal du fichier env :</h3>
@@ -236,15 +226,15 @@ Le bot accepte actuellement :
 <table>
   <tr>
     <td><code>CODING_AGENT_TELEGRAM_ENV_FILE</code></td>
-    <td>Use this if you want to point the app to a specific env file.</td>
+    <td>Utilisez ceci si vous voulez pointer l’application vers un fichier env précis.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/.env_coding_agent_telegram</code></td>
-    <td>Default env file location.</td>
+    <td>Chemin par défaut du fichier env.</td>
   </tr>
   <tr>
     <td><code>./.env_coding_agent_telegram</code></td>
-    <td>Used only if this local file already exists.</td>
+    <td>Utilisé seulement si ce fichier local existe déjà.</td>
   </tr>
 </table>
 
@@ -253,15 +243,15 @@ Le bot accepte actuellement :
 <table>
   <tr>
     <td width="250"><code>WORKSPACE_ROOT</code></td>
-    <td>Parent folder that contains your project directories.</td>
+    <td>Dossier parent qui contient vos répertoires de projet.</td>
   </tr>
   <tr>
-    <td><code>TELEGRAM_BOT_TOKENS</code></td>
-    <td>Comma-separated Telegram bot tokens.</td>
+    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td>Liste de tokens de bot Telegram séparés par des virgules.</td>
   </tr>
   <tr>
-    <td><code>ALLOWED_CHAT_IDS</code></td>
-    <td>Comma-separated Telegram private chat IDs allowed to use the bot.</td>
+    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td>Liste d’IDs de chat privés Telegram autorisés, séparés par des virgules.</td>
   </tr>
 </table>
 
@@ -270,94 +260,84 @@ Le bot accepte actuellement :
 <table>
   <tr>
     <td width="250"><code>APP_LOCALE</code></td>
-    <td>UI locale for shared bot messages and command descriptions. Supported values: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
+    <td>Langue de l’interface pour les messages partagés du bot et les descriptions de commandes. Valeurs prises en charge : <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td><code>CODEX_BIN</code></td>
-    <td>Command used to launch Codex CLI. Default: <code>codex</code>.</td>
+    <td width="250"><code>CODEX_BIN</code></td>
+    <td>Commande utilisée pour lancer Codex CLI. Valeur par défaut : <code>codex</code>.</td>
   </tr>
   <tr>
-    <td><code>COPILOT_BIN</code></td>
-    <td>Command used to launch Copilot CLI. Default: <code>copilot</code>.</td>
+    <td width="250"><code>COPILOT_BIN</code></td>
+    <td>Commande utilisée pour lancer Copilot CLI. Valeur par défaut : <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td><code>CODEX_MODEL</code></td>
-    <td>Optional Codex model override.
-    Leave empty to use the Codex CLI default model.
-    Exemple : <code>gpt-5.4</code>
-    <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a>
-    </td>
+    <td width="250"><code>CODEX_MODEL</code></td>
+    <td>Remplacement optionnel du modèle Codex. Laissez vide pour utiliser le modèle par défaut de Codex CLI. Exemple : <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">Modèles OpenAI Codex/OpenAI</a></td>
   </tr>
   <tr>
-    <td><code>COPILOT_MODEL</code></td>
-    <td>Optional Copilot model override.
-    Leave empty to use the Copilot CLI default model.
-    Examples: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code>
-    <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a>
-    </td>
+    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td>Remplacement optionnel du modèle Copilot. Laissez vide pour utiliser le modèle par défaut de Copilot CLI. Exemples : <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">Modèles pris en charge par GitHub Copilot</a></td>
   </tr>
   <tr>
-    <td><code>CODEX_APPROVAL_POLICY</code></td>
-    <td>Approval mode passed to Codex. Default: <code>never</code>.</td>
+    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td>Mode d’approbation transmis à Codex. Défaut : <code>never</code>.</td>
   </tr>
   <tr>
-    <td><code>CODEX_SANDBOX_MODE</code></td>
-    <td>Sandbox mode passed to Codex. Default: <code>workspace-write</code>.</td>
+    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td>Mode sandbox transmis à Codex. Défaut : <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
-    <td>If enabled, always bypass Codex trusted-repo checks.</td>
+    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td>Si activé, contourne toujours les vérifications de dépôt trusted de Codex.</td>
   </tr>
   <tr>
-    <td><code>ENABLE_COMMIT_COMMAND</code></td>
-    <td>Enable the <code>/commit</code> Telegram command. Default: <code>false</code>.</td>
+    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td>Active la commande Telegram <code>/commit</code>. Défaut : <code>false</code>.</td>
   </tr>
   <tr>
-    <td><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
-    <td>Hard timeout for a single agent run. Default: <code>0</code> (disabled).</td>
+    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td>Timeout dur pour une exécution d’agent. Défaut : <code>0</code> (désactivé).</td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Maximum file size the bot will read as text when building the before/after snapshot for per-run diffs. Default: <code>200000</code>.</td>
+    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td>Taille maximale de fichier que le bot lira en texte pour construire le snapshot avant/après des diffs. Défaut : <code>200000</code>.</td>
   </tr>
   <tr>
-    <td><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
-    <td>Max message size used before the app splits responses. Default: <code>3000</code></td>
+    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td>Taille maximale d’un message avant découpage de la réponse. Défaut : <code>3000</code>.</td>
   </tr>
   <tr>
-    <td><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
-    <td>Hide diffs for sensitive files. Default: <code>true></code></td>
+    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td>Masquer les diffs des fichiers sensibles. Défaut : <code>true</code>.</td>
   </tr>
   <tr>
-    <td><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
-    <td>Redact tokens, keys, <code>.env</code> values, certificates, and similar secret-like output before sending it to Telegram. Default <code>true</code> (Strongly recommended)</td>
+    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td>Masquer tokens, clés, valeurs <code>.env</code>, certificats et sorties similaires avant envoi vers Telegram. Défaut : <code>true</code> (fortement recommandé).</td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
-    <td>Force-include matching paths in diffs. Exemple : <code>.github/*,.profile.test,.profile.prod</code></td>
+    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td>Toujours inclure les chemins correspondants dans les diffs. Exemple : <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Add extra diff exclusions on top of the packaged defaults.
-  Exemple : <code>.*,personal/*,sensitive*.txt</code>
-  Note: <code>.*</code> matches hidden paths, including files inside hidden directories.</td>
+    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td>Ajouter des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package. Exemple : <code>.*,personal/*,sensitive*.txt</code> Remarque : <code>.*</code> inclut les chemins cachés, y compris les fichiers dans les dossiers cachés.</td>
   </tr>
 </table>
 
-<h3>État et journaux</h3>
+<h3>État et logs</h3>
 
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Main session state file.</td>
+    <td>Hauptdatei für den Session-Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup state file.</td>
+    <td>Backup-Datei für den Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log directory.</td>
+    <td>Log-Verzeichnis.</td>
   </tr>
 </table>
 
@@ -379,176 +359,171 @@ ENABLE_SECRET_SCRUB_FILTER=true
 
 ## 🧠 Gestion des sessions
 
-Sessions are scoped by:
+Les sessions sont isolées par :
 
-- Telegram bot
-- Telegram chat
+- bot Telegram
+- chat Telegram
 
-That means the same Telegram account can use multiple bots without mixing sessions.
+Ainsi, un même compte Telegram peut utiliser plusieurs bots sans mélanger les sessions.
 
 Exemple :
 
-- Bot A + your chat -> backend work
-- Bot B + your chat -> frontend work
-- Bot C + your chat -> infra work
+- Bot A + votre chat -> travail backend
+- Bot B + votre chat -> travail frontend
+- Bot C + votre chat -> travail infra
 
-The active session is also tied to:
+La session active est aussi liée à :
 
 - project folder
 - provider
-- branch name when available
+- nom de branch quand disponible
 
 <details>
-<summary><b>Each session stores:</b></summary>
+<summary><b>Chaque session stocke :</b></summary>
 
-- session name
+- nom de session
 - project folder
-- branch name
+- nom de branch
 - provider
-- timestamps
-- active session selection for that bot/chat scope
+- horodatages
+- sélection de session active pour cette portée bot/chat
 </details>
 
 ### 🔓 Verrou de concurrence du workspace
 
-Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
+Une seule exécution d'agent peut être active à la fois par **project folder**, quel que soit le chat ou le bot Telegram qui l'a déclenchée.
 
-This is different from “an agent is still processing the current question”:
+- **project is busy** : un agent est déjà en cours dans ce workspace
+- **agent is busy** : cette exécution unique traite encore la requête courante
 
-- **project is busy** means the workspace already has one live agent run
-- **agent is busy** means that one live run is still working on the current request
+Le bot impose cette limite pour éviter que deux agents écrivent en même temps dans le même workspace. Cela réduit les modifications conflictuelles et le risque de corruption.
 
-The bot enforces one active run per project on purpose so two agents do not write to the same workspace at the same time. That avoids conflicting edits and reduces the chance of data corruption.
+Si un message arrive alors qu'un agent tourne déjà sur ce projet, le bot répond immédiatement :
 
-If a message arrives while an agent is already running on the same project, the bot immediately replies:
+> ⏳ Un agent est déjà en cours sur ce projet. Veuillez attendre qu'il se termine.
 
-> ⏳ An agent is already running on project '…'. Please wait for it to finish.
+Le verrou est conservé uniquement en mémoire, pas sur disque. Il est libéré automatiquement quand l'agent se termine, échoue ou quand le serveur redémarre.
 
-The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
+### 💬 Questions en file d'attente
 
-### 💬 Questions en file d’attente
+Si le projet courant a déjà une exécution d'agent active, les messages texte suivants ne sont pas rejetés. Ils sont mis en file d'attente :
 
-If the current project already has one live agent run, later text messages are not rejected. They are queued instead:
+- la nouvelle question est ajoutée à un fichier de questions en attente sur disque
+- l'agent en cours continue la requête précédente
+- quand cette exécution se termine normalement, le bot commence automatiquement à traiter les questions en attente
 
-- the new question is appended to a queued-questions file on disk
-- the current agent keeps working on the earlier request
-- when that run finishes normally, the bot automatically starts processing the queued questions next
-
-If the current run is aborted and there are queued questions waiting, the bot does **not** auto-continue. It asks whether you want to continue processing the remaining queued questions. You can choose to batch process or one-by-one.
+Si l'exécution en cours est annulée et que des questions attendent encore, le bot ne continue pas automatiquement. Il demande alors si les questions restantes doivent être traitées, en lot ou une par une.
 
 ## ⚠️ Diff (modifications de fichiers)
 
-_During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
+_Pendant chaque exécution d'agent, le bot prend aussi un léger snapshot avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce snapshot est produit par le bot lui-même, pas par Codex ou Copilot._
 
-**Snapshot notes:**
+**À savoir sur le snapshot :**
 
-- the app walks the project directory before and after the run
-- for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
-- common dependency, cache, and runtime directories are also skipped
-- binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
-- for huge projects, this extra scan can add noticeable I/O and memory overhead
-- if the snapshot cannot represent a file as text, the app falls back to git diff when possible
-- for large or non-text files, the diff may still be omitted and replaced with a short unavailable message
+- l'app parcourt le dossier du projet avant et après l'exécution
+- pour les fichiers texte normaux, l'app préfère le diff du snapshot du run plutôt qu'un diff contre le head Git
+- les répertoires courants de dépendances, cache et runtime sont aussi ignorés
+- les fichiers binaires et les fichiers plus gros que `SNAPSHOT_TEXT_FILE_MAX_BYTES` ne sont pas lus comme texte
+- sur les très gros projets, ce scan supplémentaire peut ajouter un surcoût notable en I/O et en mémoire
+- si un snapshot ne peut pas représenter un fichier comme texte, l'app retombe sur `git diff` lorsque c'est possible
+- pour les gros fichiers ou les fichiers non textuels, le diff peut quand même être omis et remplacé par un court message
 
-Snapshot exclusion rules live in package resource files:
+Les règles d'exclusion du snapshot se trouvent dans les ressources du package :
 
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
 
-You can override those defaults in the env file without editing the installed package:
+Vous pouvez surcharger ces valeurs dans le fichier env sans modifier le package installé :
 
 - `SNAPSHOT_INCLUDE_PATH_GLOBS`
-  Force-include matching paths in diffs.
+  Force l'inclusion des chemins correspondants dans les diffs.
   Exemple : `.github/*,.profile.test,.profile.prod`
 
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
-  Add extra diff exclusions on top of the packaged defaults.
+  Ajoute des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package.
   Exemple : `.*,personal/*,sensitive*.txt`
-  Note: `.*` matches hidden paths, including files inside hidden directories.
+  Remarque : `.*` couvre les chemins cachés, y compris les fichiers dans des dossiers cachés.
 
-If both include and exclude rules match, the include rule wins.
+Si une règle d'inclusion et une règle d'exclusion correspondent toutes les deux, l'inclusion l'emporte.
 
-## 🌿 Comportement des branches
+## 🌿 Comportement des branch
 
-The bot treats project and branch as a bundle.
+Le bot traite le projet et la branch comme un ensemble.
 
-- choosing a project does not silently choose an unrelated branch
-- if branch input is needed, the bot asks you to pick it
-- when branch information is printed in session-related messages, project and branch are shown together
+- choisir un projet ne sélectionne pas silencieusement une branch sans rapport
+- si une branch est nécessaire, le bot vous demande de la choisir
+- lorsque des informations de branch sont affichées dans des messages liés à la session, le projet et la branch sont montrés ensemble
 
-When you create or change a branch, the bot guides you through the source explicitly:
+Quand vous créez ou changez une branch, le bot vous guide explicitement sur la source :
 
-- `local/<branch>` means use the local branch as the source
-- `origin/<branch>` means update from the remote branch first and then switch
+- `local/<branch>` : utiliser la branch locale comme source
+- `origin/<branch>` : mettre à jour depuis la branch distante puis basculer
 
-If the bot sees that the stored session branch and the repository's current branch do not match, it does not blindly continue. It asks which branch you want to use:
+Si le bot détecte que la branch stockée dans la session ne correspond pas à la branch courante du dépôt, il ne continue pas à l'aveugle. Il vous demande quelle branch utiliser :
 
-- keep the stored session branch
-- keep the current repository branch
+- conserver la branch enregistrée dans la session
+- conserver la branch courante du dépôt
 
-If your preferred source branch is missing, the bot offers fallback source choices based on the default branch and current branch instead of leaving you at a raw git error.
+Si votre branch source préférée est introuvable, le bot propose des sources de secours basées sur la branch par défaut et la branch courante au lieu de vous laisser face à une erreur Git brute.
 
-## 🔐 Gestion de confiance Git
+## 🔐 Comportement de trust Git
 
-- Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
-- Folders created through `/project <name>` are marked as trusted by this app
-- Existing folders selected through `/project <name>` remain untrusted until you confirm trust in the Telegram prompt
-- That means newly created project folders can be used immediately
-- `/commit` can be disabled entirely with `ENABLE_COMMIT_COMMAND`
-- Mutating `/commit` operations are allowed only for trusted projects
+- les dossiers existants suivent `CODEX_SKIP_GIT_REPO_CHECK`
+- les dossiers créés via `/project <name>` sont marqués trusted par cette app
+- les dossiers existants sélectionnés via `/project <name>` restent untrusted jusqu'à votre confirmation dans Telegram
+- les nouveaux dossiers de projet peuvent donc être utilisés immédiatement
+- `/commit` peut être désactivé complètement avec `ENABLE_COMMIT_COMMAND`
+- les opérations `/commit` qui modifient des fichiers ne sont autorisées que pour les projets trusted
 
-## 🪵 Journaux
+## 🪵 Logs
 
-Logs are written to **both stdout and a rotating log file** under:
+Les logs sont écrits **à la fois sur stdout et dans un fichier rotatif** sous :
 
-- `~/.coding-agent-telegram/logs` (rotated at 10 MB, 3 backups kept)
+- `~/.coding-agent-telegram/logs` (rotation à 10 MB, 3 sauvegardes conservées)
 
-> **Note:** Because messages go to both stdout and the log file, watching the terminal
-> **and** tailing the log file at the same time (e.g. `tail -f ~/.coding-agent-telegram/logs/coding-agent-telegram.log`)
-> will make each message appear twice — once from each sink. This is expected behavior.
-> View one or the other, not both simultaneously.
+> **Remarque :** si vous surveillez le terminal **et** le fichier de log en même temps, chaque message apparaît deux fois. C'est attendu. Utilisez l'un ou l'autre, pas les deux simultanément.
 
 <details>
-<summary><b>Typical logged events</b></summary>
+<summary><b>Événements généralement enregistrés</b></summary>
 
-- bot startup and polling start
-- project selection
-- session creation
-- session switching
-- active session reporting
-- normal run execution (includes an audit log line with the truncated prompt)
-- session replacement after resume failure
-- warnings and runtime errors
+- démarrage du bot et début du polling
+- sélection du projet
+- création de session
+- changement de session
+- affichage de la session active
+- exécution normale (avec une ligne d'audit contenant un prompt tronqué)
+- remplacement de session après échec de reprise
+- avertissements et erreurs runtime
 </details>
 
 ## 🗂️ Structure du projet
 
 - `src/coding_agent_telegram/`
-  Main application code
+  code principal de l'application
 
 - `tests/`
-  Test suite
+  suite de tests
 
 - `startup.sh`
-  Local bootstrap and startup entrypoint
+  point d'entrée local pour le bootstrap et le démarrage
 
 - `src/coding_agent_telegram/resources/.env.example`
-  Canonical environment template used by both repo startup and packaged installs
+  modèle d'environnement canonique utilisé à la fois par le démarrage depuis le dépôt et par les installations du package
 
 - `pyproject.toml`
-  Packaging and dependency configuration
+  configuration du packaging et des dépendances
 
-## 📦 Release Versioning
+## 📦 Versionnement des releases
 
-Package versions are derived from Git tags.
+Les versions du package sont dérivées des tags Git.
 
-- TestPyPI/testing: `v2026.3.26.dev1`
-- PyPI prerelease: `v2026.3.26rc1`
-- PyPI stable: `v2026.3.26`
+- TestPyPI/test : `v2026.3.26.dev1`
+- préversion PyPI : `v2026.3.26rc1`
+- version stable PyPI : `v2026.3.26`
 
-## 📌 Notes
+## 📌 Remarques
 
-- This project is designed for users running the agents locally on their own machine.
-- The Telegram bot is a control surface, not the execution environment itself.
-- If you run multiple bots, all of them can be managed by one server process.
+- Ce projet est conçu pour les utilisateurs qui exécutent les agents localement sur leur propre machine.
+- Le bot Telegram est une interface de contrôle, pas l'environnement d'exécution lui-même.
+- Si vous exécutez plusieurs bots, ils peuvent tous être gérés par un seul processus serveur.

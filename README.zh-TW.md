@@ -30,35 +30,35 @@
 <table border="0">
    <tr>
    <td border="0">
-   
+
    ## ✨ 為什麼使用它
-   - ✅ Lightweight: no heavy frameworks, full transparency
-   - ✅ Multi-bot: multiple chats, multiple sessions
-   - ✅ Easily review files changed by agent in code block
-   - ✅ Review files easily: view agent answers and changed files in code block
-   - ✅ Queue follow-up messages while the agent is working
-   - ✅ Accept Text and Image input
+- ✅ 輕量：沒有重型框架，行為清楚透明
+- ✅ 多 Bot：支援多個聊天、多個工作階段
+- ✅ 使用 Telegram 控制 Codex / Copilot CLI
+- ✅ 可以在 code block 中輕鬆檢視 agent 回覆與改動檔案
+- ✅ agent 執行期間也能把後續問題排入佇列
+- ✅ 支援文字與圖片輸入
 
    ## 🔁 裝置與工作階段無縫切換
-   
-   Start a session on Telegram, later on you can still continue the same Codex/Copilot CLI session on your computer, and switch back again without hassle.
-   
-   - Use `/switch` in Telegram to continue a local session
-   - Support historical sessions
+
+你可以先在 Telegram 開始一個工作階段，之後在電腦上繼續同一個 Codex/Copilot CLI 工作階段，不需要額外折騰。使用 `/switch` 也能在 Telegram 與 command line 之間自然切換。
+
+- 使用 `/switch` 繼續本機工作階段
+- 也支援歷史工作階段
 
    ## 🛠️ 典型本機流程
    ```bash
    coding-agent-telegram # or run ./startup.sh
    ```
-   
-   ##### In Telegram:
-   
+
+   ##### 在 Telegram：
+
    ```text
    /project my-project
    /new
    Fix the failing API test in the current project
    ```
-   
+
    </td>
    <td width="350" border="0">
    <img src="https://github.com/user-attachments/assets/cecb6de6-ecf0-4bf4-af70-b98071c68885" />
@@ -66,7 +66,7 @@
    </tr>
 </table>
 
-→ Setup with one-liner: 
+→ 一行指令安裝： 
 ```
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
@@ -74,60 +74,56 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 <table>
    <tr>
    <td width="50%" valign="top">
-      
+
    ## 🔐 安全性
-      
-   - Private chat allowlist with `ALLOWED_CHAT_IDS`
-   - One active agent per project to reduce conflicting writes
-   - Sensitive file diffs are hidden
-   - API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
-   - Runtime app data stays under `~/.coding-agent-telegram`
-   - Existing folders can require trust before mutating git operations
-   - Server makes `NO hidden external call`. Everything is under your control.      
+
+- 透過 `ALLOWED_CHAT_IDS` 對私人聊天進行 allowlist 控制
+- 每個 project 同一時間只允許一個活躍 agent，以降低衝突寫入
+- 敏感檔案 diff 會被隱藏
+- API keys、tokens、`.env` 值、certificates、SSH keys 與類似敏感輸出在送回 Telegram 前都會被遮罩
+- 執行期 app 資料保存在 `~/.coding-agent-telegram` 之下
+- 現有資料夾在執行會修改內容的 Git operation 前，可能需要先確認 trust
+- 沒有隱藏的外部呼叫，一切都由你掌控
    </td>
    <td width="50%" valign="top">
-      
+
    ## ✅ 需求
 
-   Before starting the server, make sure you have:
-   
-   - Python 3.9 or newer
-   - Telegram bot token created from _@BotFather_
-   - Your Telegram chat ID
-   - Codex CLI and/or Copilot CLI installed locally
-   - [Codex CLI install](https://developers.openai.com/codex/cli)
-   - [Copilot CLI install](https://github.com/features/copilot/cli)
+啟動 server 前，請先準備：
+
+- Python 3.9 或以上
+- 由 _@BotFather_ 建立的 Telegram bot token
+- 你的 Telegram chat ID
+- 已在本機安裝 Codex CLI 及/或 Copilot CLI
+- [安裝 Codex CLI](https://developers.openai.com/codex/cli)
+- [安裝 Copilot CLI](https://github.com/features/copilot/cli)
    </td>
    </tr>
 </table>
 
 ## 🚀 快速開始
 
-### Option A: Start with a one-line bootstrap script
-
+### Option A：一行 bootstrap script
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Install from PyPI with `pip`
-
+### Option B：使用 `pip` 從 PyPI 安裝
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Run from a cloned repository
-
+### Option C：從 clone 下來的 repository 執行
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Start Bot Server
-##### On first run, the app creates the env file, tells you what to fill in.
-##### After updating the environment file then run:
-
+### 啟動 Bot Server
+##### 第一次執行時，app 會建立 env 檔案，並告訴你需要填寫哪些欄位。
+##### 更新 env 檔案後，再次執行：
 ```bash
 # if you follow Option A or Option B, then run
 coding-agent-telegram
@@ -138,230 +134,214 @@ coding-agent-telegram
 
 ## 🔑 Telegram 設定
 
-### Get a Bot Token
+### 取得 Bot Token
 
-1. Open Telegram and start a chat with `@BotFather`.
-2. Send `/newbot`.
-3. Follow the prompts to choose:
-   - a display name
-   - a bot username ending in `bot`
-4. BotFather will return an HTTP API token.
-5. Put that token into `TELEGRAM_BOT_TOKENS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`.
+1. 開啟 Telegram，並與 `@BotFather` 開始聊天。
+2. 傳送 `/newbot`。
+3. 依提示設定：
+   - 顯示名稱
+   - 以 `bot` 結尾的 bot 使用者名稱
+4. BotFather 會回傳 HTTP API token。
+5. 把這個 token 填入 `~/.coding-agent-telegram/.env_coding_agent_telegram` 中的 `TELEGRAM_BOT_TOKENS`。
 
-### Get Your Chat ID
+### 取得 Chat ID
 
-The most reliable way is to use Telegram's `getUpdates` API with your own bot token.
+最可靠的方式是使用你自己的 bot token 呼叫 Telegram 的 `getUpdates` API。
 
-1. Start a chat with your bot and send it a message such as `/start`.
-2. Open this URL in your browser, replacing `<BOT_TOKEN>`:
+1. 與你的 bot 開始聊天，並傳送一則訊息，例如 `/start`。
+2. 在瀏覽器開啟以下 URL，並將 `<BOT_TOKEN>` 替換掉：
 
 ```text
 https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 ```
 
-3. Find the `chat` object in the JSON response.
-4. Copy the numeric `id` field from that object.
-5. Put that value into `ALLOWED_CHAT_IDS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`
+3. 在 JSON 回應中找出 `chat` 物件。
+4. 複製其中數值型的 `id` 欄位。
+5. 把該值填入 `~/.coding-agent-telegram/.env_coding_agent_telegram` 中的 `ALLOWED_CHAT_IDS`。
 
-Notes:
+說明：
 
-- For private chats, the chat ID is usually a positive integer.
-- If `getUpdates` returns an empty result, send another message to the bot and try again.
+- 私人聊天的 chat ID 通常是正整數。
+- 如果 `getUpdates` 回傳空結果，請先再傳一則訊息給 bot，然後重試。
 
 ## 📨 支援的訊息類型
-
-The bot currently accepts:
-
-- Text messages
-- photos
-- Codex and Copilot currently supports text and image only, video is not supported.
 
 ## 🤖 Telegram 指令
 
 <table>
   <tr>
     <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If it already exists and is still untrusted, the app asks you to trust it explicitly.</td>
+    <td>設定目前的 project 資料夾。如果資料夾不存在，app 會建立並標記為 trusted；如果已存在但仍是 untrusted，app 會明確要求確認 trust。</td>
   </tr>
   <tr>
-    <td><code>/provider</code></td>
-    <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
+    <td width="250"><code>/provider</code></td>
+    <td>為新的 session 選擇 provider。這個選擇會依 bot 與 chat 儲存，直到你手動修改。</td>
   </tr>
   <tr>
-    <td><code>/new [session_name]</code></td>
-    <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>為目前的 project 建立新的 session。如果省略名稱，bot 會使用真實 session ID。若缺少 provider、project 或 branch，bot 會引導你完成缺少的步驟。</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch for the current project. If the branch already exists, the bot treats that branch as the source candidate. Otherwise it uses the repository default branch as the source candidate.</td>
+    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td>為目前的 project 準備或切換 branch。如果 branch 已存在，bot 會把它視為 source candidate；否則會使用 repository 的 default branch 作為 source candidate。</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch using <code>&lt;origin_branch&gt;</code> as the source candidate. <br /> For both forms, the bot then offers the source choices that actually exist: <code>local/&lt;branch&gt;</code> <code>origin/&lt;branch&gt;</code>
-       <br />If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.</td>
+    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>使用 `<origin_branch>` 作為 source candidate 來準備或切換 branch。無論哪種形式，bot 之後只會提供實際存在的 source choices：`local/<branch>` 和 `origin/<branch>`。若只存在其中一個，就只顯示那個；若兩個都不存在，bot 會提示缺少 branch source。</td>
   </tr>
   <tr>
-    <td><code>/switch</code></td>
-    <td>Show the latest sessions, newest first. The list includes both bot-managed sessions and local Codex/Copilot CLI sessions for the current project.</td>
+    <td width="250"><code>/switch</code></td>
+    <td>顯示最新的 sessions，依新到舊排序。列表同時包含 bot-managed sessions 與目前 project 的本機 Codex/Copilot CLI sessions。</td>
   </tr>
   <tr>
-    <td><code>/switch page &lt;number&gt;</code></td>
-    <td>Show another page of stored sessions.</td>
+    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td>顯示已儲存 sessions 的其他頁面。</td>
   </tr>
   <tr>
-    <td><code>/switch &lt;session_id&gt;</code></td>
-    <td>Switch to a specific session by ID. If you choose a local CLI session, the bot imports it and continues from there.</td>
+    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td>透過 ID 切換到指定 session。如果你選擇本機 CLI session，bot 會把它匯入 state 並從那裡繼續。</td>
   </tr>
   <tr>
-    <td><code>/current</code></td>
-    <td>Show the active session for the current bot and chat.</td>
+    <td width="250"><code>/current</code></td>
+    <td>顯示目前 bot 與 chat 的 active session。</td>
   </tr>
   <tr>
-    <td><code>/abort</code></td>
-    <td>Abort the current agent run for the current project. If queued questions are waiting, the bot asks whether to continue them.</td>
+    <td width="250"><code>/abort</code></td>
+    <td>中止目前 project 的 agent run。如果還有 queued questions 在等待，bot 會詢問是否繼續處理。</td>
   </tr>
   <tr>
-    <td><code>/commit &lt;git commands&gt;</code></td>
-    <td>Run validated git commit-related commands inside the active session project. Available only when <code>ENABLE_COMMIT_COMMAND=true</code>. Mutating git commands require a trusted project.</td>
+    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td>在 active session 的 project 內執行已驗證的 `git commit` 相關指令。僅在 `ENABLE_COMMIT_COMMAND=true` 時可用。會修改內容的 Git 指令要求 project 已 trusted。</td>
   </tr>
   <tr>
-    <td><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
+    <td width="250"><code>/push</code></td>
+    <td>為目前 active session 執行 `origin <branch>` push。push 前 bot 會要求確認。</td>
   </tr>
 </table>
+
 <h2>⚙️ 環境變數</h2>
 
-<h3>Main env file path:</h3>
+<h3>主要 env 檔案路徑：</h3>
 
 <table>
   <tr>
     <td><code>CODING_AGENT_TELEGRAM_ENV_FILE</code></td>
-    <td>Use this if you want to point the app to a specific env file.</td>
+    <td>如果你希望 app 使用指定的 env 檔案，可設定此項。</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/.env_coding_agent_telegram</code></td>
-    <td>Default env file location.</td>
+    <td>預設的 env 檔案位置。</td>
   </tr>
   <tr>
     <td><code>./.env_coding_agent_telegram</code></td>
-    <td>Used only if this local file already exists.</td>
+    <td>只有當這個本機檔案已存在時才會使用。</td>
   </tr>
 </table>
 
-<h3>Required</h3>
+<h3>必要</h3>
 
 <table>
   <tr>
     <td width="250"><code>WORKSPACE_ROOT</code></td>
-    <td>Parent folder that contains your project directories.</td>
+    <td>包含你各個 project 目錄的父資料夾。</td>
   </tr>
   <tr>
-    <td><code>TELEGRAM_BOT_TOKENS</code></td>
-    <td>Comma-separated Telegram bot tokens.</td>
+    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td>以逗號分隔的 Telegram bot token。</td>
   </tr>
   <tr>
-    <td><code>ALLOWED_CHAT_IDS</code></td>
-    <td>Comma-separated Telegram private chat IDs allowed to use the bot.</td>
+    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td>允許使用此 bot 的 Telegram 私人 chat ID，使用逗號分隔。</td>
   </tr>
 </table>
 
-<h3>Common Settings</h3>
+<h3>常用設定</h3>
 
 <table>
   <tr>
     <td width="250"><code>APP_LOCALE</code></td>
-    <td>UI locale for shared bot messages and command descriptions. Supported values: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
+    <td>共用 bot 訊息與指令說明所使用的 UI 語言。支援值：<code>en</code>、<code>de</code>、<code>fr</code>、<code>ja</code>、<code>ko</code>、<code>nl</code>、<code>th</code>、<code>vi</code>、<code>zh-CN</code>、<code>zh-HK</code>、<code>zh-TW</code>。</td>
   </tr>
   <tr>
-    <td><code>CODEX_BIN</code></td>
-    <td>Command used to launch Codex CLI. Default: <code>codex</code>.</td>
+    <td width="250"><code>CODEX_BIN</code></td>
+    <td>用來啟動 Codex CLI 的指令。預設：<code>codex</code>。</td>
   </tr>
   <tr>
-    <td><code>COPILOT_BIN</code></td>
-    <td>Command used to launch Copilot CLI. Default: <code>copilot</code>.</td>
+    <td width="250"><code>COPILOT_BIN</code></td>
+    <td>用來啟動 Copilot CLI 的指令。預設：<code>copilot</code>。</td>
   </tr>
   <tr>
-    <td><code>CODEX_MODEL</code></td>
-    <td>Optional Codex model override.
-    Leave empty to use the Codex CLI default model.
-    Example: <code>gpt-5.4</code>
-    <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a>
-    </td>
+    <td width="250"><code>CODEX_MODEL</code></td>
+    <td>可選的 Codex model override。留空則使用 Codex CLI 預設 model。例子：<code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td><code>COPILOT_MODEL</code></td>
-    <td>Optional Copilot model override.
-    Leave empty to use the Copilot CLI default model.
-    Examples: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code>
-    <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a>
-    </td>
+    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td>可選的 Copilot model override。留空則使用 Copilot CLI 預設 model。例子：<code>gpt-5.4</code>、<code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td><code>CODEX_APPROVAL_POLICY</code></td>
-    <td>Approval mode passed to Codex. Default: <code>never</code>.</td>
+    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td>傳遞給 Codex 的 approval mode。預設：<code>never</code>。</td>
   </tr>
   <tr>
-    <td><code>CODEX_SANDBOX_MODE</code></td>
-    <td>Sandbox mode passed to Codex. Default: <code>workspace-write</code>.</td>
+    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td>傳遞給 Codex 的 sandbox mode。預設：<code>workspace-write</code>。</td>
   </tr>
   <tr>
-    <td><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
-    <td>If enabled, always bypass Codex trusted-repo checks.</td>
+    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td>如果啟用，會永遠略過 Codex 的 trusted-repo 檢查。</td>
   </tr>
   <tr>
-    <td><code>ENABLE_COMMIT_COMMAND</code></td>
-    <td>Enable the <code>/commit</code> Telegram command. Default: <code>false</code>.</td>
+    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td>啟用 Telegram 的 <code>/commit</code> 指令。預設：<code>false</code>。</td>
   </tr>
   <tr>
-    <td><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
-    <td>Hard timeout for a single agent run. Default: <code>0</code> (disabled).</td>
+    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td>單次 agent run 的硬性 timeout。預設：<code>0</code>（停用）。</td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Maximum file size the bot will read as text when building the before/after snapshot for per-run diffs. Default: <code>200000</code>.</td>
+    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td>建立每次執行的前後 snapshot diff 時，bot 會以文字讀取的最大檔案大小。預設：<code>200000</code>。</td>
   </tr>
   <tr>
-    <td><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
-    <td>Max message size used before the app splits responses. Default: <code>3000</code></td>
+    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td>app 分割回覆前使用的最大訊息長度。預設：<code>3000</code>。</td>
   </tr>
   <tr>
-    <td><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
-    <td>Hide diffs for sensitive files. Default: <code>true></code></td>
+    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td>隱藏敏感檔案的 diff。預設：<code>true</code>。</td>
   </tr>
   <tr>
-    <td><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
-    <td>Redact tokens, keys, <code>.env</code> values, certificates, and similar secret-like output before sending it to Telegram. Default <code>true</code> (Strongly recommended)</td>
+    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td>在送往 Telegram 之前，對 tokens、keys、<code>.env</code> 值、certificates 及類似秘密輸出做遮罩。預設：<code>true</code>（強烈建議啟用）。</td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
-    <td>Force-include matching paths in diffs. Example: <code>.github/*,.profile.test,.profile.prod</code></td>
+    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td>強制把符合條件的 path 納入 diff。例子：<code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Add extra diff exclusions on top of the packaged defaults.
-  Example: <code>.*,personal/*,sensitive*.txt</code>
-  Note: <code>.*</code> matches hidden paths, including files inside hidden directories.</td>
+    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td>在套件預設值之外額外加入 diff 排除規則。例子：<code>.*,personal/*,sensitive*.txt</code> 說明：<code>.*</code> 會比對隱藏 path，包括隱藏資料夾內的檔案。</td>
   </tr>
 </table>
 
-<h3>State and Logs</h3>
+<h3>State 與 Logs</h3>
 
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Main session state file.</td>
+    <td>Hauptdatei für den Session-Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup state file.</td>
+    <td>Backup-Datei für den Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log directory.</td>
+    <td>Log-Verzeichnis.</td>
   </tr>
 </table>
 
-Example:
+範例：
 
 ```env
 APP_LOCALE=en
@@ -377,178 +357,173 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 工作階段管理
+## 🧠 Session 管理
 
-Sessions are scoped by:
+Session 會依以下範圍分開：
 
 - Telegram bot
 - Telegram chat
 
-That means the same Telegram account can use multiple bots without mixing sessions.
+這表示同一個 Telegram 帳號可以同時使用多個 bot，而不會把 session 混在一起。
 
-Example:
+範例：
 
-- Bot A + your chat -> backend work
-- Bot B + your chat -> frontend work
-- Bot C + your chat -> infra work
+- Bot A + 你的 chat -> backend 工作
+- Bot B + 你的 chat -> frontend 工作
+- Bot C + 你的 chat -> infra 工作
 
-The active session is also tied to:
+active session 也會綁定到：
 
 - project folder
 - provider
-- branch name when available
+- 如果有的話，branch 名稱
 
 <details>
-<summary><b>Each session stores:</b></summary>
+<summary><b>每個 session 會儲存：</b></summary>
 
-- session name
+- session 名稱
 - project folder
-- branch name
+- branch 名稱
 - provider
 - timestamps
-- active session selection for that bot/chat scope
+- 該 bot/chat 範圍下的 active session 選擇
 </details>
 
-### 🔓 Workspace 並行鎖
+### 🔓 Workspace concurrency lock
 
-Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
+同一時間，每個 **project folder** 只能有一個 agent run 在執行，不論它是由哪個 chat 或 Telegram bot 觸發。
 
-This is different from “an agent is still processing the current question”:
+- **project is busy**：該 workspace 裡已經有一個 agent run 在運行
+- **agent is busy**：那個 run 仍在處理目前的請求
 
-- **project is busy** means the workspace already has one live agent run
-- **agent is busy** means that one live run is still working on the current request
+bot 會強制這個限制，避免兩個 agent 同時寫入同一個 workspace，從而減少衝突修改與資料損壞的風險。
 
-The bot enforces one active run per project on purpose so two agents do not write to the same workspace at the same time. That avoids conflicting edits and reduces the chance of data corruption.
+如果同一個 project 已經有 agent 在運行，又收到新的訊息，bot 會立即回覆：
 
-If a message arrives while an agent is already running on the same project, the bot immediately replies:
+> ⏳ 這個 project 上已經有 agent 在運行。請等待它完成。
 
-> ⏳ An agent is already running on project '…'. Please wait for it to finish.
-
-The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
+這個 lock 只保存在記憶體中，不會寫入磁碟，所以當 agent 完成、失敗或 server 重新啟動時會自動釋放。
 
 ### 💬 排隊問題
 
-If the current project already has one live agent run, later text messages are not rejected. They are queued instead:
+如果目前的 project 已經有一個 agent run 在執行，之後的文字訊息不會被拒絕，而是會進入佇列。
 
-- the new question is appended to a queued-questions file on disk
-- the current agent keeps working on the earlier request
-- when that run finishes normally, the bot automatically starts processing the queued questions next
+- 新問題會追加到磁碟上的 queued-questions file
+- 目前的 agent 會繼續處理先前的請求
+- 當該 run 正常結束後，bot 會自動開始處理佇列中的問題
 
-If the current run is aborted and there are queued questions waiting, the bot does **not** auto-continue. It asks whether you want to continue processing the remaining queued questions. You can choose to batch process or one-by-one.
+如果目前的 run 被 abort，而仍有 queued questions 在等待，bot 不會自動繼續。它會詢問你是否要繼續處理剩餘問題，以及要分批還是逐個處理。
 
 ## ⚠️ Diff（檔案變更）
 
-_During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
+_在每次 agent run 期間，bot 也會為 project 產生輕量的 before/after snapshot，用來彙整已變更檔案並把 diff 傳回 Telegram。這個 snapshot 是由 bot app 自己建立，不是由 Codex 或 Copilot 建立。_
 
-**Snapshot notes:**
+**Snapshot 說明：**
 
-- the app walks the project directory before and after the run
-- for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
-- common dependency, cache, and runtime directories are also skipped
-- binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
-- for huge projects, this extra scan can add noticeable I/O and memory overhead
-- if the snapshot cannot represent a file as text, the app falls back to git diff when possible
-- for large or non-text files, the diff may still be omitted and replaced with a short unavailable message
+- app 會在 run 前後掃描 project directory
+- 對一般文字檔，app 會優先使用本次 run 的 snapshot diff，而不是 git head diff
+- 常見的 dependency、cache 與 runtime directory 也會被略過
+- binary file 以及大於 `SNAPSHOT_TEXT_FILE_MAX_BYTES` 的 file 不會以文字方式讀取
+- 對非常大的 project，這次額外掃描可能增加明顯的 I/O 與記憶體負擔
+- 如果 snapshot 無法把 file 表示為文字，app 會在可行時 fallback 到 `git diff`
+- 對大檔案或非文字檔，diff 仍可能被省略，並改用簡短訊息代替
 
-Snapshot exclusion rules live in package resource files:
+Snapshot 排除規則位於 package resources：
 
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
 
-You can override those defaults in the env file without editing the installed package:
+你可以在 env file 中覆蓋這些預設值，而不用修改已安裝的 package：
 
 - `SNAPSHOT_INCLUDE_PATH_GLOBS`
-  Force-include matching paths in diffs.
-  Example: `.github/*,.profile.test,.profile.prod`
+  強制把符合的 path 納入 diff。
+  範例：`.github/*,.profile.test,.profile.prod`
 
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
-  Add extra diff exclusions on top of the packaged defaults.
-  Example: `.*,personal/*,sensitive*.txt`
-  Note: `.*` matches hidden paths, including files inside hidden directories.
+  在 package 預設值之外加入額外的 diff 排除規則。
+  範例：`.*,personal/*,sensitive*.txt`
+  說明：`.*` 會比對 hidden path，包括 hidden directory 內的 file。
 
-If both include and exclude rules match, the include rule wins.
+如果 include 和 exclude 同時命中，include 會優先。
 
-## 🌿 branch 行為
+## 🌿 Branch 行為
 
-The bot treats project and branch as a bundle.
+bot 會把 project 和 branch 當成一組資訊來處理。
 
-- choosing a project does not silently choose an unrelated branch
-- if branch input is needed, the bot asks you to pick it
-- when branch information is printed in session-related messages, project and branch are shown together
+- 選擇 project 時不會悄悄切到無關 branch
+- 如果需要 branch 輸入，bot 會要求你選擇
+- 在 session 相關訊息中顯示 branch 資訊時，project 和 branch 會一起顯示
 
-When you create or change a branch, the bot guides you through the source explicitly:
+當你建立或切換 branch 時，bot 會明確引導你選擇 source：
 
-- `local/<branch>` means use the local branch as the source
-- `origin/<branch>` means update from the remote branch first and then switch
+- `local/<branch>`：使用本地 branch 作為 source
+- `origin/<branch>`：先從遠端 branch 更新，再切換
 
-If the bot sees that the stored session branch and the repository's current branch do not match, it does not blindly continue. It asks which branch you want to use:
+如果 bot 發現 session 中儲存的 branch 與目前 repository branch 不一致，它不會盲目繼續，而會詢問你想使用哪個 branch：
 
-- keep the stored session branch
-- keep the current repository branch
+- 保留 session 中儲存的 branch
+- 保留目前 repository branch
 
-If your preferred source branch is missing, the bot offers fallback source choices based on the default branch and current branch instead of leaving you at a raw git error.
+如果你偏好的 source branch 已不存在，bot 會根據 default branch 和 current branch 提供 fallback source，而不是直接丟出原始 Git error。
 
-## 🔐 Git 信任行為
+## 🔐 Git trust 行為
 
-- Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
-- Folders created through `/project <name>` are marked as trusted by this app
-- Existing folders selected through `/project <name>` remain untrusted until you confirm trust in the Telegram prompt
-- That means newly created project folders can be used immediately
-- `/commit` can be disabled entirely with `ENABLE_COMMIT_COMMAND`
-- Mutating `/commit` operations are allowed only for trusted projects
+- 已存在的 folder 會遵循 `CODEX_SKIP_GIT_REPO_CHECK`
+- 透過 `/project <name>` 建立的 folder 會被這個 app 標記為 trusted
+- 透過 `/project <name>` 選取的既有 folder，在你於 Telegram 確認 trust 前仍然保持 untrusted
+- 因此，新建立的 project folder 可以立即使用
+- 可以用 `ENABLE_COMMIT_COMMAND` 完全停用 `/commit`
+- 會修改內容的 `/commit` 操作只允許在 trusted project 上執行
 
-## 🪵 日誌
+## 🪵 Logs
 
-Logs are written to **both stdout and a rotating log file** under:
+log 會**同時寫入 stdout 與輪轉 log file**，路徑如下：
 
-- `~/.coding-agent-telegram/logs` (rotated at 10 MB, 3 backups kept)
+- `~/.coding-agent-telegram/logs`（10 MB 輪轉，保留 3 份備份）
 
-> **Note:** Because messages go to both stdout and the log file, watching the terminal
-> **and** tailing the log file at the same time (e.g. `tail -f ~/.coding-agent-telegram/logs/coding-agent-telegram.log`)
-> will make each message appear twice — once from each sink. This is expected behavior.
-> View one or the other, not both simultaneously.
+> **注意：**如果你同時看 terminal 又去 tail log file，每條訊息都會出現兩次。這是正常行為。請只看其中一邊，不要同時看兩邊。
 
 <details>
-<summary><b>Typical logged events</b></summary>
+<summary><b>常見記錄事件</b></summary>
 
-- bot startup and polling start
-- project selection
-- session creation
-- session switching
-- active session reporting
-- normal run execution (includes an audit log line with the truncated prompt)
-- session replacement after resume failure
-- warnings and runtime errors
+- bot 啟動與 polling 開始
+- project 選擇
+- session 建立
+- session 切換
+- active session 報告
+- 正常 run 執行（包含被截短的 prompt audit log 行）
+- resume 失敗後的 session 替換
+- warnings 與 runtime errors
 </details>
 
 ## 🗂️ 專案結構
 
 - `src/coding_agent_telegram/`
-  Main application code
+  app 主程式碼
 
 - `tests/`
-  Test suite
+  測試套件
 
 - `startup.sh`
-  Local bootstrap and startup entrypoint
+  本地 bootstrap 與 startup 入口
 
 - `src/coding_agent_telegram/resources/.env.example`
-  Canonical environment template used by both repo startup and packaged installs
+  標準環境範本，同時用於 repo 啟動與 package 安裝
 
 - `pyproject.toml`
-  Packaging and dependency configuration
+  packaging 與 dependency 設定
 
-## 📦 Release Versioning
+## 📦 Release 版本規則
 
-Package versions are derived from Git tags.
+package 版本由 Git tags 推導而來。
 
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
 
-## 📌 Notes
+## 📌 備註
 
-- This project is designed for users running the agents locally on their own machine.
-- The Telegram bot is a control surface, not the execution environment itself.
-- If you run multiple bots, all of them can be managed by one server process.
+- 本專案面向在自己機器上本地執行 agent 的使用者。
+- Telegram bot 是控制介面，不是實際執行環境。
+- 如果你運行多個 bot，也可以由同一個 server process 統一管理。

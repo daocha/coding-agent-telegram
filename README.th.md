@@ -14,8 +14,8 @@
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-HK.md">繁體中文（香港）</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-TW.md">繁體中文（台灣）</a>
   </p>
-  <p><strong>AI Coding Agent แบบเบา รองรับหลายบอต หลายเซสชัน ทำงานหลายงานได้ตลอด 24/7</strong></p>
-  <p>ควบคุม AI coding agent บนเครื่องของคุณได้จากทุกที่ผ่าน Telegram</p>
+  <p><strong>เบา รองรับหลายบอต หลายเซสชัน หลายงาน พร้อม AI Coding Agent ทำงานได้ 24/7</strong></p>
+  <p>ควบคุม AI Coding Agent ที่รันในเครื่องของคุณจากที่ไหนก็ได้ผ่าน Telegram</p>
   <p>
     <img src="https://img.shields.io/badge/stability-experimental-orange.svg" alt="Experimental" />
     <a href="https://opensource.org/licenses/MIT">
@@ -30,35 +30,35 @@
 <table border="0">
    <tr>
    <td border="0">
-   
-   ## ✨ จุดเด่นของโปรเจกต์นี้
-   - ✅ Lightweight: no heavy frameworks, full transparency
-   - ✅ Multi-bot: multiple chats, multiple sessions
-   - ✅ Easily review files changed by agent in code block
-   - ✅ Review files easily: view agent answers and changed files in code block
-   - ✅ Queue follow-up messages while the agent is working
-   - ✅ Accept Text and Image input
+
+   ## ✨ ทำไมถึงควรใช้
+- ✅ เบา: ไม่ต้องใช้เฟรมเวิร์กหนัก ๆ และตรวจสอบการทำงานได้ง่าย
+- ✅ หลายบอต: รองรับหลายแชต หลายเซสชัน
+- ✅ ใช้ Telegram เพื่อควบคุม Codex / Copilot CLI
+- ✅ ตรวจคำตอบและไฟล์ที่ถูกแก้ได้ง่ายใน code block
+- ✅ ส่งคำถามต่อคิวไว้ได้ระหว่างที่ agent กำลังทำงาน
+- ✅ รองรับข้อความและรูปภาพ
 
    ## 🔁 สลับอุปกรณ์และเซสชันได้ลื่นไหล
-   
-   Start a session on Telegram, later on you can still continue the same Codex/Copilot CLI session on your computer, and switch back again without hassle.
-   
-   - Use `/switch` in Telegram to continue a local session
-   - Support historical sessions
 
-   ## 🛠️ ขั้นตอนใช้งานบนเครื่องแบบทั่วไป
+เริ่มเซสชันจาก Telegram แล้วค่อยกลับไปทำต่อบนคอมพิวเตอร์ด้วยเซสชัน Codex/Copilot CLI เดิมได้ทันที และใช้ `/switch` เพื่อสลับกลับไปมาระหว่าง Telegram กับ command line ได้อย่างง่ายดาย
+
+- ใช้ `/switch` เพื่อทำงานต่อจากเซสชันในเครื่อง
+- รองรับเซสชันย้อนหลัง
+
+   ## 🛠️ ตัวอย่าง flow การใช้งานบนเครื่อง
    ```bash
    coding-agent-telegram # or run ./startup.sh
    ```
-   
-   ##### In Telegram:
-   
+
+   ##### ใน Telegram:
+
    ```text
    /project my-project
    /new
    Fix the failing API test in the current project
    ```
-   
+
    </td>
    <td width="350" border="0">
    <img src="https://github.com/user-attachments/assets/cecb6de6-ecf0-4bf4-af70-b98071c68885" />
@@ -66,7 +66,7 @@
    </tr>
 </table>
 
-→ Setup with one-liner: 
+→ ติดตั้งด้วยคำสั่งบรรทัดเดียว: 
 ```
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
@@ -74,60 +74,56 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 <table>
    <tr>
    <td width="50%" valign="top">
-      
+
    ## 🔐 ความปลอดภัย
-      
-   - Private chat allowlist with `ALLOWED_CHAT_IDS`
-   - One active agent per project to reduce conflicting writes
-   - Sensitive file diffs are hidden
-   - API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
-   - Runtime app data stays under `~/.coding-agent-telegram`
-   - Existing folders can require trust before mutating git operations
-   - Server makes `NO hidden external call`. Everything is under your control.      
+
+- จำกัดสิทธิ์แชตส่วนตัวด้วย `ALLOWED_CHAT_IDS`
+- อนุญาตให้มี agent ที่ทำงานอยู่ได้เพียงหนึ่งตัวต่อหนึ่งโปรเจกต์ เพื่อลดการเขียนทับกัน
+- ซ่อน diff ของไฟล์ที่มีข้อมูลอ่อนไหว
+- ปิดบัง API keys, tokens, ค่าใน `.env`, certificates, SSH keys และข้อมูลลักษณะใกล้เคียงก่อนส่งกลับไปที่ Telegram
+- ข้อมูล runtime ของแอปเก็บไว้ใต้ `~/.coding-agent-telegram`
+- โฟลเดอร์ที่มีอยู่เดิมอาจต้องยืนยัน trust ก่อนทำ Git operation ที่มีการแก้ไข
+- ไม่มีการเรียกออกภายนอกแบบซ่อน ทุกอย่างอยู่ในการควบคุมของคุณ
    </td>
    <td width="50%" valign="top">
-      
+
    ## ✅ สิ่งที่ต้องมี
 
-   Before starting the server, make sure you have:
-   
-   - Python 3.9 or newer
-   - Telegram bot token created from _@BotFather_
-   - Your Telegram chat ID
-   - Codex CLI and/or Copilot CLI installed locally
-   - [Codex CLI install](https://developers.openai.com/codex/cli)
-   - [Copilot CLI install](https://github.com/features/copilot/cli)
+ก่อนเริ่มเซิร์ฟเวอร์ โปรดเตรียม:
+
+- Python 3.9 ขึ้นไป
+- Telegram bot token จาก _@BotFather_
+- Telegram chat ID ของคุณ
+- ติดตั้ง Codex CLI และ/หรือ Copilot CLI ไว้ในเครื่องแล้ว
+- [ติดตั้ง Codex CLI](https://developers.openai.com/codex/cli)
+- [ติดตั้ง Copilot CLI](https://github.com/features/copilot/cli)
    </td>
    </tr>
 </table>
 
 ## 🚀 เริ่มต้นอย่างรวดเร็ว
 
-### Option A: Start with a one-line bootstrap script
-
+### Option A: สคริปต์ bootstrap แบบบรรทัดเดียว
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Install from PyPI with `pip`
-
+### Option B: ติดตั้งจาก PyPI ด้วย `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Run from a cloned repository
-
+### Option C: รันจาก repository ที่ clone มา
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Start Bot Server
-##### On first run, the app creates the env file, tells you what to fill in.
-##### After updating the environment file then run:
-
+### เริ่ม Bot Server
+##### ครั้งแรกแอปจะสร้างไฟล์ env และบอกว่าต้องกรอกค่าใดบ้าง
+##### หลังแก้ไฟล์ env แล้ว ให้รันอีกครั้ง:
 ```bash
 # if you follow Option A or Option B, then run
 coding-agent-telegram
@@ -136,232 +132,216 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🔑 การตั้งค่า Telegram
+## 🔑 ตั้งค่า Telegram
 
-### Get a Bot Token
+### รับ Bot Token
 
-1. Open Telegram and start a chat with `@BotFather`.
-2. Send `/newbot`.
-3. Follow the prompts to choose:
-   - a display name
-   - a bot username ending in `bot`
-4. BotFather will return an HTTP API token.
-5. Put that token into `TELEGRAM_BOT_TOKENS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`.
+1. เปิด Telegram และเริ่มแชตกับ `@BotFather`
+2. ส่ง `/newbot`
+3. ทำตามขั้นตอนเพื่อกำหนด:
+   - ชื่อที่แสดง
+   - ชื่อผู้ใช้ bot ที่ลงท้ายด้วย `bot`
+4. BotFather จะส่ง HTTP API token กลับมา
+5. นำ token นี้ไปใส่ใน `TELEGRAM_BOT_TOKENS` ภายใน `~/.coding-agent-telegram/.env_coding_agent_telegram`
 
-### Get Your Chat ID
+### รับ Chat ID
 
-The most reliable way is to use Telegram's `getUpdates` API with your own bot token.
+วิธีที่เชื่อถือได้ที่สุดคือใช้ Telegram `getUpdates` API พร้อม bot token ของคุณเอง
 
-1. Start a chat with your bot and send it a message such as `/start`.
-2. Open this URL in your browser, replacing `<BOT_TOKEN>`:
+1. เริ่มแชตกับบอตของคุณแล้วส่งข้อความ เช่น `/start`
+2. เปิด URL นี้ในเบราว์เซอร์ โดยแทนที่ `<BOT_TOKEN>`:
 
 ```text
 https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 ```
 
-3. Find the `chat` object in the JSON response.
-4. Copy the numeric `id` field from that object.
-5. Put that value into `ALLOWED_CHAT_IDS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`
+3. หา object `chat` ใน JSON response
+4. คัดลอกค่า `id` ที่เป็นตัวเลข
+5. นำค่านี้ไปใส่ใน `ALLOWED_CHAT_IDS` ภายใน `~/.coding-agent-telegram/.env_coding_agent_telegram`
 
-Notes:
+หมายเหตุ:
 
-- For private chats, the chat ID is usually a positive integer.
-- If `getUpdates` returns an empty result, send another message to the bot and try again.
+- สำหรับแชตส่วนตัว chat ID มักเป็นจำนวนเต็มบวก
+- หาก `getUpdates` คืนค่ากลับมาเป็นค่าว่าง ให้ส่งข้อความหาบอตอีกครั้งแล้วลองใหม่
 
 ## 📨 ประเภทข้อความที่รองรับ
-
-The bot currently accepts:
-
-- Text messages
-- photos
-- Codex and Copilot currently supports text and image only, video is not supported.
 
 ## 🤖 คำสั่ง Telegram
 
 <table>
   <tr>
     <td width="250"><code>/project &lt;project_folder&gt;</code></td>
-    <td>Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If it already exists and is still untrusted, the app asks you to trust it explicitly.</td>
+    <td>ตั้งค่าโฟลเดอร์ project ปัจจุบัน หากโฟลเดอร์ยังไม่มี แอปจะสร้างและทำเครื่องหมายว่า trusted หากมีอยู่แล้วแต่ยัง untrusted แอปจะถามยืนยัน trust ก่อน</td>
   </tr>
   <tr>
-    <td><code>/provider</code></td>
-    <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
+    <td width="250"><code>/provider</code></td>
+    <td>เลือก provider สำหรับ session ใหม่ โดยค่าที่เลือกจะถูกเก็บแยกตาม bot และ chat จนกว่าคุณจะเปลี่ยน</td>
   </tr>
   <tr>
-    <td><code>/new [session_name]</code></td>
-    <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
+    <td width="250"><code>/new [session_name]</code></td>
+    <td>สร้าง session ใหม่สำหรับ project ปัจจุบัน หากไม่ระบุชื่อ บอตจะใช้ session ID จริง หากยังไม่มี provider, project หรือ branch บอตจะพาคุณไปยังขั้นตอนที่ขาดอยู่</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch for the current project. If the branch already exists, the bot treats that branch as the source candidate. Otherwise it uses the repository default branch as the source candidate.</td>
+    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td>เตรียมหรือสลับ branch สำหรับ project ปัจจุบัน หาก branch มีอยู่แล้ว บอตจะถือ branch นั้นเป็น source candidate หากยังไม่มี บอตจะใช้ default branch ของ repository เป็น source candidate</td>
   </tr>
   <tr>
-    <td><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Prepare or switch a branch using <code>&lt;origin_branch&gt;</code> as the source candidate. <br /> For both forms, the bot then offers the source choices that actually exist: <code>local/&lt;branch&gt;</code> <code>origin/&lt;branch&gt;</code>
-       <br />If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.</td>
+    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>เตรียมหรือสลับ branch โดยใช้ `<origin_branch>` เป็น source candidate สำหรับทั้งสองรูปแบบ บอตจะแสดงเฉพาะ source choices ที่มีอยู่จริงเท่านั้น: `local/<branch>` และ `origin/<branch>` หากมีเพียงตัวเดียวก็จะแสดงเพียงตัวนั้น หากไม่มีเลย บอตจะแจ้งว่าไม่พบ branch source</td>
   </tr>
   <tr>
-    <td><code>/switch</code></td>
-    <td>Show the latest sessions, newest first. The list includes both bot-managed sessions and local Codex/Copilot CLI sessions for the current project.</td>
+    <td width="250"><code>/switch</code></td>
+    <td>แสดง session ล่าสุด โดยเรียงจากใหม่ไปเก่า รายการนี้รวมทั้ง bot-managed sessions และ local Codex/Copilot CLI sessions ของ project ปัจจุบัน</td>
   </tr>
   <tr>
-    <td><code>/switch page &lt;number&gt;</code></td>
-    <td>Show another page of stored sessions.</td>
+    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td>แสดงหน้าถัดไปของ sessions ที่จัดเก็บไว้</td>
   </tr>
   <tr>
-    <td><code>/switch &lt;session_id&gt;</code></td>
-    <td>Switch to a specific session by ID. If you choose a local CLI session, the bot imports it and continues from there.</td>
+    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td>สลับไปยัง session ที่ระบุด้วย ID หากเลือก local CLI session บอตจะ import เข้าสู่ state แล้วทำงานต่อจากตรงนั้น</td>
   </tr>
   <tr>
-    <td><code>/current</code></td>
-    <td>Show the active session for the current bot and chat.</td>
+    <td width="250"><code>/current</code></td>
+    <td>แสดง active session ของ bot และ chat ปัจจุบัน</td>
   </tr>
   <tr>
-    <td><code>/abort</code></td>
-    <td>Abort the current agent run for the current project. If queued questions are waiting, the bot asks whether to continue them.</td>
+    <td width="250"><code>/abort</code></td>
+    <td>ยกเลิก agent run ปัจจุบันของ project นี้ หากมี queued questions รออยู่ บอตจะถามว่าจะให้ประมวลผลต่อหรือไม่</td>
   </tr>
   <tr>
-    <td><code>/commit &lt;git commands&gt;</code></td>
-    <td>Run validated git commit-related commands inside the active session project. Available only when <code>ENABLE_COMMIT_COMMAND=true</code>. Mutating git commands require a trusted project.</td>
+    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td>รันคำสั่งที่เกี่ยวข้องกับ `git commit` ซึ่งผ่านการตรวจสอบแล้วภายใน project ของ active session ใช้ได้เมื่อ `ENABLE_COMMIT_COMMAND=true` เท่านั้น คำสั่ง Git ที่มีการแก้ไขต้องใช้ project ที่ trusted</td>
   </tr>
   <tr>
-    <td><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
+    <td width="250"><code>/push</code></td>
+    <td>push `origin <branch>` สำหรับ active session ปัจจุบัน โดยบอตจะขอการยืนยันก่อน push</td>
   </tr>
 </table>
+
 <h2>⚙️ ตัวแปรสภาพแวดล้อม</h2>
 
-<h3>Main env file path:</h3>
+<h3>ตำแหน่งไฟล์ env หลัก:</h3>
 
 <table>
   <tr>
     <td><code>CODING_AGENT_TELEGRAM_ENV_FILE</code></td>
-    <td>Use this if you want to point the app to a specific env file.</td>
+    <td>ใช้สิ่งนี้หากต้องการให้แอปชี้ไปยังไฟล์ env ที่กำหนดเอง</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/.env_coding_agent_telegram</code></td>
-    <td>Default env file location.</td>
+    <td>ตำแหน่งไฟล์ env เริ่มต้น</td>
   </tr>
   <tr>
     <td><code>./.env_coding_agent_telegram</code></td>
-    <td>Used only if this local file already exists.</td>
+    <td>จะใช้ก็ต่อเมื่อไฟล์ local นี้มีอยู่แล้วเท่านั้น</td>
   </tr>
 </table>
 
-<h3>Required</h3>
+<h3>จำเป็น</h3>
 
 <table>
   <tr>
     <td width="250"><code>WORKSPACE_ROOT</code></td>
-    <td>Parent folder that contains your project directories.</td>
+    <td>โฟลเดอร์หลักที่เก็บโฟลเดอร์โปรเจกต์ของคุณ</td>
   </tr>
   <tr>
-    <td><code>TELEGRAM_BOT_TOKENS</code></td>
-    <td>Comma-separated Telegram bot tokens.</td>
+    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td>Telegram bot tokens แบบคั่นด้วย comma</td>
   </tr>
   <tr>
-    <td><code>ALLOWED_CHAT_IDS</code></td>
-    <td>Comma-separated Telegram private chat IDs allowed to use the bot.</td>
+    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td>Telegram private chat IDs แบบคั่นด้วย comma ที่ได้รับอนุญาตให้ใช้บอต</td>
   </tr>
 </table>
 
-<h3>Common Settings</h3>
+<h3>การตั้งค่าทั่วไป</h3>
 
 <table>
   <tr>
     <td width="250"><code>APP_LOCALE</code></td>
-    <td>UI locale for shared bot messages and command descriptions. Supported values: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
+    <td>ภาษา UI สำหรับข้อความของบอตและคำอธิบายคำสั่งที่ใช้ร่วมกัน ค่าที่รองรับ: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code></td>
   </tr>
   <tr>
-    <td><code>CODEX_BIN</code></td>
-    <td>Command used to launch Codex CLI. Default: <code>codex</code>.</td>
+    <td width="250"><code>CODEX_BIN</code></td>
+    <td>คำสั่งที่ใช้เรียก Codex CLI ค่าเริ่มต้น: <code>codex</code></td>
   </tr>
   <tr>
-    <td><code>COPILOT_BIN</code></td>
-    <td>Command used to launch Copilot CLI. Default: <code>copilot</code>.</td>
+    <td width="250"><code>COPILOT_BIN</code></td>
+    <td>คำสั่งที่ใช้เรียก Copilot CLI ค่าเริ่มต้น: <code>copilot</code></td>
   </tr>
   <tr>
-    <td><code>CODEX_MODEL</code></td>
-    <td>Optional Codex model override.
-    Leave empty to use the Codex CLI default model.
-    Example: <code>gpt-5.4</code>
-    <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a>
-    </td>
+    <td width="250"><code>CODEX_MODEL</code></td>
+    <td>กำหนด model ของ Codex เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Codex CLI ตัวอย่าง: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td><code>COPILOT_MODEL</code></td>
-    <td>Optional Copilot model override.
-    Leave empty to use the Copilot CLI default model.
-    Examples: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code>
-    <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a>
-    </td>
+    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td>กำหนด model ของ Copilot เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Copilot CLI ตัวอย่าง: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td><code>CODEX_APPROVAL_POLICY</code></td>
-    <td>Approval mode passed to Codex. Default: <code>never</code>.</td>
+    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td>โหมด approval ที่ส่งให้ Codex ค่าเริ่มต้น: <code>never</code></td>
   </tr>
   <tr>
-    <td><code>CODEX_SANDBOX_MODE</code></td>
-    <td>Sandbox mode passed to Codex. Default: <code>workspace-write</code>.</td>
+    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td>โหมด sandbox ที่ส่งให้ Codex ค่าเริ่มต้น: <code>workspace-write</code></td>
   </tr>
   <tr>
-    <td><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
-    <td>If enabled, always bypass Codex trusted-repo checks.</td>
+    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td>หากเปิดไว้ จะข้ามการตรวจ trusted-repo ของ Codex เสมอ</td>
   </tr>
   <tr>
-    <td><code>ENABLE_COMMIT_COMMAND</code></td>
-    <td>Enable the <code>/commit</code> Telegram command. Default: <code>false</code>.</td>
+    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td>เปิดใช้งานคำสั่ง Telegram <code>/commit</code> ค่าเริ่มต้น: <code>false</code></td>
   </tr>
   <tr>
-    <td><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
-    <td>Hard timeout for a single agent run. Default: <code>0</code> (disabled).</td>
+    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td>ฮาร์ดไทม์เอาต์สำหรับ agent run หนึ่งครั้ง ค่าเริ่มต้น: <code>0</code> (ปิดใช้งาน)</td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Maximum file size the bot will read as text when building the before/after snapshot for per-run diffs. Default: <code>200000</code>.</td>
+    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td>ขนาดไฟล์สูงสุดที่บอตจะอ่านเป็นข้อความเพื่อสร้าง before/after snapshot สำหรับ diff ของแต่ละ run ค่าเริ่มต้น: <code>200000</code></td>
   </tr>
   <tr>
-    <td><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
-    <td>Max message size used before the app splits responses. Default: <code>3000</code></td>
+    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td>ขนาดข้อความสูงสุดก่อนที่แอปจะแบ่งการตอบกลับ ค่าเริ่มต้น: <code>3000</code></td>
   </tr>
   <tr>
-    <td><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
-    <td>Hide diffs for sensitive files. Default: <code>true></code></td>
+    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td>ซ่อน diff สำหรับไฟล์ที่มีข้อมูลอ่อนไหว ค่าเริ่มต้น: <code>true</code></td>
   </tr>
   <tr>
-    <td><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
-    <td>Redact tokens, keys, <code>.env</code> values, certificates, and similar secret-like output before sending it to Telegram. Default <code>true</code> (Strongly recommended)</td>
+    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td>ปิดบัง tokens, keys, ค่า <code>.env</code>, certificates และข้อมูลลักษณะคล้ายความลับก่อนส่งไปยัง Telegram ค่าเริ่มต้น: <code>true</code> (แนะนำอย่างยิ่ง)</td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
-    <td>Force-include matching paths in diffs. Example: <code>.github/*,.profile.test,.profile.prod</code></td>
+    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td>บังคับรวม path ที่ตรงเงื่อนไขเข้าใน diff ตัวอย่าง: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Add extra diff exclusions on top of the packaged defaults.
-  Example: <code>.*,personal/*,sensitive*.txt</code>
-  Note: <code>.*</code> matches hidden paths, including files inside hidden directories.</td>
+    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td>เพิ่มกฎยกเว้น diff เพิ่มเติมทับบนค่าเริ่มต้นของแพ็กเกจ ตัวอย่าง: <code>.*,personal/*,sensitive*.txt</code> หมายเหตุ: <code>.*</code> จะตรงกับ path ที่ซ่อนอยู่ รวมถึงไฟล์ใน hidden directory</td>
   </tr>
 </table>
 
-<h3>State and Logs</h3>
+<h3>State และ Logs</h3>
 
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Main session state file.</td>
+    <td>Hauptdatei für den Session-Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup state file.</td>
+    <td>Backup-Datei für den Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log directory.</td>
+    <td>Log-Verzeichnis.</td>
   </tr>
 </table>
 
-Example:
+ตัวอย่าง:
 
 ```env
 APP_LOCALE=en
@@ -377,178 +357,173 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 การจัดการเซสชัน
+## 🧠 การจัดการ Session
 
-Sessions are scoped by:
+Session ถูกแยกตาม:
 
 - Telegram bot
 - Telegram chat
 
-That means the same Telegram account can use multiple bots without mixing sessions.
+ดังนั้นบัญชี Telegram เดียวกันสามารถใช้หลาย bot ได้โดยไม่ทำให้ session ปะปนกัน
 
-Example:
+ตัวอย่าง:
 
-- Bot A + your chat -> backend work
-- Bot B + your chat -> frontend work
-- Bot C + your chat -> infra work
+- Bot A + chat ของคุณ -> งาน backend
+- Bot B + chat ของคุณ -> งาน frontend
+- Bot C + chat ของคุณ -> งาน infra
 
-The active session is also tied to:
+active session ยังผูกกับสิ่งต่อไปนี้ด้วย:
 
 - project folder
 - provider
-- branch name when available
+- ชื่อ branch หากมี
 
 <details>
-<summary><b>Each session stores:</b></summary>
+<summary><b>แต่ละ session จะเก็บข้อมูล:</b></summary>
 
-- session name
+- ชื่อ session
 - project folder
-- branch name
+- ชื่อ branch
 - provider
 - timestamps
-- active session selection for that bot/chat scope
+- การเลือก active session ภายใต้ขอบเขต bot/chat นั้น
 </details>
 
-### 🔓 ล็อกการทำงานพร้อมกันของ workspace
+### 🔓 Workspace concurrency lock
 
-Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
+จะมี agent run ที่ active ได้พร้อมกันเพียงหนึ่งตัวต่อ **project folder** ไม่ว่า chat หรือ Telegram bot ตัวใดจะเป็นผู้เริ่มก็ตาม
 
-This is different from “an agent is still processing the current question”:
+- **project is busy**: ใน workspace นั้นมี agent run ทำงานอยู่แล้ว
+- **agent is busy**: run ตัวนั้นยังประมวลผลคำขอปัจจุบันไม่เสร็จ
 
-- **project is busy** means the workspace already has one live agent run
-- **agent is busy** means that one live run is still working on the current request
+บอตบังคับกติกานี้เพื่อไม่ให้มีสอง agent เขียนลง workspace เดียวกันพร้อมกัน ช่วยลดการแก้ไขชนกันและลดโอกาสข้อมูลเสียหาย
 
-The bot enforces one active run per project on purpose so two agents do not write to the same workspace at the same time. That avoids conflicting edits and reduces the chance of data corruption.
+หากมีข้อความเข้ามาในขณะที่ project เดียวกันกำลังมี agent ทำงานอยู่ บอตจะตอบทันทีว่า:
 
-If a message arrives while an agent is already running on the same project, the bot immediately replies:
+> ⏳ มี agent กำลังทำงานอยู่บน project นี้แล้ว โปรดรอให้เสร็จก่อน
 
-> ⏳ An agent is already running on project '…'. Please wait for it to finish.
+lock นี้อยู่ในหน่วยความจำ ไม่ได้เก็บลงดิสก์ จึงถูกปล่อยอัตโนมัติเมื่อ agent ทำงานเสร็จ ล้มเหลว หรือ server รีสตาร์ต
 
-The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
+### 💬 คำถามที่เข้าคิว
 
-### 💬 คำถามที่เข้าคิวไว้
+หาก project ปัจจุบันมี agent run ทำงานอยู่แล้ว ข้อความตัวอักษรที่ส่งมาภายหลังจะไม่ถูกปฏิเสธ แต่จะถูกนำไปเข้าคิวแทน
 
-If the current project already has one live agent run, later text messages are not rejected. They are queued instead:
+- คำถามใหม่จะถูกต่อท้ายในไฟล์ queued-questions บนดิสก์
+- agent ปัจจุบันยังคงทำงานกับคำขอเดิมต่อไป
+- เมื่อ run นั้นจบแบบปกติ บอตจะเริ่มประมวลผลคำถามในคิวโดยอัตโนมัติ
 
-- the new question is appended to a queued-questions file on disk
-- the current agent keeps working on the earlier request
-- when that run finishes normally, the bot automatically starts processing the queued questions next
+หาก run ปัจจุบันถูก abort และยังมี queued questions เหลืออยู่ บอตจะไม่ทำต่ออัตโนมัติ แต่จะถามว่าต้องการประมวลผลคำถามที่เหลือต่อหรือไม่ แบบรวมกันหรือทีละข้อ
 
-If the current run is aborted and there are queued questions waiting, the bot does **not** auto-continue. It asks whether you want to continue processing the remaining queued questions. You can choose to batch process or one-by-one.
+## ⚠️ Diff (การเปลี่ยนไฟล์)
 
-## ⚠️ Diff (การเปลี่ยนแปลงไฟล์)
+_ในแต่ละ agent run บอตจะสร้าง before/after snapshot แบบเบาของโปรเจกต์ด้วย เพื่อสรุปไฟล์ที่เปลี่ยนและส่ง diff กลับไปยัง Telegram ได้ Snapshot นี้ถูกสร้างโดยตัวบอตเอง ไม่ใช่โดย Codex หรือ Copilot._
 
-_During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
+**สิ่งที่ควรรู้เกี่ยวกับ snapshot:**
 
-**Snapshot notes:**
+- แอปจะสแกน project directory ก่อนและหลังการรัน
+- สำหรับไฟล์ข้อความทั่วไป แอปจะใช้ diff จาก snapshot ของ run นั้นก่อน diff เทียบกับ git head
+- โฟลเดอร์ dependency, cache และ runtime ที่พบบ่อยจะถูกข้ามเช่นกัน
+- ไฟล์ binary และไฟล์ที่ใหญ่กว่า `SNAPSHOT_TEXT_FILE_MAX_BYTES` จะไม่ถูกอ่านเป็นข้อความ
+- สำหรับโปรเจกต์ขนาดใหญ่มาก การสแกนเพิ่มนี้อาจเพิ่มภาระด้าน I/O และ memory ได้อย่างเห็นได้ชัด
+- หาก snapshot ไม่สามารถแทนไฟล์เป็นข้อความได้ แอปจะ fallback ไปใช้ `git diff` เมื่อทำได้
+- สำหรับไฟล์ขนาดใหญ่หรือไม่ใช่ข้อความ diff อาจถูกละไว้และแทนด้วยข้อความสั้น ๆ
 
-- the app walks the project directory before and after the run
-- for normal text files, the app prefers the per-run snapshot diff rather than a git-head diff
-- common dependency, cache, and runtime directories are also skipped
-- binary files and files larger than `SNAPSHOT_TEXT_FILE_MAX_BYTES` are not loaded as text
-- for huge projects, this extra scan can add noticeable I/O and memory overhead
-- if the snapshot cannot represent a file as text, the app falls back to git diff when possible
-- for large or non-text files, the diff may still be omitted and replaced with a short unavailable message
-
-Snapshot exclusion rules live in package resource files:
+กฎการยกเว้น snapshot อยู่ใน package resources:
 
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
 - `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
 
-You can override those defaults in the env file without editing the installed package:
+คุณสามารถ override ค่าเหล่านี้ในไฟล์ env ได้โดยไม่ต้องแก้ package ที่ติดตั้งอยู่:
 
 - `SNAPSHOT_INCLUDE_PATH_GLOBS`
-  Force-include matching paths in diffs.
-  Example: `.github/*,.profile.test,.profile.prod`
+  บังคับรวม path ที่ตรงเงื่อนไขเข้าไปใน diff
+  ตัวอย่าง: `.github/*,.profile.test,.profile.prod`
 
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
-  Add extra diff exclusions on top of the packaged defaults.
-  Example: `.*,personal/*,sensitive*.txt`
-  Note: `.*` matches hidden paths, including files inside hidden directories.
+  เพิ่มกฎยกเว้น diff เพิ่มเติมทับบนค่าเริ่มต้นของ package
+  ตัวอย่าง: `.*,personal/*,sensitive*.txt`
+  หมายเหตุ: `.*` จะตรงกับ hidden path รวมถึงไฟล์ใน hidden directory
 
-If both include and exclude rules match, the include rule wins.
+หาก include และ exclude ตรงพร้อมกัน include จะมีผลก่อน
 
-## 🌿 พฤติกรรมของ branch
+## 🌿 พฤติกรรมของ Branch
 
-The bot treats project and branch as a bundle.
+บอตถือว่า project และ branch เป็นชุดเดียวกัน
 
-- choosing a project does not silently choose an unrelated branch
-- if branch input is needed, the bot asks you to pick it
-- when branch information is printed in session-related messages, project and branch are shown together
+- การเลือก project จะไม่แอบเลือก branch ที่ไม่เกี่ยวข้องให้อัตโนมัติ
+- หากต้องใช้ branch บอตจะถามให้คุณเลือก
+- เมื่อมีการแสดงข้อมูล branch ในข้อความที่เกี่ยวกับ session จะโชว์ project และ branch ควบคู่กัน
 
-When you create or change a branch, the bot guides you through the source explicitly:
+เมื่อคุณสร้างหรือสลับ branch บอตจะพาคุณเลือก source อย่างชัดเจน:
 
-- `local/<branch>` means use the local branch as the source
-- `origin/<branch>` means update from the remote branch first and then switch
+- `local/<branch>` คือใช้ local branch เป็นต้นทาง
+- `origin/<branch>` คืออัปเดตจาก remote branch ก่อน แล้วค่อยสลับ
 
-If the bot sees that the stored session branch and the repository's current branch do not match, it does not blindly continue. It asks which branch you want to use:
+ถ้าบอตพบว่า branch ที่เก็บไว้ใน session ไม่ตรงกับ branch ปัจจุบันของ repository บอตจะไม่ทำต่อแบบเดาสุ่ม แต่จะถามว่าต้องการใช้ branch ใด:
 
-- keep the stored session branch
-- keep the current repository branch
+- ใช้ branch ที่เก็บไว้ใน session
+- ใช้ branch ปัจจุบันของ repository
 
-If your preferred source branch is missing, the bot offers fallback source choices based on the default branch and current branch instead of leaving you at a raw git error.
+หาก source branch ที่คุณต้องการหายไป บอตจะเสนอ fallback source ตาม default branch และ current branch แทนที่จะปล่อยให้คุณเจอ Git error ตรง ๆ
 
-## 🔐 พฤติกรรมเรื่องความเชื่อถือของ Git
+## 🔐 พฤติกรรม trust ของ Git
 
-- Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
-- Folders created through `/project <name>` are marked as trusted by this app
-- Existing folders selected through `/project <name>` remain untrusted until you confirm trust in the Telegram prompt
-- That means newly created project folders can be used immediately
-- `/commit` can be disabled entirely with `ENABLE_COMMIT_COMMAND`
-- Mutating `/commit` operations are allowed only for trusted projects
+- โฟลเดอร์ที่มีอยู่เดิมจะอิงตาม `CODEX_SKIP_GIT_REPO_CHECK`
+- โฟลเดอร์ที่สร้างผ่าน `/project <name>` จะถูกทำเครื่องหมาย trusted โดยแอปนี้
+- โฟลเดอร์เดิมที่เลือกผ่าน `/project <name>` จะยังคงเป็น untrusted จนกว่าคุณจะยืนยัน trust ใน Telegram
+- ดังนั้นโฟลเดอร์โปรเจกต์ที่สร้างใหม่จึงใช้งานได้ทันที
+- สามารถปิด `/commit` ได้ทั้งหมดด้วย `ENABLE_COMMIT_COMMAND`
+- การทำ `/commit` ที่มีการแก้ไขจริงจะอนุญาตเฉพาะกับ trusted project เท่านั้น
 
 ## 🪵 Logs
 
-Logs are written to **both stdout and a rotating log file** under:
+log จะถูกเขียน **ทั้งไปที่ stdout และไฟล์ log แบบหมุนเวียน** ใต้ path นี้:
 
-- `~/.coding-agent-telegram/logs` (rotated at 10 MB, 3 backups kept)
+- `~/.coding-agent-telegram/logs` (หมุนเมื่อถึง 10 MB และเก็บสำรอง 3 ชุด)
 
-> **Note:** Because messages go to both stdout and the log file, watching the terminal
-> **and** tailing the log file at the same time (e.g. `tail -f ~/.coding-agent-telegram/logs/coding-agent-telegram.log`)
-> will make each message appear twice — once from each sink. This is expected behavior.
-> View one or the other, not both simultaneously.
+> **หมายเหตุ:** ถ้าคุณดู terminal ไปพร้อมกับ tail ไฟล์ log ข้อความแต่ละอันจะปรากฏสองครั้ง นี่เป็นพฤติกรรมปกติ ควรดูอย่างใดอย่างหนึ่ง ไม่ใช่ทั้งสองพร้อมกัน
 
 <details>
-<summary><b>Typical logged events</b></summary>
+<summary><b>เหตุการณ์ที่มักถูกบันทึก</b></summary>
 
-- bot startup and polling start
-- project selection
-- session creation
-- session switching
-- active session reporting
-- normal run execution (includes an audit log line with the truncated prompt)
-- session replacement after resume failure
-- warnings and runtime errors
+- การเริ่มต้น bot และเริ่ม polling
+- การเลือก project
+- การสร้าง session
+- การสลับ session
+- การรายงาน active session
+- การรันงานแบบปกติ (รวม audit log line ที่มี prompt แบบตัดทอน)
+- การแทนที่ session หลัง resume ล้มเหลว
+- warnings และ runtime errors
 </details>
 
 ## 🗂️ โครงสร้างโปรเจกต์
 
 - `src/coding_agent_telegram/`
-  Main application code
+  โค้ดหลักของแอปพลิเคชัน
 
 - `tests/`
-  Test suite
+  ชุดทดสอบ
 
 - `startup.sh`
-  Local bootstrap and startup entrypoint
+  entrypoint สำหรับ bootstrap และ startup แบบ local
 
 - `src/coding_agent_telegram/resources/.env.example`
-  Canonical environment template used by both repo startup and packaged installs
+  template สภาพแวดล้อมหลักที่ใช้ทั้งตอนเริ่มจาก repo และตอนติดตั้งเป็น package
 
 - `pyproject.toml`
-  Packaging and dependency configuration
+  การตั้งค่า packaging และ dependencies
 
-## 📦 Release Versioning
+## 📦 การกำหนดเวอร์ชัน release
 
-Package versions are derived from Git tags.
+เวอร์ชันของ package ถูก derive จาก Git tags
 
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
 
-## 📌 Notes
+## 📌 หมายเหตุ
 
-- This project is designed for users running the agents locally on their own machine.
-- The Telegram bot is a control surface, not the execution environment itself.
-- If you run multiple bots, all of them can be managed by one server process.
+- โปรเจกต์นี้ออกแบบมาสำหรับผู้ใช้ที่รัน agents แบบ local บนเครื่องของตนเอง
+- Telegram bot เป็น control surface ไม่ใช่ execution environment
+- หากคุณรันหลาย bot ก็ยังจัดการทั้งหมดได้ด้วย server process เดียว

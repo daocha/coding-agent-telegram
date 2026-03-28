@@ -130,11 +130,16 @@ class CommandRouterBase:
         self._last_run_results: dict[int, object] = {}
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
-        return sorted(
-            sessions.items(),
-            key=lambda item: (item[1].get("updated_at") or item[1].get("created_at") or "", item[0]),
+        indexed_sessions = list(enumerate(sessions.items()))
+        sorted_indexed_sessions = sorted(
+            indexed_sessions,
+            key=lambda indexed_item: (
+                indexed_item[1][1].get("updated_at") or indexed_item[1][1].get("created_at") or "",
+                indexed_item[0],
+            ),
             reverse=True,
         )
+        return [item for _, item in sorted_indexed_sessions]
 
     def _build_switch_page(
         self,

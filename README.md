@@ -34,8 +34,8 @@
    ## ✨ Why Use It
    - ✅ Lightweight: no heavy frameworks, full transparency
    - ✅ Multi-bot: multiple chats, multiple sessions
+   - ✅ Use Telegram to control Codex / Copilot CLI
    - ✅ Easily review files changed by agent in code block
-   - ✅ Review files easily: view agent answers and changed files in code block
    - ✅ Queue follow-up messages while the agent is working
    - ✅ Accept Text and Image input
 

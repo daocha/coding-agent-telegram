@@ -1501,7 +1501,8 @@ def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
     assert "Available sessions (page 1/3):" in message
     assert "🤖 = Bot managed session" in message
     assert "session-9" in message
-    assert "session-5" in message
+    assert "session-7" in message
+    assert "session-6" not in message
     assert "session-4" not in message
     assert "Pages: /switch page 1 ... /switch page 3" in message
     assert "/switch &lt;session_id&gt;" in message
