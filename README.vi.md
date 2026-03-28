@@ -32,19 +32,19 @@
    <td border="0">
 
    ## ✨ Vì sao nên dùng
-- ✅ Nhẹ: không cần framework nặng, minh bạch hoàn toàn
-- ✅ Nhiều bot: nhiều cuộc chat, nhiều phiên
-- ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
-- ✅ Dễ xem câu trả lời và các file đã thay đổi trong code block
-- ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
-- ✅ Hỗ trợ đầu vào văn bản và hình ảnh
+  - ✅ Nhẹ: không cần framework nặng, minh bạch hoàn toàn
+  - ✅ Nhiều bot: nhiều cuộc chat, nhiều phiên
+  - ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
+  - ✅ Dễ xem câu trả lời và các file đã thay đổi trong code block
+  - ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
+  - ✅ Hỗ trợ đầu vào văn bản và hình ảnh
 
    ## 🔁 Chuyển thiết bị/phiên liền mạch
 
-Bắt đầu một phiên trên Telegram rồi tiếp tục đúng phiên Codex/Copilot CLI đó trên máy tính sau mà không cần thao tác rườm rà. Với `/switch`, bạn cũng có thể chuyển qua lại mượt mà giữa Telegram và command line.
-
-- Dùng `/switch` để tiếp tục một phiên cục bộ
-- Hỗ trợ cả các phiên lịch sử
+  Bắt đầu một phiên trên Telegram rồi tiếp tục đúng phiên Codex/Copilot CLI đó trên máy tính sau mà không cần thao tác rườm rà. Với `/switch`, bạn cũng có thể chuyển qua lại mượt mà giữa Telegram và command line.
+  
+  - Dùng `/switch` để tiếp tục một phiên cục bộ
+  - Hỗ trợ cả các phiên lịch sử
 
    ## 🛠️ Luồng làm việc cục bộ điển hình
    ```bash
