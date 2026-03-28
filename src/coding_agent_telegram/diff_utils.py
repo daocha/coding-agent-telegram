@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from coding_agent_telegram.config import DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
+from coding_agent_telegram.i18n import DEFAULT_LOCALE, translate
 
 INTERNAL_APP_DIR = ".coding-agent-telegram"
 TEXTUAL_DIFF_UNAVAILABLE = "Binary or large file changed; textual diff unavailable."
@@ -246,18 +247,18 @@ def collect_diffs(project_path: Path, files: list[str]) -> list[FileDiff]:
     return results
 
 
-def build_summary(session_name: str, project_folder: str, files: list[str]) -> str:
+def build_summary(session_name: str, project_folder: str, files: list[str], *, locale: str = DEFAULT_LOCALE) -> str:
     lines = [
-        "Task completed.",
-        f"Session: {session_name}",
-        f"Project: {project_folder}",
+        translate(locale, "diff.task_completed"),
+        translate(locale, "diff.session_label", session_name=session_name),
+        translate(locale, "diff.project_label", project_folder=project_folder),
         "",
-        "Changed files:",
+        translate(locale, "diff.changed_files"),
     ]
     if files:
         lines.extend([f"- {f}" for f in files])
     else:
-        lines.append("- (none)")
+        lines.append(f"- {translate(locale, 'diff.none')}")
     return "\n".join(lines)
 
 
@@ -363,7 +364,7 @@ def _split_text_chunks(text: str, *, body_limit: int) -> list[str]:
     return chunks
 
 
-def _chunk_code_block(file_path: str, code_text: str, max_length: int) -> list[CodeChunk]:
+def _chunk_code_block(file_path: str, code_text: str, max_length: int, *, locale: str = DEFAULT_LOCALE) -> list[CodeChunk]:
     language = _language_for_path(file_path)
     body_limit = max(400, max_length - 128)
     chunks = _split_text_chunks(code_text, body_limit=body_limit)
@@ -371,14 +372,14 @@ def _chunk_code_block(file_path: str, code_text: str, max_length: int) -> list[C
     total = len(chunks)
     out: list[CodeChunk] = []
     for index, chunk in enumerate(chunks, start=1):
-        header = f"{file_path} (new file) ({index}/{total})"
+        header = translate(locale, "diff.new_file_header", file_path=file_path, index=index, total=total)
         out.append(CodeChunk(header=header, code=chunk, language=language or None))
     return out
 
 
-def chunk_fenced_diff(file_path: str, diff_text: str, max_length: int) -> list[CodeChunk]:
+def chunk_fenced_diff(file_path: str, diff_text: str, max_length: int, *, locale: str = DEFAULT_LOCALE) -> list[CodeChunk]:
     if _is_new_file_diff(diff_text):
-        return _chunk_code_block(file_path, _extract_new_file_content(diff_text), max_length)
+        return _chunk_code_block(file_path, _extract_new_file_content(diff_text), max_length, locale=locale)
 
     simplified = _simplify_diff_text(diff_text)
     if not simplified:
@@ -391,7 +392,15 @@ def chunk_fenced_diff(file_path: str, diff_text: str, max_length: int) -> list[C
     additions, deletions = _diff_stats(simplified)
     language = _language_for_path(file_path) or None
     for index, chunk in enumerate(chunks, start=1):
-        header = f"{file_path} (+{additions} -{deletions}) ({index}/{total})"
+        header = translate(
+            locale,
+            "diff.changed_file_header",
+            file_path=file_path,
+            additions=additions,
+            deletions=deletions,
+            index=index,
+            total=total,
+        )
         out.append(CodeChunk(header=header, code=chunk, language=language))
     return out
 

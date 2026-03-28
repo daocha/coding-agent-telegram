@@ -6,6 +6,8 @@ import coding_agent_telegram.config as config_module
 from coding_agent_telegram.config import (
     DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
     DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
+    create_initial_env_file,
+    detect_system_locale,
     load_config,
     resolve_app_internal_root,
     resolve_default_state_file_path,
@@ -42,6 +44,7 @@ def _isolate_env(monkeypatch, tmp_path):
         "MAX_TELEGRAM_MESSAGE_LENGTH",
         "ENABLE_SENSITIVE_DIFF_FILTER",
         "ENABLE_SECRET_SCRUB_FILTER",
+        "APP_LOCALE",
         "DEFAULT_AGENT_PROVIDER",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -84,6 +87,7 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.snapshot_text_file_max_bytes == DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
     assert cfg.max_telegram_message_length == DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH
     assert cfg.enable_secret_scrub_filter is True
+    assert cfg.locale == "en"
     assert cfg.default_agent_provider == "codex"
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
@@ -140,6 +144,30 @@ def test_load_config_secret_scrub_filter_can_be_disabled(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.enable_secret_scrub_filter is False
+
+
+def test_load_config_locale_override(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("APP_LOCALE", "zh-TW")
+
+    cfg = load_config()
+
+    assert cfg.locale == "zh-TW"
+
+
+def test_load_config_invalid_locale_falls_back_to_en(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("APP_LOCALE", "es")
+
+    cfg = load_config()
+
+    assert cfg.locale == "en"
 
 
 def test_resolve_env_file_path_uses_explicit_env_override(monkeypatch, tmp_path):
@@ -303,3 +331,27 @@ def test_resolve_env_file_path_returns_default_path_when_neither_file_exists(tmp
     path = resolve_env_file_path()
     assert path.name == DEFAULT_ENV_FILE_NAME
     assert path.parent == home / ".coding-agent-telegram"
+
+
+def test_detect_system_locale_prefers_shell_locale_env(monkeypatch):
+    monkeypatch.setenv("LANG", "zh_TW.UTF-8")
+    monkeypatch.delenv("LC_ALL", raising=False)
+    monkeypatch.delenv("LC_MESSAGES", raising=False)
+    monkeypatch.delenv("LANGUAGE", raising=False)
+
+    assert detect_system_locale() == "zh-TW"
+
+
+def test_create_initial_env_file_initializes_app_locale_from_system_language(tmp_path, monkeypatch):
+    env_path = tmp_path / ".env_coding_agent_telegram"
+    template_path = tmp_path / ".env.example"
+    template_path.write_text("APP_LOCALE=en\nWORKSPACE_ROOT=\n", encoding="utf-8")
+    monkeypatch.setenv("LANG", "ja_JP.UTF-8")
+    monkeypatch.delenv("LC_ALL", raising=False)
+    monkeypatch.delenv("LC_MESSAGES", raising=False)
+    monkeypatch.delenv("LANGUAGE", raising=False)
+
+    app_locale = create_initial_env_file(env_path, template_path)
+
+    assert app_locale == "ja"
+    assert "APP_LOCALE=ja" in env_path.read_text(encoding="utf-8")

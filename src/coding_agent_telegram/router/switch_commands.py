@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.filters import resolve_project_path
+from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.native_sessions import discover_native_project_sessions
 from coding_agent_telegram.telegram_sender import send_html_text, send_text
 
@@ -12,6 +13,14 @@ from .base import logger, require_allowed_chat
 
 
 class SwitchCommandMixin:
+    def _switch_origin_label(self, chat_id: int, origin: str) -> str:
+        key = "switch.source_native_cli" if origin == "native" else "switch.source_bot_managed"
+        return translate(self._chat_locale(chat_id), key)
+
+    def _switch_status_label(self, chat_id: int, status: str) -> str:
+        key = "switch.status_active" if status == "active" else "switch.status_idle"
+        return translate(self._chat_locale(chat_id), key)
+
     def _switch_listing_entries(self, chat_id: int) -> tuple[list[dict[str, str]], str | None]:
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         bot_sessions = self.deps.store.list_sessions(self.deps.bot_id, chat_id)
@@ -79,10 +88,12 @@ class SwitchCommandMixin:
 
     def _build_switch_page_from_entries(
         self,
+        chat_id: int,
         entries: list[dict[str, str]],
         current_project_folder: str | None,
         page: int,
     ) -> str:
+        locale = self._chat_locale(chat_id)
         total_sessions = len(entries)
         total_pages = max(1, (total_sessions + self.SWITCH_PAGE_SIZE - 1) // self.SWITCH_PAGE_SIZE)
         page = min(max(page, 1), total_pages)
@@ -90,38 +101,39 @@ class SwitchCommandMixin:
         page_items = entries[start : start + self.SWITCH_PAGE_SIZE]
 
         project_line = (
-            f"Current project filter for native sessions: <code>{html.escape(current_project_folder)}</code>"
+            translate(locale, "switch.current_project_filter", project_folder=f"<code>{html.escape(current_project_folder)}</code>")
             if current_project_folder
-            else "Current project filter for native sessions: (none)"
+            else translate(locale, "switch.current_project_filter_none")
         )
         lines = [
-            f"Available sessions (page {page}/{total_pages}):",
+            translate(locale, "switch.available_sessions", page=page, total_pages=total_pages),
             "",
-            "🤖 = Bot managed session",
-            "💻 = native CLI session",
+            f"🤖 = {translate(locale, 'switch.source_bot_managed')}",
+            f"💻 = {translate(locale, 'switch.source_native_cli')}",
             project_line,
             "",
         ]
         for idx, entry in enumerate(page_items, start=start + 1):
             branch_name = entry["branch_name"] or "(current branch)"
             marker = "🤖" if entry["origin"] == "bot" else "💻"
+            status_label = self._switch_status_label(chat_id, entry["status"])
             lines.append(
-                f"{idx}. {marker} {html.escape(entry['name'])} | <code>{html.escape(entry['project_folder'])}</code> &lt;{html.escape(branch_name)}&gt; | {html.escape(entry['provider'])} | {html.escape(entry['status'])}"
+                f"{idx}. {marker} {html.escape(entry['name'])} | <code>{html.escape(entry['project_folder'])}</code> &lt;{html.escape(branch_name)}&gt; | {html.escape(entry['provider'])} | {html.escape(status_label)}"
             )
             lines.append(f"session_id: {entry['session_id']}")
-            lines.append(f"initialized: {html.escape(entry['initialized_from'])}")
+            lines.append(f"{translate(locale, 'switch.initialized_label')}: {html.escape(entry['initialized_from'])}")
             lines.append("")
 
         lines.extend(
             [
-                "Use:",
+                translate(locale, "switch.use_label"),
                 "/switch &lt;session_id&gt;",
                 f"/switch page {page}",
-                "Selecting a native CLI session imports it into state.json and switches the bot to it.",
+                translate(locale, "switch.native_import_note"),
             ]
         )
         if total_pages > 1:
-            lines.append(f"Pages: /switch page 1 ... /switch page {total_pages}")
+            lines.append(translate(locale, "switch.pages_label", total_pages=total_pages))
         return "\n".join(lines).strip()
 
     @require_allowed_chat()
@@ -133,26 +145,26 @@ class SwitchCommandMixin:
 
         if not context.args:
             if not entries:
-                await send_text(update, context, "No sessions found.")
+                await send_text(update, context, self._t(update, "switch.no_sessions_found"))
                 return
             logger.info("Listed sessions page 1 for chat %s (%d sessions total).", chat_id, len(entries))
-            await send_html_text(update, context, self._build_switch_page_from_entries(entries, current_project_folder, 1))
+            await send_html_text(update, context, self._build_switch_page_from_entries(chat_id, entries, current_project_folder, 1))
             return
 
         if len(context.args) == 2 and context.args[0].lower() == "page":
             if not entries:
-                await send_text(update, context, "No sessions found.")
+                await send_text(update, context, self._t(update, "switch.no_sessions_found"))
                 return
             try:
                 page = int(context.args[1])
             except ValueError:
-                await send_text(update, context, "Invalid page number.\nUse: /switch page <number>")
+                await send_text(update, context, self._t(update, "switch.invalid_page_number"))
                 return
             if page < 1:
-                await send_text(update, context, "Invalid page number.\nUse: /switch page <number>")
+                await send_text(update, context, self._t(update, "switch.invalid_page_number"))
                 return
             logger.info("Listed sessions page %d for chat %s (%d sessions total).", page, chat_id, len(entries))
-            await send_html_text(update, context, self._build_switch_page_from_entries(entries, current_project_folder, page))
+            await send_html_text(update, context, self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page))
             return
 
         session_id = " ".join(context.args).strip()
@@ -180,7 +192,7 @@ class SwitchCommandMixin:
             native_origin_label = native_entry["origin_label"]
             native_initialized_from = native_entry["initialized_from"]
         if session is None:
-            await send_text(update, context, "⚠️ Session not found.\nRun /switch to list available sessions.")
+            await send_text(update, context, self._t(update, "switch.session_not_found"))
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, session["project_folder"])
@@ -188,11 +200,11 @@ class SwitchCommandMixin:
             await send_text(
                 update,
                 context,
-                f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+                self._t(update, "common.project_folder_missing", project_folder=session["project_folder"]),
             )
             return
         if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):
-            await send_text(update, context, "⚠️ Session not found.\nRun /switch to list available sessions.")
+            await send_text(update, context, self._t(update, "switch.session_not_found"))
             return
         logger.info(
             "Switched chat %s to session '%s' (%s) in project '%s'.",
@@ -205,16 +217,18 @@ class SwitchCommandMixin:
             update,
             context,
             (
-                f"Switched to session: {html.escape(session['name'])}\n"
-                f"Project: <code>{html.escape(session['project_folder'])}</code>\n"
-                f"Provider: {html.escape(session.get('provider', 'codex'))}\n"
-                f"Branch: {html.escape((session.get('branch_name') or '(current branch)'))}"
+                f"{self._t(update, 'switch.switched_to_session')}: {html.escape(session['name'])}\n"
+                f"{self._t(update, 'switch.project_label')}: <code>{html.escape(session['project_folder'])}</code>\n"
+                f"{self._t(update, 'switch.provider_label')}: {html.escape(session.get('provider', 'codex'))}\n"
+                f"{self._t(update, 'switch.branch_label')}: {html.escape((session.get('branch_name') or '(current branch)'))}"
                 + (
-                    f"\nSource: {html.escape(native_origin_label)}\nInitialized: {html.escape(native_initialized_from)}\nImported into state.json."
+                    f"\n{self._t(update, 'switch.source_label')}: {html.escape(self._switch_origin_label(chat_id, 'native'))}"
+                    f"\n{self._t(update, 'switch.initialized_label')}: {html.escape(native_initialized_from)}"
+                    f"\n{self._t(update, 'switch.imported_into_state_json')}"
                     if imported_from_native
                     else (
-                        f"\nSource: {html.escape(str(session.get('origin_label') or 'Bot managed session'))}\n"
-                        f"Initialized: {html.escape(str(session.get('initialized_from') or 'Bot-managed session from state.json'))}"
+                        f"\n{self._t(update, 'switch.source_label')}: {html.escape(self._switch_origin_label(chat_id, str(session.get('origin') or 'bot')))}\n"
+                        f"{self._t(update, 'switch.initialized_label')}: {html.escape(str(session.get('initialized_from') or 'Bot-managed session from state.json'))}"
                     )
                 )
             ),

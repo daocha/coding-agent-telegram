@@ -47,6 +47,7 @@ class AgentRunResult:
     assistant_text: str
     error_message: Optional[str]
     raw_events: list[dict]
+    error_code: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -163,11 +164,33 @@ class MultiAgentRunner:
         for key, value in event.items():
             if self._looks_metadata_key(key):
                 continue
-            if isinstance(value, (str, int, float, bool)):
-                summary[key] = value
+            summarized = self._summarize_event_value(value, parent_key=key)
+            if summarized not in (None, "", [], {}):
+                summary[key] = summarized
         if summary:
             return json.dumps(summary, ensure_ascii=False)
         return json.dumps(event, ensure_ascii=False)
+
+    def _summarize_event_value(self, value: Any, *, parent_key: str = "") -> Any:
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, list):
+            summarized_items = [
+                summarized
+                for item in value
+                if (summarized := self._summarize_event_value(item, parent_key=parent_key)) not in (None, "", [], {})
+            ]
+            return summarized_items
+        if isinstance(value, dict):
+            summary: dict[str, Any] = {}
+            for key, item in value.items():
+                if self._looks_metadata_key(key):
+                    continue
+                summarized = self._summarize_event_value(item, parent_key=key)
+                if summarized not in (None, "", [], {}):
+                    summary[key] = summarized
+            return summary
+        return None
 
     def _extract_codex_assistant_text(self, event: AssistantEvent) -> str:
         if isinstance(event, str):
@@ -243,6 +266,8 @@ class MultiAgentRunner:
         except json.JSONDecodeError:
             return stripped
 
+        if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
+            return self._summarize_structured_event(event)
         extracted = self._extract_codex_assistant_text(event)
         if extracted:
             return extracted
@@ -259,6 +284,8 @@ class MultiAgentRunner:
         except json.JSONDecodeError:
             return stripped
 
+        if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
+            return self._summarize_structured_event(event)
         extracted = self._extract_copilot_assistant_text(event)
         if extracted:
             return extracted
@@ -423,11 +450,17 @@ class MultiAgentRunner:
         if aborted:
             success = False
             assistant_text = ""
-            error_message = "Agent run aborted by /abort."
+            error_message = None
+            error_code = "agent_aborted"
         else:
             success = proc.returncode == 0 and parsed_success
+            error_code = None
             if not success and not error_message:
-                error_message = stderr.strip() or "Agent command failed."
+                stripped_stderr = stderr.strip()
+                if stripped_stderr:
+                    error_message = stripped_stderr
+                else:
+                    error_code = "agent_command_failed"
 
         return AgentRunResult(
             session_id=session_id,
@@ -435,6 +468,7 @@ class MultiAgentRunner:
             assistant_text=assistant_text,
             error_message=error_message,
             raw_events=events,
+            error_code=error_code,
         )
 
     def abort_running_process(self, project_path: Path) -> bool:
