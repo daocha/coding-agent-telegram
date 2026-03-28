@@ -207,7 +207,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>壓縮目前使用中的 session，並要求 provider 精簡目前的對話狀態。</td>
+    <td>從目前使用中的 session 建立新的壓縮 session，並切換到該 session。</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

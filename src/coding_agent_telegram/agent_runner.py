@@ -164,11 +164,33 @@ class MultiAgentRunner:
         for key, value in event.items():
             if self._looks_metadata_key(key):
                 continue
-            if isinstance(value, (str, int, float, bool)):
-                summary[key] = value
+            summarized = self._summarize_event_value(value, parent_key=key)
+            if summarized not in (None, "", [], {}):
+                summary[key] = summarized
         if summary:
             return json.dumps(summary, ensure_ascii=False)
         return json.dumps(event, ensure_ascii=False)
+
+    def _summarize_event_value(self, value: Any, *, parent_key: str = "") -> Any:
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, list):
+            summarized_items = [
+                summarized
+                for item in value
+                if (summarized := self._summarize_event_value(item, parent_key=parent_key)) not in (None, "", [], {})
+            ]
+            return summarized_items
+        if isinstance(value, dict):
+            summary: dict[str, Any] = {}
+            for key, item in value.items():
+                if self._looks_metadata_key(key):
+                    continue
+                summarized = self._summarize_event_value(item, parent_key=key)
+                if summarized not in (None, "", [], {}):
+                    summary[key] = summarized
+            return summary
+        return None
 
     def _extract_codex_assistant_text(self, event: AssistantEvent) -> str:
         if isinstance(event, str):
@@ -244,6 +266,8 @@ class MultiAgentRunner:
         except json.JSONDecodeError:
             return stripped
 
+        if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
+            return self._summarize_structured_event(event)
         extracted = self._extract_codex_assistant_text(event)
         if extracted:
             return extracted
@@ -260,6 +284,8 @@ class MultiAgentRunner:
         except json.JSONDecodeError:
             return stripped
 
+        if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
+            return self._summarize_structured_event(event)
         extracted = self._extract_copilot_assistant_text(event)
         if extracted:
             return extracted

@@ -207,7 +207,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>활성 session 을 compact 하고 provider 에게 현재 대화 상태를 압축하도록 요청합니다.</td>
+    <td>활성 session 에서 새 compact session 을 만들고 그쪽으로 전환합니다.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

@@ -213,7 +213,7 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>Die aktive Session compacten und den Provider bitten, den aktuellen Gesprächszustand zu verdichten.</td>
+    <td>Aus der aktiven Session eine neue kompakte Session erzeugen und dorthin wechseln.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

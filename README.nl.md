@@ -207,7 +207,7 @@ Opmerkingen:
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>De actieve session compacten en de provider vragen de huidige gespreksstatus samen te vatten.</td>
+    <td>Maak vanuit de actieve session een nieuwe compacte session en schakel daarheen over.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

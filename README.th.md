@@ -207,7 +207,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>ย่อ session ที่กำลังใช้งาน และให้ provider บีบอัดสถานะบทสนทนาปัจจุบัน</td>
+    <td>สร้าง session แบบย่อใหม่จาก session ที่กำลังใช้งาน แล้วสลับไปที่ session นั้น</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

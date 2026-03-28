@@ -207,7 +207,7 @@ Lưu ý:
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>Thu gọn session đang hoạt động và yêu cầu provider nén trạng thái hội thoại hiện tại.</td>
+    <td>Tạo một session rút gọn mới từ session đang hoạt động rồi chuyển sang session đó.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

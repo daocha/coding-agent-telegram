@@ -207,7 +207,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>アクティブな session を compact し、provider に現在の会話状態を圧縮させます。</td>
+    <td>アクティブな session から新しい compact 済み session を作成し、そこへ切り替えます。</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

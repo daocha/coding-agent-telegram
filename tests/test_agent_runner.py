@@ -297,6 +297,58 @@ def test_copilot_runner_progress_falls_back_to_raw_json_when_no_text_field_exist
     assert '"state": "running"' in captured[0].text
 
 
+def test_copilot_runner_progress_includes_nested_item_started_details(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"item.started","item":{"type":"shell","command":"git status","description":"Check repo state"}}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert '"type": "item.started"' in captured[0].text
+    assert '"command": "git status"' in captured[0].text
+
+
+def test_codex_runner_progress_includes_nested_item_completed_details(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"item.completed","item":{"type":"shell","command":"git status","status":"completed"}}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("codex", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert '"type": "item.completed"' in captured[0].text
+    assert '"command": "git status"' in captured[0].text
+
+
 def test_copilot_runner_extracts_assistant_message_delta_content(monkeypatch):
     calls = []
     monkeypatch.setattr(

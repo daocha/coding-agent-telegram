@@ -217,7 +217,7 @@ The bot currently accepts:
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>Compact the active session and ask the provider to compress the current conversation state.</td>
+    <td>Create a fresh compacted session from the active session and switch to it.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

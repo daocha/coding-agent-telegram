@@ -76,7 +76,7 @@ class SessionStatusCommandMixin:
         if await self._notify_if_current_project_busy(update, context):
             return
 
-        await self.runtime.run_active_session(update, context, user_message="/compact")
+        await self.runtime.compact_active_session(update, context)
 
     @require_allowed_chat(answer_callback=True)
     async def handle_queue_continue_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -170,5 +170,8 @@
   "cli.update_fields_in_env": "Update these fields in {env_path}:",
   "cli.then_run": "Then run: coding-agent-telegram",
   "bot.command.compact": "ย่อ session ที่กำลังใช้งาน",
-  "status.usage_compact": "วิธีใช้: /compact"
+  "status.usage_compact": "วิธีใช้: /compact",
+  "runtime.compacting_session": "กำลังย่อ session ที่กำลังใช้งาน...",
+  "runtime.compact_summary_missing": "provider ไม่ได้ส่ง compact handoff summary ที่ใช้งานได้กลับมา",
+  "runtime.session_compacted": "ย่อ session สำเร็จแล้ว และสลับไปที่ {session_name} ({session_id})"
 }

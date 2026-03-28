@@ -84,6 +84,70 @@ class DummyRunner:
         )
 
 
+class CompactingRunner(DummyRunner):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+                "on_stall": on_stall,
+                "on_progress": on_progress,
+            }
+        )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="Current goal: finish compact flow.\nFiles changed: README.md\nNext step: continue safely.",
+            error_message=None,
+            raw_events=[],
+        )
+
+    def create_session(
+        self,
+        provider,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.create_calls.append(
+            {
+                "provider": provider,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+                "on_stall": on_stall,
+                "on_progress": on_progress,
+            }
+        )
+        return AgentRunResult(
+            session_id="sess_compacted",
+            success=True,
+            assistant_text="Handoff loaded.",
+            error_message=None,
+            raw_events=[],
+        )
+
+
 class MarkdownRunner(DummyRunner):
     def resume_session(
         self,
@@ -2576,13 +2640,14 @@ def test_compact_reports_usage_when_args_are_passed(tmp_path: Path):
     assert bot.messages[-1][1] == "Usage: /compact"
 
 
-def test_compact_runs_active_session_with_compact_prompt(tmp_path: Path):
+@pytest.mark.parametrize("provider", ["codex", "copilot"])
+def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: str):
     backend = tmp_path / "backend"
     backend.mkdir()
-    runner = DummyRunner()
+    runner = CompactingRunner()
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
-    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "copilot")
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", provider)
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(is_git_repo=False)
 
@@ -2592,9 +2657,15 @@ def test_compact_runs_active_session_with_compact_prompt(tmp_path: Path):
 
     asyncio.run(router.handle_compact(update, context))
 
-    assert runner.resume_calls[-1]["provider"] == "copilot"
+    assert runner.resume_calls[-1]["provider"] == provider
     assert runner.resume_calls[-1]["session_id"] == "sess_current"
-    assert runner.resume_calls[-1]["user_message"] == "/compact"
+    assert "compact handoff summary" in runner.resume_calls[-1]["user_message"].lower()
+    assert runner.create_calls[-1]["provider"] == provider
+    assert "Use this compact handoff summary" in runner.create_calls[-1]["user_message"]
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_compacted"
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-1"
+    assert "Session compacted successfully." in bot.messages[-1][1]
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):

@@ -207,7 +207,7 @@ Remarques :
   </tr>
   <tr>
     <td width="250"><code>/compact</code></td>
-    <td>Compacter la session active et demander au provider de condenser l'état actuel de la conversation.</td>
+    <td>Créer une nouvelle session compactée à partir de la session active et basculer dessus.</td>
   </tr>
   <tr>
     <td width="250"><code>/commit &lt;git commands&gt;</code></td>

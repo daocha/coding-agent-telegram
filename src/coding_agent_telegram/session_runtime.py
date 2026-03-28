@@ -43,6 +43,16 @@ logger = logging.getLogger(__name__)
 PHOTO_ATTACHMENTS_DIR = "telegram_attachments"
 IMAGE_INSPECTION_PROMPT = "Open and inspect that image before answering."
 IMAGE_NO_CAPTION_MESSAGE = "The user sent an image without additional text."
+COMPACT_SUMMARY_PROMPT = (
+    "Create a compact handoff summary for this session so work can continue in a fresh session with less context. "
+    "Do not make code changes. Do not ask follow-up questions. Keep it concise but complete. "
+    "Include: current goal, important decisions, files changed, unresolved issues, and the most useful next steps."
+)
+COMPACT_BOOTSTRAP_TEMPLATE = (
+    "Use this compact handoff summary from the previous session as your starting context.\n\n"
+    "{summary}\n\n"
+    "Acknowledge that you have loaded the handoff summary and are ready to continue."
+)
 
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
@@ -357,6 +367,125 @@ class SessionRuntime:
             before=before,
         )
         return result
+
+    async def compact_active_session(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> AgentRunResult | None:
+        chat_id = update.effective_chat.id
+        active_id, session, project_path = await self._active_session_or_notify(update, context)
+        if active_id is None or session is None or project_path is None:
+            return None
+
+        project_folder = session["project_folder"]
+        provider = session.get("provider", "codex")
+        branch_name = session.get("branch_name", "")
+        session_name = session["name"]
+        logger.info(
+            "Compacting session '%s' (%s) for chat %s in project '%s' with provider '%s'.",
+            session_name,
+            active_id,
+            chat_id,
+            project_folder,
+            provider,
+        )
+
+        if branch_name and self.git.is_git_repo(project_path):
+            checkout = await self._checkout_branch(update, context, project_path, branch_name)
+            if not checkout:
+                return None
+
+        await send_text(update, context, self._t(update, "runtime.compacting_session"))
+        summary_result = await self.run_with_typing(
+            update,
+            context,
+            self.agent_runner.resume_session,
+            provider,
+            active_id,
+            project_path,
+            COMPACT_SUMMARY_PROMPT,
+            workspace_lock_key=project_folder,
+            skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            stall_message=self._t(update, "runtime.active_run_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
+        )
+        if summary_result is None:
+            logger.info(
+                "Compaction summary run was not started for chat %s on project '%s' because the workspace is busy.",
+                chat_id,
+                project_folder,
+            )
+            return None
+        if not summary_result.success:
+            error_text = (
+                _sanitize_agent_error(summary_result.error_message, error_code=getattr(summary_result, "error_code", None))
+                if summary_result.error_message
+                else self._t(update, "runtime.agent_run_failed")
+            )
+            if getattr(summary_result, "error_code", None) == "agent_aborted":
+                error_text = self._t(update, "runtime.agent_run_aborted")
+            await send_text(update, context, error_text)
+            return summary_result
+
+        compact_summary = (summary_result.assistant_text or "").strip()
+        if not compact_summary:
+            await send_text(update, context, self._t(update, "runtime.compact_summary_missing"))
+            return AgentRunResult(
+                session_id=active_id,
+                success=False,
+                assistant_text="",
+                error_message=None,
+                raw_events=[],
+                error_code="compact_summary_missing",
+            )
+
+        create_result = await self.run_with_typing(
+            update,
+            context,
+            self.agent_runner.create_session,
+            provider,
+            project_path,
+            COMPACT_BOOTSTRAP_TEMPLATE.format(summary=compact_summary),
+            workspace_lock_key=project_folder,
+            skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            stall_message=self._t(update, "runtime.replacement_session_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
+        )
+        if create_result is None:
+            return None
+        if not create_result.success or not create_result.session_id:
+            error_text = (
+                _sanitize_agent_error(create_result.error_message, error_code=getattr(create_result, "error_code", None))
+                if create_result.error_message
+                else self._t(update, "runtime.agent_run_failed")
+            )
+            if getattr(create_result, "error_code", None) == "agent_aborted":
+                error_text = self._t(update, "runtime.agent_run_aborted")
+            await send_text(update, context, error_text)
+            return create_result
+
+        switched_session_name = self._next_rotated_session_name(chat_id, session_name)
+        self.store.create_session(
+            self.bot_id,
+            chat_id,
+            create_result.session_id,
+            switched_session_name,
+            project_folder,
+            provider,
+            branch_name=branch_name,
+        )
+        await send_text(
+            update,
+            context,
+            self._t(
+                update,
+                "runtime.session_compacted",
+                session_name=switched_session_name,
+                session_id=create_result.session_id,
+            ),
+        )
+        return create_result
 
     async def _checkout_branch(
         self,
