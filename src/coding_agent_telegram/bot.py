@@ -7,6 +7,7 @@ from telegram.request import HTTPXRequest
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters as tg_filters
 
 from coding_agent_telegram.command_router import CommandRouter
+from coding_agent_telegram.i18n import DEFAULT_LOCALE, translate
 from coding_agent_telegram.session_store import SessionStoreError
 
 
@@ -19,19 +20,20 @@ TELEGRAM_REQUEST_CONNECTION_POOL_SIZE = 20
 TELEGRAM_GET_UPDATES_CONNECTION_POOL_SIZE = 2
 
 
-def default_bot_commands(*, enable_commit_command: bool) -> list[BotCommand]:
+def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_LOCALE) -> list[BotCommand]:
     commands = [
-        BotCommand("project", "Set the current project folder"),
-        BotCommand("branch", "Create and switch to a git work branch"),
-        BotCommand("provider", "Choose the provider for new sessions"),
-        BotCommand("new", "Create a new session"),
-        BotCommand("switch", "List sessions or switch to one"),
-        BotCommand("current", "Show the active session"),
-        BotCommand("abort", "Abort the current agent run"),
+        BotCommand("provider", translate(locale, "bot.command.provider")),
+        BotCommand("project", translate(locale, "bot.command.project")),
+        BotCommand("branch", translate(locale, "bot.command.branch")),
+        BotCommand("current", translate(locale, "bot.command.current")),
+        BotCommand("new", translate(locale, "bot.command.new")),
+        BotCommand("switch", translate(locale, "bot.command.switch")),
+        BotCommand("compact", translate(locale, "bot.command.compact")),
     ]
     if enable_commit_command:
-        commands.append(BotCommand("commit", "Run validated git commit commands"))
-    commands.append(BotCommand("push", "Push the current session branch"))
+        commands.append(BotCommand("commit", translate(locale, "bot.command.commit")))
+    commands.append(BotCommand("push", translate(locale, "bot.command.push")))
+    commands.append(BotCommand("abort", translate(locale, "bot.command.abort")))
     return commands
 
 
@@ -39,29 +41,46 @@ def allowed_private_chat_filter(allowed_chat_ids: set[int]):
     return tg_filters.Chat(chat_id=sorted(allowed_chat_ids)) & tg_filters.ChatType.PRIVATE
 
 
-async def initialize_bot_commands(app: Application, *, enable_commit_command: bool, allowed_chat_ids: set[int]) -> None:
-    commands = default_bot_commands(enable_commit_command=enable_commit_command)
+async def initialize_bot_commands(
+    app: Application,
+    *,
+    enable_commit_command: bool,
+    allowed_chat_ids: set[int],
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    async def set_commands(commands, scope) -> None:
+        await app.bot.set_my_commands(commands, scope=scope)
+
     await app.bot.delete_my_commands(scope=BotCommandScopeDefault())
+    base_commands = default_bot_commands(enable_commit_command=enable_commit_command, locale=locale)
+    await set_commands(base_commands, BotCommandScopeDefault())
     for chat_id in sorted(allowed_chat_ids):
-        await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id))
+        await set_commands(base_commands, BotCommandScopeChat(chat_id))
 
 
-async def handle_error(update, context) -> None:
-    if isinstance(context.error, SessionStoreError):
-        logger.warning("Session store lock conflict: %s", context.error)
+def build_error_handler(locale: str):
+    async def handle_error(update, context) -> None:
+        resolved_locale = locale or DEFAULT_LOCALE
+        if isinstance(context.error, SessionStoreError):
+            logger.warning("Session store lock conflict: %s", context.error)
+            if update is not None and getattr(update, "effective_chat", None) is not None:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=translate(resolved_locale, "bot.error.session_store", error=context.error),
+                )
+            return
+        logger.exception("Telegram handler failed.", exc_info=context.error)
         if update is not None and getattr(update, "effective_chat", None) is not None:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=f"⚠️ {context.error}",
+                text=translate(resolved_locale, "bot.error.command_failed"),
             )
-        return
-    logger.exception("Telegram handler failed.", exc_info=context.error)
-    if update is not None and getattr(update, "effective_chat", None) is not None:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="⚠️ Command failed. Check the server log for details.",
-        )
 
+    return handle_error
+
+
+async def handle_error(update, context) -> None:
+    await build_error_handler(DEFAULT_LOCALE)(update, context)
 
 def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: set[int]) -> Application:
     request = HTTPXRequest(
@@ -90,17 +109,18 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
         | tg_filters.VOICE
     )
 
+    app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
     app.add_handler(CommandHandler("project", router.handle_project, filters=allowed_private))
     app.add_handler(CommandHandler("branch", router.handle_branch, filters=allowed_private))
-    app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
+    app.add_handler(CommandHandler("current", router.handle_current, filters=allowed_private))
     app.add_handler(CommandHandler("new", router.handle_new, filters=allowed_private, block=False))
     app.add_handler(CommandHandler("switch", router.handle_switch, filters=allowed_private))
-    app.add_handler(CommandHandler("current", router.handle_current, filters=allowed_private))
-    app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
+    app.add_handler(CommandHandler("compact", router.handle_compact, filters=allowed_private))
     app.add_handler(CommandHandler("commit", router.handle_commit, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
+    app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
     app.add_handler(CallbackQueryHandler(router.handle_provider_callback, pattern=r"^provider:set:(codex|copilot)$", block=False))
-    app.add_handler(CallbackQueryHandler(router.handle_queue_batch_callback, pattern=r"^queuebatch:(group|single)$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_queue_batch_callback, pattern=r"^queuebatch:(group|single|cancel)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_continue_callback, pattern=r"^queuecontinue:(yes|no)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_source_callback, pattern=r"^branchsource:(local|origin):", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_discrepancy_callback, pattern=r"^branchdiscrepancy:(stored|current)$", block=False))
@@ -109,6 +129,6 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo, block=False))
     app.add_handler(MessageHandler(allowed_private & tg_filters.TEXT & ~tg_filters.COMMAND, router.handle_message, block=False))
     app.add_handler(MessageHandler(allowed_private & unsupported_media, router.handle_unsupported_message))
-    app.add_error_handler(handle_error)
+    app.add_error_handler(build_error_handler(router.deps.cfg.locale))
 
     return app

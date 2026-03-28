@@ -28,6 +28,7 @@ from coding_agent_telegram.diff_utils import (
 )
 from coding_agent_telegram.filters import is_sensitive_path, resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager
+from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
     markdownish_to_html,
@@ -40,21 +41,17 @@ from coding_agent_telegram.telegram_sender import (
 
 logger = logging.getLogger(__name__)
 PHOTO_ATTACHMENTS_DIR = "telegram_attachments"
-ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
-MISSING_PROJECT_MESSAGE = "⚠️ Project folder no longer exists for this session: {project_folder}"
-WORKING_MESSAGE = "Working on it..."
-PHOTO_TOO_LARGE_MESSAGE = "Photo is too large. The maximum supported size is 5 MB."
 IMAGE_INSPECTION_PROMPT = "Open and inspect that image before answering."
 IMAGE_NO_CAPTION_MESSAGE = "The user sent an image without additional text."
-ACTIVE_RUN_STALL_MESSAGE = (
-    "The current agent run appears stuck.\n"
-    "The local agent process is still running but has not produced output.\n"
-    "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+COMPACT_SUMMARY_PROMPT = (
+    "Create a compact handoff summary for this session so work can continue in a fresh session with less context. "
+    "Do not make code changes. Do not ask follow-up questions. Keep it concise but complete. "
+    "Include: current goal, important decisions, files changed, unresolved issues, and the most useful next steps."
 )
-REPLACEMENT_SESSION_STALL_MESSAGE = (
-    "Replacement session creation appears stuck.\n"
-    "The local agent process is still running but has not produced output.\n"
-    "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
+COMPACT_BOOTSTRAP_TEMPLATE = (
+    "Use this compact handoff summary from the previous session as your starting context.\n\n"
+    "{summary}\n\n"
+    "Acknowledge that you have loaded the handoff summary and are ready to continue."
 )
 
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
@@ -97,12 +94,17 @@ def _scrub_secrets(text: str) -> str:
     return text
 
 
-def _sanitize_agent_error(text: str) -> str:
+def _sanitize_agent_error(text: str, *, error_code: str | None = None) -> str:
     """Remove absolute filesystem paths from agent error messages before sending to users."""
-    normalized = " ".join((text or "").split())
-    if re.match(r"^Agent run aborted by .+", normalized):
+    if error_code == "agent_aborted":
         return "Agent run aborted by /abort."
     return _ABSOLUTE_PATH_RE.sub("<path>", text)
+
+
+class PhotoAttachmentError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class PhotoAttachmentStore:
@@ -117,17 +119,17 @@ class PhotoAttachmentStore:
 
     async def store_photo(self, update: Update, project_folder: str) -> Path:
         if update.message is None or not update.message.photo:
-            raise ValueError("Photo message does not contain a photo.")
+            raise PhotoAttachmentError("missing_photo", "Photo message does not contain a photo.")
 
         telegram_photo = update.message.photo[-1]
         declared_size = getattr(telegram_photo, "file_size", None)
         if isinstance(declared_size, int) and declared_size > self.MAX_PHOTO_BYTES:
-            raise ValueError(PHOTO_TOO_LARGE_MESSAGE)
+            raise PhotoAttachmentError("photo_too_large", translate("en", "runtime.photo_too_large"))
 
         telegram_file = await telegram_photo.get_file()
         content = bytes(await telegram_file.download_as_bytearray())
         if len(content) > self.MAX_PHOTO_BYTES:
-            raise ValueError(PHOTO_TOO_LARGE_MESSAGE)
+            raise PhotoAttachmentError("photo_too_large", translate("en", "runtime.photo_too_large"))
         suffix = Path(telegram_file.file_path or "image.jpg").suffix.lower() or ".jpg"
         if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
             suffix = ".jpg"
@@ -175,6 +177,12 @@ class SessionRuntime:
         self.git = git
         self.run_with_typing = run_with_typing
 
+    def _locale(self, update: Update | None) -> str:
+        return self.cfg.locale
+
+    def _t(self, update: Update | None, key: str, **kwargs) -> str:
+        return translate(self._locale(update), key, **kwargs)
+
     def _next_rotated_session_name(self, chat_id: int, base_name: str) -> str:
         existing = {
             data.get("name", "").strip().lower()
@@ -201,12 +209,12 @@ class SessionRuntime:
         chat_state = self.store.get_chat_state(self.bot_id, chat_id)
         active_id = chat_state.get("active_session_id")
         if not active_id:
-            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            await send_text(update, context, self._t(update, "common.no_active_session"))
             return None, None, None
 
         session = chat_state.get("sessions", {}).get(active_id)
         if not session:
-            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            await send_text(update, context, self._t(update, "common.no_active_session"))
             return None, None, None
 
         project_path = resolve_project_path(self.cfg.workspace_root, session["project_folder"])
@@ -214,7 +222,7 @@ class SessionRuntime:
             await send_text(
                 update,
                 context,
-                MISSING_PROJECT_MESSAGE.format(project_folder=session["project_folder"]),
+                self._t(update, "common.project_folder_missing", project_folder=session["project_folder"]),
             )
             return None, None, None
         return active_id, session, project_path
@@ -256,7 +264,7 @@ class SessionRuntime:
             max_text_file_bytes=self.cfg.snapshot_text_file_max_bytes,
         )
         before = set(changed_files(project_path))
-        await send_text(update, context, WORKING_MESSAGE)
+        await send_text(update, context, self._t(update, "runtime.working_on_it"))
         result = await self.run_with_typing(
             update,
             context,
@@ -268,8 +276,8 @@ class SessionRuntime:
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
-            stall_message=ACTIVE_RUN_STALL_MESSAGE,
-            progress_label="Live agent output",
+            stall_message=self._t(update, "runtime.active_run_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
         )
         if result is None:
             logger.info(
@@ -304,7 +312,13 @@ class SessionRuntime:
                 active_id,
                 result.error_message or "unknown error",
             )
-            error_text = _sanitize_agent_error(result.error_message) if result.error_message else "Agent run failed."
+            error_text = (
+                _sanitize_agent_error(result.error_message, error_code=getattr(result, "error_code", None))
+                if result.error_message
+                else self._t(update, "runtime.agent_run_failed")
+            )
+            if getattr(result, "error_code", None) == "agent_aborted":
+                error_text = self._t(update, "runtime.agent_run_aborted")
             await send_text(update, context, error_text)
             return result
 
@@ -330,10 +344,11 @@ class SessionRuntime:
             await send_text(
                 update,
                 context,
-                (
-                    "Resume succeeded, but the session ID changed.\n"
-                    f"New session ID: {result.session_id}\n"
-                    f"New session name: {switched_session_name}"
+                self._t(
+                    update,
+                    "runtime.resume_id_changed",
+                    session_id=result.session_id,
+                    session_name=switched_session_name,
                 ),
             )
             session_name = switched_session_name
@@ -352,6 +367,125 @@ class SessionRuntime:
             before=before,
         )
         return result
+
+    async def compact_active_session(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> AgentRunResult | None:
+        chat_id = update.effective_chat.id
+        active_id, session, project_path = await self._active_session_or_notify(update, context)
+        if active_id is None or session is None or project_path is None:
+            return None
+
+        project_folder = session["project_folder"]
+        provider = session.get("provider", "codex")
+        branch_name = session.get("branch_name", "")
+        session_name = session["name"]
+        logger.info(
+            "Compacting session '%s' (%s) for chat %s in project '%s' with provider '%s'.",
+            session_name,
+            active_id,
+            chat_id,
+            project_folder,
+            provider,
+        )
+
+        if branch_name and self.git.is_git_repo(project_path):
+            checkout = await self._checkout_branch(update, context, project_path, branch_name)
+            if not checkout:
+                return None
+
+        await send_text(update, context, self._t(update, "runtime.compacting_session"))
+        summary_result = await self.run_with_typing(
+            update,
+            context,
+            self.agent_runner.resume_session,
+            provider,
+            active_id,
+            project_path,
+            COMPACT_SUMMARY_PROMPT,
+            workspace_lock_key=project_folder,
+            skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            stall_message=self._t(update, "runtime.active_run_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
+        )
+        if summary_result is None:
+            logger.info(
+                "Compaction summary run was not started for chat %s on project '%s' because the workspace is busy.",
+                chat_id,
+                project_folder,
+            )
+            return None
+        if not summary_result.success:
+            error_text = (
+                _sanitize_agent_error(summary_result.error_message, error_code=getattr(summary_result, "error_code", None))
+                if summary_result.error_message
+                else self._t(update, "runtime.agent_run_failed")
+            )
+            if getattr(summary_result, "error_code", None) == "agent_aborted":
+                error_text = self._t(update, "runtime.agent_run_aborted")
+            await send_text(update, context, error_text)
+            return summary_result
+
+        compact_summary = (summary_result.assistant_text or "").strip()
+        if not compact_summary:
+            await send_text(update, context, self._t(update, "runtime.compact_summary_missing"))
+            return AgentRunResult(
+                session_id=active_id,
+                success=False,
+                assistant_text="",
+                error_message=None,
+                raw_events=[],
+                error_code="compact_summary_missing",
+            )
+
+        create_result = await self.run_with_typing(
+            update,
+            context,
+            self.agent_runner.create_session,
+            provider,
+            project_path,
+            COMPACT_BOOTSTRAP_TEMPLATE.format(summary=compact_summary),
+            workspace_lock_key=project_folder,
+            skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            stall_message=self._t(update, "runtime.replacement_session_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
+        )
+        if create_result is None:
+            return None
+        if not create_result.success or not create_result.session_id:
+            error_text = (
+                _sanitize_agent_error(create_result.error_message, error_code=getattr(create_result, "error_code", None))
+                if create_result.error_message
+                else self._t(update, "runtime.agent_run_failed")
+            )
+            if getattr(create_result, "error_code", None) == "agent_aborted":
+                error_text = self._t(update, "runtime.agent_run_aborted")
+            await send_text(update, context, error_text)
+            return create_result
+
+        switched_session_name = self._next_rotated_session_name(chat_id, session_name)
+        self.store.create_session(
+            self.bot_id,
+            chat_id,
+            create_result.session_id,
+            switched_session_name,
+            project_folder,
+            provider,
+            branch_name=branch_name,
+        )
+        await send_text(
+            update,
+            context,
+            self._t(
+                update,
+                "runtime.session_compacted",
+                session_name=switched_session_name,
+                session_id=create_result.session_id,
+            ),
+        )
+        return create_result
 
     async def _checkout_branch(
         self,
@@ -402,8 +536,8 @@ class SessionRuntime:
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
-            stall_message=REPLACEMENT_SESSION_STALL_MESSAGE,
-            progress_label="Live agent output",
+            stall_message=self._t(update, "runtime.replacement_session_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
         )
         if create_result is None:
             return None, active_id, session_name
@@ -431,10 +565,11 @@ class SessionRuntime:
         await send_text(
             update,
             context,
-            (
-                "Resume failed, so a new session was created.\n"
-                f"New session ID: {create_result.session_id}\n"
-                f"New session name: {switched_session_name}"
+            self._t(
+                update,
+                "runtime.resume_created_new",
+                session_id=create_result.session_id,
+                session_name=switched_session_name,
             ),
         )
         return create_result, create_result.session_id, switched_session_name
@@ -475,7 +610,7 @@ class SessionRuntime:
             result.session_id or active_id,
             len(files),
         )
-        await send_text(update, context, build_summary(session_name, project_folder, files))
+        await send_text(update, context, build_summary(session_name, project_folder, files, locale=self._locale(update)))
         await self._send_diffs(update, context, diffs)
 
     def _merge_snapshot_diffs(self, diffs, snapshot_diffs_by_path):
@@ -523,7 +658,17 @@ class SessionRuntime:
                 continue
 
             provider_label = "Copilot" if provider == "copilot" else "Codex"
-            title_prefix = f"{provider_label} output" if total == 1 else f"{provider_label} output {index}/{total}"
+            title_prefix = (
+                self._t(update, "runtime.provider_output_single", provider=provider_label)
+                if total == 1
+                else self._t(
+                    update,
+                    "runtime.provider_output_index",
+                    provider=provider_label,
+                    index=index,
+                    total=total,
+                )
+            )
             for message in self._chunk_assistant_prose(title_prefix, segment.text):
                 await send_html_text(update, context, message)
 
@@ -572,11 +717,12 @@ class SessionRuntime:
     async def _send_diffs(self, update: Update, context: ContextTypes.DEFAULT_TYPE, diffs) -> None:
         for file_diff in diffs:
             if self.cfg.enable_sensitive_diff_filter and is_sensitive_path(file_diff.path):
-                await send_text(update, context, f"{file_diff.path}\nThis file contains sensitive content and was omitted.")
+                await send_text(update, context, self._t(update, "runtime.sensitive_diff_omitted", path=file_diff.path))
                 continue
             for chunk in chunk_fenced_diff(
                 file_diff.path,
                 file_diff.diff,
                 self.cfg.max_telegram_message_length,
+                locale=self._locale(update),
             ):
                 await send_code_block(update, context, chunk.header, chunk.code, language=chunk.language)

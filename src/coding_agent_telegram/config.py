@@ -2,12 +2,16 @@ from __future__ import annotations
 
 """Application configuration loading and shared default limits."""
 
+import importlib.resources
 import os
+import re
+import locale as system_locale
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+from coding_agent_telegram.i18n import DEFAULT_LOCALE, normalize_locale
 
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
 DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
@@ -49,6 +53,7 @@ class AppConfig:
     default_agent_provider: str
     agent_hard_timeout_seconds: int
     app_internal_root: Path
+    locale: str = DEFAULT_LOCALE
 
 
 def _parse_bool(value: str, default: bool = False) -> bool:
@@ -79,6 +84,42 @@ def _parse_bot_tokens() -> tuple[str, ...]:
 
 def default_app_internal_root() -> Path:
     return Path.home() / DEFAULT_INTERNAL_APP_DIR_NAME
+
+
+def detect_system_locale() -> str:
+    for env_name in ("LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"):
+        raw = os.getenv(env_name, "").strip()
+        if not raw:
+            continue
+        for candidate in raw.split(":"):
+            normalized = normalize_locale(candidate)
+            if normalized:
+                return normalized
+    try:
+        language_code, _encoding = system_locale.getlocale()
+    except (ValueError, TypeError):
+        language_code = None
+    return normalize_locale(language_code)
+
+
+def _apply_initial_app_locale(template_text: str, app_locale: str) -> str:
+    replacement = f"APP_LOCALE={normalize_locale(app_locale)}"
+    if re.search(r"(?m)^APP_LOCALE=.*$", template_text):
+        return re.sub(r"(?m)^APP_LOCALE=.*$", replacement, template_text, count=1)
+    return f"{replacement}\n{template_text}"
+
+
+def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None) -> str:
+    if template_path is None:
+        template_text = importlib.resources.files("coding_agent_telegram").joinpath("resources/.env.example").read_text(
+            encoding="utf-8"
+        )
+    else:
+        template_text = template_path.read_text(encoding="utf-8")
+    app_locale = detect_system_locale()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text(_apply_initial_app_locale(template_text, app_locale), encoding="utf-8")
+    return app_locale
 
 
 def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
@@ -131,6 +172,7 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
     tokens = _parse_bot_tokens()
     allowed_ids = _parse_allowed_chat_ids()
     provider = os.getenv("DEFAULT_AGENT_PROVIDER", "codex").strip().lower()
+    locale = normalize_locale(os.getenv("APP_LOCALE", DEFAULT_LOCALE).strip() or DEFAULT_LOCALE)
 
     if not workspace_root_raw:
         raise ValueError("Missing required config: WORKSPACE_ROOT")
@@ -140,7 +182,6 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         raise ValueError("Missing required config: ALLOWED_CHAT_IDS")
     if provider not in {"codex", "copilot"}:
         raise ValueError("DEFAULT_AGENT_PROVIDER must be either codex or copilot")
-
     workspace_root = Path(workspace_root_raw).expanduser().resolve()
     app_internal_root = resolve_app_internal_root(workspace_root)
 
@@ -180,4 +221,5 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
         ),
         app_internal_root=app_internal_root,
+        locale=locale,
     )

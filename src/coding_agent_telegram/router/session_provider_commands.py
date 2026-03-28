@@ -50,18 +50,15 @@ class SessionProviderCommandMixin:
         await send_text(
             update,
             context,
-            (
-                f"{provider_label} CLI not found: {self._provider_bin(provider)}\n"
-                "Run /provider to choose an available provider or update the bot config."
-            ),
+            self._t(update, "provider.cli_not_found", provider_label=provider_label, bin_name=self._provider_bin(provider)),
         )
         return False
 
     def _build_provider_keyboard(self, current_provider: str) -> InlineKeyboardMarkup:
         def button_label(provider: str) -> str:
             provider_label = "Codex" if provider == "codex" else "Copilot"
-            status = "available" if self._provider_available(provider) else "missing"
-            marker = "current" if provider == current_provider else status
+            status = self._t(None, "provider.status_available") if self._provider_available(provider) else self._t(None, "provider.status_missing")
+            marker = self._t(None, "provider.status_current") if provider == current_provider else status
             return f"{provider_label} ({marker})"
 
         return InlineKeyboardMarkup(
@@ -78,7 +75,7 @@ class SessionProviderCommandMixin:
         if await self._notify_if_current_project_busy(update, context):
             return
         if context.args:
-            await send_text(update, context, "Usage: /provider")
+            await send_text(update, context, self._t(update, "provider.usage_provider"))
             return
 
         chat_id = update.effective_chat.id
@@ -87,9 +84,10 @@ class SessionProviderCommandMixin:
         if update.effective_chat is not None:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=(
-                    f"Current provider: {current_provider or '(not selected)'}\n"
-                    "Choose the provider for new sessions."
+                text=self._t(
+                    update,
+                    "provider.current_provider_prompt",
+                    provider=current_provider or self._t(update, "provider.not_selected"),
                 ),
                 reply_markup=self._build_provider_keyboard(current_provider),
             )
@@ -112,12 +110,12 @@ class SessionProviderCommandMixin:
         if not self._provider_available(provider):
             provider_label = "Codex" if provider == "codex" else "Copilot"
             await query.edit_message_text(
-                f"{provider_label} CLI not found: {self._provider_bin(provider)}\nUpdate the bot config or install that CLI first."
+                self._t(update, "provider.cli_not_found_install_first", provider_label=provider_label, bin_name=self._provider_bin(provider))
             )
             return
 
         self.deps.store.set_current_provider(self.deps.bot_id, chat_id, provider)
-        await query.edit_message_text(f"Current provider set to: {provider}")
+        await query.edit_message_text(self._t(update, "provider.current_provider_set", provider=provider))
         if previous_provider != provider and not self._pending_action(chat_id):
             self._store_pending_action(
                 chat_id,

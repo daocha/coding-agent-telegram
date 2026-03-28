@@ -84,6 +84,70 @@ class DummyRunner:
         )
 
 
+class CompactingRunner(DummyRunner):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.resume_calls.append(
+            {
+                "provider": provider,
+                "session_id": session_id,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+                "on_stall": on_stall,
+                "on_progress": on_progress,
+            }
+        )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="Current goal: finish compact flow.\nFiles changed: README.md\nNext step: continue safely.",
+            error_message=None,
+            raw_events=[],
+        )
+
+    def create_session(
+        self,
+        provider,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.create_calls.append(
+            {
+                "provider": provider,
+                "project_path": project_path,
+                "user_message": user_message,
+                "skip_git_repo_check": skip_git_repo_check,
+                "image_paths": image_paths,
+                "on_stall": on_stall,
+                "on_progress": on_progress,
+            }
+        )
+        return AgentRunResult(
+            session_id="sess_compacted",
+            success=True,
+            assistant_text="Handoff loaded.",
+            error_message=None,
+            raw_events=[],
+        )
+
+
 class MarkdownRunner(DummyRunner):
     def resume_session(
         self,
@@ -830,6 +894,42 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
 
 
+def test_branch_command_for_new_branch_offers_current_and_default_sources(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-enhancements",
+        default_branch="main",
+        local_branches=["main", "feature-enhancements"],
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["new-feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Creating a new branch from the following branch source: new-feature" in message
+    assert "Current branch in repo: feature-enhancements" in message
+    assert "Default branch: main" in message
+    reply_markup = bot.messages[-1][3]
+    assert reply_markup is not None
+    labels = [button.text for row in reply_markup.inline_keyboard for button in row]
+    assert labels == [
+        "local/feature-enhancements",
+        "origin/feature-enhancements",
+        "local/main",
+        "origin/main",
+    ]
+
+
 def test_branch_command_switches_to_existing_branch(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -1090,8 +1190,9 @@ class AbortableBlockingRunner(BlockingRunner):
                     session_id=session_id,
                     success=False,
                     assistant_text="",
-                    error_message="Agent run aborted by /abort.",
+                    error_message=None,
                     raw_events=[],
+                    error_code="agent_aborted",
                 )
         return AgentRunResult(
             session_id=session_id,
@@ -1187,7 +1288,7 @@ def test_new_command_reports_stalled_agent_process(tmp_path: Path):
 
     asyncio.run(router.handle_new(update, context))
 
-    assert any("Session creation appears stuck." in message[1] for message in bot.messages)
+    assert any("Replacement session creation appears stuck." in message[1] for message in bot.messages)
     assert any("hidden permission dialog" in message[1] for message in bot.messages)
 
 
@@ -1464,7 +1565,8 @@ def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
     assert "Available sessions (page 1/3):" in message
     assert "🤖 = Bot managed session" in message
     assert "session-9" in message
-    assert "session-5" in message
+    assert "session-7" in message
+    assert "session-6" not in message
     assert "session-4" not in message
     assert "Pages: /switch page 1 ... /switch page 3" in message
     assert "/switch &lt;session_id&gt;" in message
@@ -1696,7 +1798,7 @@ def test_switch_imports_native_session_into_state_json(tmp_path: Path, monkeypat
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_native_codex"
     assert state["sessions"]["sess_native_codex"]["name"] == "Native codex review"
-    assert "Source: native codex" in bot.messages[-1][1]
+    assert "Source: native CLI session" in bot.messages[-1][1]
     assert "Imported into state.json." in bot.messages[-1][1]
 
 
@@ -2523,6 +2625,49 @@ def test_abort_sends_signal_for_current_project_run(tmp_path: Path):
     assert bot.messages[-1][1] == "Abort signal sent for the current project run."
 
 
+def test_compact_reports_usage_when_args_are_passed(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/compact extra")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["extra"], bot=bot)
+
+    asyncio.run(router.handle_compact(update, context))
+
+    assert bot.messages[-1][1] == "Usage: /compact"
+
+
+@pytest.mark.parametrize("provider", ["codex", "copilot"])
+def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: str):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = CompactingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", provider)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="/compact")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_compact(update, context))
+
+    assert runner.resume_calls[-1]["provider"] == provider
+    assert runner.resume_calls[-1]["session_id"] == "sess_current"
+    assert "compact handoff summary" in runner.resume_calls[-1]["user_message"].lower()
+    assert runner.create_calls[-1]["provider"] == provider
+    assert "Use this compact handoff summary" in runner.create_calls[-1]["user_message"]
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_compacted"
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-1"
+    assert "Session compacted successfully." in bot.messages[-1][1]
+
+
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -2735,6 +2880,7 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         buttons = keyboard.inline_keyboard[0]
         assert buttons[0].callback_data == "queuebatch:group"
         assert buttons[1].callback_data == "queuebatch:single"
+        assert buttons[2].callback_data == "queuebatch:cancel"
 
         answers = []
         edited = []
@@ -2773,6 +2919,126 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         queued_notices = [message for _, message, _, _ in bot.messages if "Working on queued questions:" in message]
         assert any("1. two" in message and "2. three" in message for message in queued_notices)
         assert any("1. four four four four four four four" in message for message in queued_notices)
+
+    asyncio.run(exercise())
+
+
+def test_single_queue_batch_choice_processes_remaining_questions_without_reprompt(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="two"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(make_update(text="three"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(make_update(text="four"), SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        await first_task
+
+        prompt_messages = [entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]
+        assert len(prompt_messages) == 1
+
+        answers = []
+        edited = []
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(data="queuebatch:single", answer=None, edit_message_text=None),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        callback_update.callback_query.answer = fake_answer
+        callback_update.callback_query.edit_message_text = fake_edit
+
+        callback_task = asyncio.create_task(
+            router.handle_queue_batch_callback(callback_update, SimpleNamespace(args=[], bot=bot))
+        )
+
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+
+        started_third = await asyncio.to_thread(runner.wait_started, 3, 1.0)
+        assert started_third is True
+        runner.release_next()
+
+        started_fourth = await asyncio.to_thread(runner.wait_started, 4, 1.0)
+        assert started_fourth is True
+        runner.release_next()
+        await callback_task
+
+        assert len(runner.resume_calls) == 4
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert runner.resume_calls[1]["user_message"] == "two"
+        assert runner.resume_calls[2]["user_message"] == "three"
+        assert runner.resume_calls[3]["user_message"] == "four"
+        assert answers == ["answered"]
+        assert edited == ["Processing the queued questions one by one."]
+        assert len([entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]) == 1
+
+    asyncio.run(exercise())
+
+
+def test_cancel_queue_batch_discards_pending_batch(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="two"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(make_update(text="three"), SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        await first_task
+
+        prompt_messages = [entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]
+        assert len(prompt_messages) == 1
+
+        answers = []
+        edited = []
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(data="queuebatch:cancel", answer=None, edit_message_text=None),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        callback_update.callback_query.answer = fake_answer
+        callback_update.callback_query.edit_message_text = fake_edit
+
+        await router.handle_queue_batch_callback(callback_update, SimpleNamespace(args=[], bot=bot))
+
+        assert len(runner.resume_calls) == 1
+        assert answers == ["answered"]
+        assert edited == ["Queued questions were cancelled."]
+        assert router._chat_pending_queue_decisions == {}
 
     asyncio.run(exercise())
 
