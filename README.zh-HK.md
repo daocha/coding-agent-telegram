@@ -32,19 +32,19 @@
    <td border="0">
 
    ## ✨ 為什麼使用它
-- ✅ 輕量：沒有重型框架，行為清晰透明
-- ✅ 多 Bot：支援多個聊天、多個工作階段
-- ✅ 使用 Telegram 控制 Codex / Copilot CLI
-- ✅ 可在 code block 中輕鬆查看 agent 回覆及改動檔案
-- ✅ agent 執行中仍可把後續問題排入佇列
-- ✅ 支援文字與圖片輸入
+  - ✅ 輕量：沒有重型框架，行為清晰透明
+  - ✅ 多 Bot：支援多個聊天、多個工作階段
+  - ✅ 使用 Telegram 控制 Codex / Copilot CLI
+  - ✅ 可在 code block 中輕鬆查看 agent 回覆及改動檔案
+  - ✅ agent 執行中仍可把後續問題排入佇列
+  - ✅ 支援文字與圖片輸入
 
    ## 🔁 裝置與工作階段無縫切換
 
-你可以先在 Telegram 開始一個工作階段，之後再在電腦上繼續同一個 Codex/Copilot CLI 工作階段，過程自然順暢。使用 `/switch` 亦可在 Telegram 與 command line 之間輕鬆切換。
-
-- 使用 `/switch` 繼續本機工作階段
-- 亦支援歷史工作階段
+  你可以先在 Telegram 開始一個工作階段，之後再在電腦上繼續同一個 Codex/Copilot CLI 工作階段，過程自然順暢。使用 `/switch` 亦可在 Telegram 與 command line 之間輕鬆切換。
+  
+  - 使用 `/switch` 繼續本機工作階段
+  - 亦支援歷史工作階段
 
    ## 🛠️ 典型本機流程
    ```bash
