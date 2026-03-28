@@ -19,18 +19,18 @@
    <td border="0">
    
    ## ✨ Why Use It
-   - ✅ Lightweight: no heavy frameworks or dependencies, full transparency
-   - ✅ Multi-bot: multiple chats, multiple sessions, multi-tasking
-   - ✅ Easy Use: Control local Codex CLI and Copilot CLI from Telegram
+   - ✅ Lightweight: no heavy frameworks, full transparency
+   - ✅ Multi-bot: multiple chats, multiple sessions
+   - ✅ Easily review files changed by agent in code block
    - ✅ Review files easily: view agent answers and changed files in code block
-   - ✅ Queue and group follow-up messages while the agent is still working
+   - ✅ Queue follow-up messages while the agent is working
    - ✅ Accept Text and Image input
 
    ## 🔁 Seamless Device/Session Switching
    
    Start a session on Telegram, later on you can still continue the same Codex/Copilot CLI session on your computer, and switch back again without hassle.
    
-   - Use `/switch` in Telegram to continue a local Codex/Copilot CLI session
+   - Use `/switch` in Telegram to continue a local session
    - Support historical sessions
 
    ## 🛠️ Typical Local Flow
