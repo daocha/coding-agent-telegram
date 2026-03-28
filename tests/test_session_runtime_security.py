@@ -54,6 +54,43 @@ def test_scrub_secrets_handles_multiple_secrets_in_same_text():
     assert "ghs_ABCDE" not in result
 
 
+def test_scrub_secrets_redacts_pem_like_text():
+    text = (
+        "cert:\n"
+        "-----BEGIN PRIVATE KEY-----\n"
+        "abc123ABC123abc123ABC123abc123ABC123abc123ABC123\n"
+        "-----END PRIVATE KEY-----"
+    )
+    result = _scrub_secrets(text)
+    assert "<pem-like-text>" in result
+    assert "BEGIN PRIVATE KEY" not in result
+
+
+def test_scrub_secrets_redacts_certificate_block():
+    text = (
+        "-----BEGIN CERTIFICATE-----\n"
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtesttesttesttest\n"
+        "-----END CERTIFICATE-----"
+    )
+    result = _scrub_secrets(text)
+    assert "<crt-like-text>" in result
+    assert "BEGIN CERTIFICATE" not in result
+
+
+def test_scrub_secrets_redacts_hex_like_text():
+    text = "fingerprint deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    result = _scrub_secrets(text)
+    assert "<hex-like-text>" in result
+    assert "deadbeefdeadbeef" not in result
+
+
+def test_scrub_secrets_redacts_base64_like_text():
+    text = "blob QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0MTIzNDU2Nzg5MDEyMzQ1Njc4OTA="
+    result = _scrub_secrets(text)
+    assert "<base64-like-text>" in result
+    assert "QUJDREVGR0hJ" not in result
+
+
 # ---------------------------------------------------------------------------
 # _sanitize_agent_error
 # ---------------------------------------------------------------------------
