@@ -1092,6 +1092,7 @@ class AbortableBlockingRunner(BlockingRunner):
                     assistant_text="",
                     error_message="Agent run aborted by /abort.",
                     raw_events=[],
+                    error_code="agent_aborted",
                 )
         return AgentRunResult(
             session_id=session_id,
@@ -1187,7 +1188,7 @@ def test_new_command_reports_stalled_agent_process(tmp_path: Path):
 
     asyncio.run(router.handle_new(update, context))
 
-    assert any("Session creation appears stuck." in message[1] for message in bot.messages)
+    assert any("Replacement session creation appears stuck." in message[1] for message in bot.messages)
     assert any("hidden permission dialog" in message[1] for message in bot.messages)
 
 
@@ -1696,7 +1697,7 @@ def test_switch_imports_native_session_into_state_json(tmp_path: Path, monkeypat
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_native_codex"
     assert state["sessions"]["sess_native_codex"]["name"] == "Native codex review"
-    assert "Source: native codex" in bot.messages[-1][1]
+    assert "Source: native CLI session" in bot.messages[-1][1]
     assert "Imported into state.json." in bot.messages[-1][1]
 
 
@@ -2735,6 +2736,7 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         buttons = keyboard.inline_keyboard[0]
         assert buttons[0].callback_data == "queuebatch:group"
         assert buttons[1].callback_data == "queuebatch:single"
+        assert buttons[2].callback_data == "queuebatch:cancel"
 
         answers = []
         edited = []
@@ -2773,6 +2775,126 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         queued_notices = [message for _, message, _, _ in bot.messages if "Working on queued questions:" in message]
         assert any("1. two" in message and "2. three" in message for message in queued_notices)
         assert any("1. four four four four four four four" in message for message in queued_notices)
+
+    asyncio.run(exercise())
+
+
+def test_single_queue_batch_choice_processes_remaining_questions_without_reprompt(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="two"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(make_update(text="three"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(make_update(text="four"), SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        await first_task
+
+        prompt_messages = [entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]
+        assert len(prompt_messages) == 1
+
+        answers = []
+        edited = []
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(data="queuebatch:single", answer=None, edit_message_text=None),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        callback_update.callback_query.answer = fake_answer
+        callback_update.callback_query.edit_message_text = fake_edit
+
+        callback_task = asyncio.create_task(
+            router.handle_queue_batch_callback(callback_update, SimpleNamespace(args=[], bot=bot))
+        )
+
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+
+        started_third = await asyncio.to_thread(runner.wait_started, 3, 1.0)
+        assert started_third is True
+        runner.release_next()
+
+        started_fourth = await asyncio.to_thread(runner.wait_started, 4, 1.0)
+        assert started_fourth is True
+        runner.release_next()
+        await callback_task
+
+        assert len(runner.resume_calls) == 4
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert runner.resume_calls[1]["user_message"] == "two"
+        assert runner.resume_calls[2]["user_message"] == "three"
+        assert runner.resume_calls[3]["user_message"] == "four"
+        assert answers == ["answered"]
+        assert edited == ["Processing the queued questions one by one."]
+        assert len([entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]) == 1
+
+    asyncio.run(exercise())
+
+
+def test_cancel_queue_batch_discards_pending_batch(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_task = asyncio.create_task(router.handle_message(make_update(text="first question"), SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(make_update(text="two"), SimpleNamespace(args=[], bot=bot))
+        await router.handle_message(make_update(text="three"), SimpleNamespace(args=[], bot=bot))
+        runner.release_next()
+        await first_task
+
+        prompt_messages = [entry for entry in bot.messages if "Multiple queued questions are ready." in entry[1]]
+        assert len(prompt_messages) == 1
+
+        answers = []
+        edited = []
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(data="queuebatch:cancel", answer=None, edit_message_text=None),
+        )
+
+        async def fake_answer():
+            answers.append("answered")
+
+        async def fake_edit(text):
+            edited.append(text)
+
+        callback_update.callback_query.answer = fake_answer
+        callback_update.callback_query.edit_message_text = fake_edit
+
+        await router.handle_queue_batch_callback(callback_update, SimpleNamespace(args=[], bot=bot))
+
+        assert len(runner.resume_calls) == 1
+        assert answers == ["answered"]
+        assert edited == ["Queued questions were cancelled."]
+        assert router._chat_pending_queue_decisions == {}
 
     asyncio.run(exercise())
 

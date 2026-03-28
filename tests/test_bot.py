@@ -118,7 +118,7 @@ import asyncio
 
 def test_initialize_bot_commands_calls_delete_and_set():
     """initialize_bot_commands must call delete_my_commands once and
-    set_my_commands once per allowed chat."""
+    set_my_commands for the default scope plus once per allowed chat."""
     from coding_agent_telegram.bot import initialize_bot_commands
 
     deleted = []
@@ -139,8 +139,9 @@ def test_initialize_bot_commands_calls_delete_and_set():
     )
 
     assert len(deleted) == 1
-    assert len(set_calls) == 2
-    chat_ids_called = {s[1].chat_id for s in set_calls}
+    assert len(set_calls) >= 3
+    assert any(type(scope).__name__ == "BotCommandScopeDefault" for _, scope in set_calls)
+    chat_ids_called = {scope.chat_id for _, scope in set_calls if hasattr(scope, "chat_id")}
     assert chat_ids_called == {10, 20}
 
 
@@ -187,4 +188,4 @@ def test_initialize_bot_commands_empty_allowed_chat_ids():
         initialize_bot_commands(FakeApp(), enable_commit_command=False, allowed_chat_ids=set())
     )
 
-    assert set_calls == []
+    assert len(set_calls) >= 1

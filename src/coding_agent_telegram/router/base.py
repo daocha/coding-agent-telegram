@@ -22,6 +22,7 @@ from coding_agent_telegram.agent_runner import AgentProgressInfo, MultiAgentRunn
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager, _sanitize_git_output
+from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import send_text
@@ -29,7 +30,6 @@ from coding_agent_telegram.telegram_sender import send_text
 
 logger = logging.getLogger(__name__)
 TYPING_REFRESH_TIMEOUT_SECONDS = 4
-ACTIVE_SESSION_REQUIRED_MESSAGE = "No active session.\nPlease run /project and /new first."
 PROGRESS_PREVIEW_MAX_CHARS = 600
 
 
@@ -124,6 +124,7 @@ class CommandRouterBase:
         self._chat_message_queue_files: dict[int, deque[Path]] = {}
         self._chat_processing_queue_files: dict[int, Path] = {}
         self._chat_pending_queue_decisions: dict[int, tuple[Path, list[str]]] = {}
+        self._chat_queue_batch_modes: dict[int, str] = {}
         self._chat_next_queue_file_index: dict[int, int] = {}
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}
@@ -198,6 +199,15 @@ class CommandRouterBase:
         has_running_process = getattr(self.deps.agent_runner, "has_running_process", None)
         return bool(has_running_process is not None and has_running_process(project_path))
 
+    def _locale(self, update: Update | None) -> str:
+        return self.deps.cfg.locale
+
+    def _chat_locale(self, chat_id: int) -> str:
+        return self.deps.cfg.locale
+
+    def _t(self, update: Update | None, key: str, **kwargs) -> str:
+        return translate(self._locale(update), key, **kwargs)
+
     async def _notify_if_current_project_busy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         chat = update.effective_chat
         if chat is None:
@@ -208,7 +218,7 @@ class CommandRouterBase:
         await send_text(
             update,
             context,
-            f"An agent is currently running on project '{project_folder}'.\nOnly /current and /abort are supported until it finishes.",
+            self._t(update, "common.project_busy", project_folder=project_folder),
         )
         return True
 
@@ -229,8 +239,7 @@ class CommandRouterBase:
                 await send_text(
                     update,
                     context,
-                    f"⏳ An agent is already running on project '{workspace_lock_key}'. "
-                    "Please wait for it to finish.",
+                    self._t(update, "common.agent_already_running", project_folder=workspace_lock_key),
                 )
                 return None
             async with lock:
@@ -396,7 +405,7 @@ class CommandRouterBase:
         chat_id = update.effective_chat.id
         active_id, session, _ = self._active_session_context(chat_id)
         if session is None:
-            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            await send_text(update, context, self._t(update, "common.no_active_session"))
             return None, None
         return active_id, session
 
@@ -411,12 +420,12 @@ class CommandRouterBase:
         chat_id = update.effective_chat.id
         _, session, project_path = self._active_session_context(chat_id)
         if session is None or project_path is None:
-            await send_text(update, context, ACTIVE_SESSION_REQUIRED_MESSAGE)
+            await send_text(update, context, self._t(update, "common.no_active_session"))
             return None, None
         if not await self._ensure_session_project_exists(update, context, session, project_path):
             return None, None
         if require_git_repo and not self.git.is_git_repo(project_path):
-            await send_text(update, context, "⚠️ Current project is not a git repository.")
+            await send_text(update, context, self._t(update, "common.current_project_not_git"))
             return None, None
         return session, project_path
 
@@ -757,6 +766,6 @@ class CommandRouterBase:
         await send_text(
             update,
             context,
-            f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+            self._t(update, "common.project_folder_missing", project_folder=session["project_folder"]),
         )
         return False
