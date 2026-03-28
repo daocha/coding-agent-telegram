@@ -14,8 +14,8 @@
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-HK.md">繁體中文（香港）</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-TW.md">繁體中文（台灣）</a>
   </p>
-  <p><strong>Lightweight, Multi Bots, Multi sessions, Multi-tasking, 24/7 AI Coding Agent</strong></p>
-  <p>Control your local AI coding agent from anywhere with Telegram.</p>
+  <p><strong>Leichtgewichtig, Multi-Bot, Multi-Session, Multitasking, 24/7 KI-Coding-Agent</strong></p>
+  <p>Steuere deinen lokalen KI-Coding-Agenten von überall über Telegram.</p>
   <p>
     <img src="https://img.shields.io/badge/stability-experimental-orange.svg" alt="Experimental" />
     <a href="https://opensource.org/licenses/MIT">
@@ -31,22 +31,22 @@
    <tr>
    <td border="0">
    
-   ## ✨ Why Use It
+   ## ✨ Warum dieses Projekt
    - ✅ Lightweight: no heavy frameworks, full transparency
    - ✅ Multi-bot: multiple chats, multiple sessions
    - ✅ Easily review files changed by agent in code block
-   - ✅ Review files easily: view agent answers and changed files in code block
+   - ✅ Dateien leicht prüfen: Antworten und geänderte Dateien direkt in Codeblöcken ansehen
    - ✅ Queue follow-up messages while the agent is working
-   - ✅ Accept Text and Image input
+   - ✅ Unterstützt Text- und Bildeingaben
 
-   ## 🔁 Seamless Device/Session Switching
+   ## 🔁 Nahtlos zwischen Geräten und Sessions wechseln
    
-   Start a session on Telegram, later on you can still continue the same Codex/Copilot CLI session on your computer, and switch back again without hassle.
+   Starte eine Session in Telegram, arbeite später nahtlos am selben Codex/Copilot-CLI-Workflow auf deinem Computer weiter und wechsle jederzeit zurück.
    
    - Use `/switch` in Telegram to continue a local session
-   - Support historical sessions
+   - Unterstützt auch frühere Sessions
 
-   ## 🛠️ Typical Local Flow
+   ## 🛠️ Typischer Ablauf lokal
    ```bash
    coding-agent-telegram # or run ./startup.sh
    ```
@@ -75,21 +75,21 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    <tr>
    <td width="50%" valign="top">
       
-   ## 🔐 Security
+   ## 🔐 Sicherheit
       
    - Private chat allowlist with `ALLOWED_CHAT_IDS`
    - One active agent per project to reduce conflicting writes
-   - Sensitive file diffs are hidden
-   - API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
-   - Runtime app data stays under `~/.coding-agent-telegram`
-   - Existing folders can require trust before mutating git operations
-   - Server makes `NO hidden external call`. Everything is under your control.      
+   - Diffs sensibler Dateien werden ausgeblendet
+   - API-Schlüssel, Tokens, `.env`-Werte, Zertifikate, SSH-Schlüssel und ähnliche Geheimnisse werden vor dem Senden an Telegram geschwärzt
+   - Laufzeitdaten der App bleiben unter `~/.coding-agent-telegram`
+   - Bestehende Ordner können vor schreibenden Git-Operationen eine Vertrauensbestätigung verlangen
+   - Der Server macht `KEINE versteckten externen Aufrufe`. Alles bleibt unter deiner Kontrolle.      
    </td>
    <td width="50%" valign="top">
       
-   ## ✅ Requirements
+   ## ✅ Voraussetzungen
 
-   Before starting the server, make sure you have:
+   Bevor du den Server startest, stelle sicher, dass Folgendes vorhanden ist:
    
    - Python 3.9 or newer
    - Telegram bot token created from _@BotFather_
@@ -101,22 +101,22 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    </tr>
 </table>
 
-## 🚀 Quick Start
+## 🚀 Schnellstart
 
-### Option A: Start with a one-line bootstrap script
+### Option A: Start mit einem Einzeiler
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Install from PyPI with `pip`
+### Option B: Installation über PyPI mit `pip`
 
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Run from a cloned repository
+### Option C: Aus einem geklonten Repository starten
 
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
@@ -124,9 +124,9 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Start Bot Server
-##### On first run, the app creates the env file, tells you what to fill in.
-##### After updating the environment file then run:
+### Bot-Server starten
+##### Beim ersten Start erstellt die App die Env-Datei und zeigt an, welche Felder ausgefüllt werden müssen.
+##### Nach dem Aktualisieren der Umgebungsdatei erneut ausführen:
 
 ```bash
 # if you follow Option A or Option B, then run
@@ -136,9 +136,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🔑 Telegram Setup
+## 🔑 Telegram-Einrichtung
 
-### Get a Bot Token
+### Bot-Token holen
 
 1. Open Telegram and start a chat with `@BotFather`.
 2. Send `/newbot`.
@@ -148,7 +148,7 @@ coding-agent-telegram
 4. BotFather will return an HTTP API token.
 5. Put that token into `TELEGRAM_BOT_TOKENS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`.
 
-### Get Your Chat ID
+### Eigene Chat-ID holen
 
 The most reliable way is to use Telegram's `getUpdates` API with your own bot token.
 
@@ -163,20 +163,20 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 4. Copy the numeric `id` field from that object.
 5. Put that value into `ALLOWED_CHAT_IDS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`
 
-Notes:
+Hinweise:
 
 - For private chats, the chat ID is usually a positive integer.
 - If `getUpdates` returns an empty result, send another message to the bot and try again.
 
-## 📨 Supported Message Types
+## 📨 Unterstützte Nachrichtentypen
 
-The bot currently accepts:
+Der Bot akzeptiert derzeit:
 
-- Text messages
-- photos
-- Codex and Copilot currently supports text and image only, video is not supported.
+- Textnachrichten
+- Fotos
+- Codex und Copilot unterstützen derzeit nur Text und Bilder, Videos werden nicht unterstützt.
 
-## 🤖 Telegram Commands
+## 🤖 Telegram-Befehle
 
 <table>
   <tr>
@@ -229,9 +229,9 @@ The bot currently accepts:
     <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
   </tr>
 </table>
-<h2>⚙️ Environment Variables</h2>
+<h2>⚙️ Umgebungsvariablen</h2>
 
-<h3>Main env file path:</h3>
+<h3>Hauptpfad der Env-Datei:</h3>
 
 <table>
   <tr>
@@ -248,7 +248,7 @@ The bot currently accepts:
   </tr>
 </table>
 
-<h3>Required</h3>
+<h3>Erforderlich</h3>
 
 <table>
   <tr>
@@ -265,7 +265,7 @@ The bot currently accepts:
   </tr>
 </table>
 
-<h3>Common Settings</h3>
+<h3>Allgemeine Einstellungen</h3>
 
 <table>
   <tr>
@@ -284,7 +284,7 @@ The bot currently accepts:
     <td><code>CODEX_MODEL</code></td>
     <td>Optional Codex model override.
     Leave empty to use the Codex CLI default model.
-    Example: <code>gpt-5.4</code>
+    Beispiel: <code>gpt-5.4</code>
     <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a>
     </td>
   </tr>
@@ -334,17 +334,17 @@ The bot currently accepts:
   </tr>
   <tr>
     <td><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
-    <td>Force-include matching paths in diffs. Example: <code>.github/*,.profile.test,.profile.prod</code></td>
+    <td>Force-include matching paths in diffs. Beispiel: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
     <td><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>Add extra diff exclusions on top of the packaged defaults.
-  Example: <code>.*,personal/*,sensitive*.txt</code>
+  Beispiel: <code>.*,personal/*,sensitive*.txt</code>
   Note: <code>.*</code> matches hidden paths, including files inside hidden directories.</td>
   </tr>
 </table>
 
-<h3>State and Logs</h3>
+<h3>Status und Logs</h3>
 
 <table>
   <tr>
@@ -361,7 +361,7 @@ The bot currently accepts:
   </tr>
 </table>
 
-Example:
+Beispiel:
 
 ```env
 APP_LOCALE=en
@@ -377,7 +377,7 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Session Management
+## 🧠 Session-Verwaltung
 
 Sessions are scoped by:
 
@@ -386,7 +386,7 @@ Sessions are scoped by:
 
 That means the same Telegram account can use multiple bots without mixing sessions.
 
-Example:
+Beispiel:
 
 - Bot A + your chat -> backend work
 - Bot B + your chat -> frontend work
@@ -409,7 +409,7 @@ The active session is also tied to:
 - active session selection for that bot/chat scope
 </details>
 
-### 🔓 Workspace concurrency lock
+### 🔓 Workspace-Sperre für parallele Zugriffe
 
 Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
 
@@ -426,7 +426,7 @@ If a message arrives while an agent is already running on the same project, the 
 
 The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
 
-### 💬 Queued questions
+### 💬 Wartende Fragen
 
 If the current project already has one live agent run, later text messages are not rejected. They are queued instead:
 
@@ -436,7 +436,7 @@ If the current project already has one live agent run, later text messages are n
 
 If the current run is aborted and there are queued questions waiting, the bot does **not** auto-continue. It asks whether you want to continue processing the remaining queued questions. You can choose to batch process or one-by-one.
 
-## ⚠️ Diff (file changes)
+## ⚠️ Diff (Dateiänderungen)
 
 _During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
 
@@ -460,16 +460,16 @@ You can override those defaults in the env file without editing the installed pa
 
 - `SNAPSHOT_INCLUDE_PATH_GLOBS`
   Force-include matching paths in diffs.
-  Example: `.github/*,.profile.test,.profile.prod`
+  Beispiel: `.github/*,.profile.test,.profile.prod`
 
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
   Add extra diff exclusions on top of the packaged defaults.
-  Example: `.*,personal/*,sensitive*.txt`
+  Beispiel: `.*,personal/*,sensitive*.txt`
   Note: `.*` matches hidden paths, including files inside hidden directories.
 
 If both include and exclude rules match, the include rule wins.
 
-## 🌿 Branch Behavior
+## 🌿 Branch-Verhalten
 
 The bot treats project and branch as a bundle.
 
@@ -489,7 +489,7 @@ If the bot sees that the stored session branch and the repository's current bran
 
 If your preferred source branch is missing, the bot offers fallback source choices based on the default branch and current branch instead of leaving you at a raw git error.
 
-## 🔐 Git Trust Behavior
+## 🔐 Git-Vertrauensmodell
 
 - Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
 - Folders created through `/project <name>` are marked as trusted by this app
@@ -522,7 +522,7 @@ Logs are written to **both stdout and a rotating log file** under:
 - warnings and runtime errors
 </details>
 
-## 🗂️ Project Structure
+## 🗂️ Projektstruktur
 
 - `src/coding_agent_telegram/`
   Main application code

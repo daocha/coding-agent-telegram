@@ -14,8 +14,8 @@
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-HK.md">繁體中文（香港）</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.zh-TW.md">繁體中文（台灣）</a>
   </p>
-  <p><strong>Lightweight, Multi Bots, Multi sessions, Multi-tasking, 24/7 AI Coding Agent</strong></p>
-  <p>Control your local AI coding agent from anywhere with Telegram.</p>
+  <p><strong>가볍고, 멀티 봇·멀티 세션·멀티태스킹을 지원하는 24/7 AI 코딩 에이전트</strong></p>
+  <p>Telegram으로 어디서든 로컬 AI 코딩 에이전트를 제어할 수 있습니다.</p>
   <p>
     <img src="https://img.shields.io/badge/stability-experimental-orange.svg" alt="Experimental" />
     <a href="https://opensource.org/licenses/MIT">
@@ -31,7 +31,7 @@
    <tr>
    <td border="0">
    
-   ## ✨ Why Use It
+   ## ✨ 왜 사용하나
    - ✅ Lightweight: no heavy frameworks, full transparency
    - ✅ Multi-bot: multiple chats, multiple sessions
    - ✅ Easily review files changed by agent in code block
@@ -39,14 +39,14 @@
    - ✅ Queue follow-up messages while the agent is working
    - ✅ Accept Text and Image input
 
-   ## 🔁 Seamless Device/Session Switching
+   ## 🔁 기기/세션 간 자연스러운 전환
    
    Start a session on Telegram, later on you can still continue the same Codex/Copilot CLI session on your computer, and switch back again without hassle.
    
    - Use `/switch` in Telegram to continue a local session
    - Support historical sessions
 
-   ## 🛠️ Typical Local Flow
+   ## 🛠️ 일반적인 로컬 사용 흐름
    ```bash
    coding-agent-telegram # or run ./startup.sh
    ```
@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    <tr>
    <td width="50%" valign="top">
       
-   ## 🔐 Security
+   ## 🔐 보안
       
    - Private chat allowlist with `ALLOWED_CHAT_IDS`
    - One active agent per project to reduce conflicting writes
@@ -87,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    </td>
    <td width="50%" valign="top">
       
-   ## ✅ Requirements
+   ## ✅ 요구 사항
 
    Before starting the server, make sure you have:
    
@@ -101,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    </tr>
 </table>
 
-## 🚀 Quick Start
+## 🚀 빠른 시작
 
 ### Option A: Start with a one-line bootstrap script
 
@@ -136,7 +136,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🔑 Telegram Setup
+## 🔑 Telegram 설정
 
 ### Get a Bot Token
 
@@ -168,7 +168,7 @@ Notes:
 - For private chats, the chat ID is usually a positive integer.
 - If `getUpdates` returns an empty result, send another message to the bot and try again.
 
-## 📨 Supported Message Types
+## 📨 지원 메시지 유형
 
 The bot currently accepts:
 
@@ -176,7 +176,7 @@ The bot currently accepts:
 - photos
 - Codex and Copilot currently supports text and image only, video is not supported.
 
-## 🤖 Telegram Commands
+## 🤖 Telegram 명령어
 
 <table>
   <tr>
@@ -229,7 +229,7 @@ The bot currently accepts:
     <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
   </tr>
 </table>
-<h2>⚙️ Environment Variables</h2>
+<h2>⚙️ 환경 변수</h2>
 
 <h3>Main env file path:</h3>
 
@@ -377,7 +377,7 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Session Management
+## 🧠 세션 관리
 
 Sessions are scoped by:
 
@@ -409,7 +409,7 @@ The active session is also tied to:
 - active session selection for that bot/chat scope
 </details>
 
-### 🔓 Workspace concurrency lock
+### 🔓 Workspace 동시 실행 잠금
 
 Only one agent run can be active per **project folder** at a time — regardless of which chat ID or Telegram bot triggers it.
 
@@ -426,7 +426,7 @@ If a message arrives while an agent is already running on the same project, the 
 
 The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
 
-### 💬 Queued questions
+### 💬 대기열 질문
 
 If the current project already has one live agent run, later text messages are not rejected. They are queued instead:
 
@@ -436,7 +436,7 @@ If the current project already has one live agent run, later text messages are n
 
 If the current run is aborted and there are queued questions waiting, the bot does **not** auto-continue. It asks whether you want to continue processing the remaining queued questions. You can choose to batch process or one-by-one.
 
-## ⚠️ Diff (file changes)
+## ⚠️ Diff (파일 변경)
 
 _During each agent run, the bot also takes a lightweight before/after project snapshot so it can summarize changed files and send diffs back to Telegram. This snapshot is taken by the bot app itself, not by Codex or Copilot._
 
@@ -469,7 +469,7 @@ You can override those defaults in the env file without editing the installed pa
 
 If both include and exclude rules match, the include rule wins.
 
-## 🌿 Branch Behavior
+## 🌿 branch 동작
 
 The bot treats project and branch as a bundle.
 
@@ -489,7 +489,7 @@ If the bot sees that the stored session branch and the repository's current bran
 
 If your preferred source branch is missing, the bot offers fallback source choices based on the default branch and current branch instead of leaving you at a raw git error.
 
-## 🔐 Git Trust Behavior
+## 🔐 Git trust 동작
 
 - Existing folders follow `CODEX_SKIP_GIT_REPO_CHECK`
 - Folders created through `/project <name>` are marked as trusted by this app
@@ -498,7 +498,7 @@ If your preferred source branch is missing, the bot offers fallback source choic
 - `/commit` can be disabled entirely with `ENABLE_COMMIT_COMMAND`
 - Mutating `/commit` operations are allowed only for trusted projects
 
-## 🪵 Logs
+## 🪵 로그
 
 Logs are written to **both stdout and a rotating log file** under:
 
@@ -522,7 +522,7 @@ Logs are written to **both stdout and a rotating log file** under:
 - warnings and runtime errors
 </details>
 
-## 🗂️ Project Structure
+## 🗂️ 프로젝트 구조
 
 - `src/coding_agent_telegram/`
   Main application code
