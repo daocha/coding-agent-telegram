@@ -41,6 +41,7 @@ def _isolate_env(monkeypatch, tmp_path):
         "SNAPSHOT_TEXT_FILE_MAX_BYTES",
         "MAX_TELEGRAM_MESSAGE_LENGTH",
         "ENABLE_SENSITIVE_DIFF_FILTER",
+        "ENABLE_SECRET_SCRUB_FILTER",
         "DEFAULT_AGENT_PROVIDER",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -62,7 +63,6 @@ def test_load_config_required(monkeypatch, tmp_path):
     monkeypatch.setenv("SNAPSHOT_TEXT_FILE_MAX_BYTES", str(DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES))
     monkeypatch.setenv("MAX_TELEGRAM_MESSAGE_LENGTH", str(DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH))
     monkeypatch.setenv("DEFAULT_AGENT_PROVIDER", "codex")
-    monkeypatch.setenv("LOG_DIR", "./logs")
     monkeypatch.setenv("CODEX_MODEL", "")
     monkeypatch.setenv("COPILOT_MODEL", "")
     monkeypatch.setenv("COPILOT_AUTOPILOT", "true")
@@ -83,6 +83,7 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.enable_commit_command is False
     assert cfg.snapshot_text_file_max_bytes == DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
     assert cfg.max_telegram_message_length == DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH
+    assert cfg.enable_secret_scrub_filter is True
     assert cfg.default_agent_provider == "codex"
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
@@ -127,6 +128,18 @@ def test_load_config_snapshot_limit_override(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.snapshot_text_file_max_bytes == 4096
+
+
+def test_load_config_secret_scrub_filter_can_be_disabled(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("ENABLE_SECRET_SCRUB_FILTER", "false")
+
+    cfg = load_config()
+
+    assert cfg.enable_secret_scrub_filter is False
 
 
 def test_resolve_env_file_path_uses_explicit_env_override(monkeypatch, tmp_path):

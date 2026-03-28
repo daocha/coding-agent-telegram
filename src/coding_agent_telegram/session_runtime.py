@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import importlib.resources
 import logging
 import re
 from pathlib import Path
@@ -56,20 +57,37 @@ REPLACEMENT_SESSION_STALL_MESSAGE = (
     "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
 )
 
-# Patterns for secrets that the agent might echo back from files it has read.
-# Matches are replaced with a placeholder before sending to Telegram.
-_SECRET_SCRUB_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\d{9,10}:[A-Za-z0-9_-]{35}"), "<telegram-token>"),
-    (re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"), "<github-token>"),
-    (re.compile(r"sk-[A-Za-z0-9]{20,}T3BlbkFJ[A-Za-z0-9]{20,}"), "<openai-key>"),
-    (re.compile(r"glpat-[A-Za-z0-9\-_]{20,}"), "<gitlab-token>"),
-    (re.compile(r"xox[baprs]-[A-Za-z0-9\-]{10,}"), "<slack-token>"),
-    (re.compile(r"AIza[A-Za-z0-9\-_]{35}"), "<gcp-api-key>"),
-    (re.compile(r"AKIA[A-Z0-9]{16}"), "<aws-access-key>"),
-)
-
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
+
+
+def _load_secret_scrub_patterns() -> tuple[tuple[re.Pattern[str], str], ...]:
+    resource = importlib.resources.files("coding_agent_telegram").joinpath("resources/secret_scrub_patterns.properties")
+    compiled: list[tuple[re.Pattern[str], str]] = []
+    try:
+        raw_text = resource.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("Failed to load secret scrub patterns from %s.", resource)
+        return ()
+    for raw_line in raw_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, pattern_text = line.split("=", 1)
+        name = name.strip()
+        pattern_text = pattern_text.strip()
+        if not name or not pattern_text:
+            continue
+        try:
+            compiled.append((re.compile(pattern_text), f"<{name}>"))
+        except re.error:
+            logger.exception("Invalid secret scrub regex for pattern '%s'.", name)
+    return tuple(compiled)
+
+
+# Patterns for secrets that the agent might echo back from files it has read.
+# Matches are replaced with a placeholder before sending to Telegram.
+_SECRET_SCRUB_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = _load_secret_scrub_patterns()
 
 
 def _scrub_secrets(text: str) -> str:
@@ -486,7 +504,8 @@ class SessionRuntime:
         *,
         provider: str,
     ) -> None:
-        assistant_text = _scrub_secrets(assistant_text)
+        if self.cfg.enable_secret_scrub_filter:
+            assistant_text = _scrub_secrets(assistant_text)
         segments = split_assistant_output(assistant_text)
         if not segments:
             return

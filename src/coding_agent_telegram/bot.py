@@ -100,6 +100,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CommandHandler("commit", router.handle_commit, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
     app.add_handler(CallbackQueryHandler(router.handle_provider_callback, pattern=r"^provider:set:(codex|copilot)$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_queue_batch_callback, pattern=r"^queuebatch:(group|single)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_continue_callback, pattern=r"^queuecontinue:(yes|no)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_source_callback, pattern=r"^branchsource:(local|origin):", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_discrepancy_callback, pattern=r"^branchdiscrepancy:(stored|current)$", block=False))

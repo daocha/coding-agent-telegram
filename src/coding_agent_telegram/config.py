@@ -45,6 +45,7 @@ class AppConfig:
     snapshot_text_file_max_bytes: int
     max_telegram_message_length: int
     enable_sensitive_diff_filter: bool
+    enable_secret_scrub_filter: bool
     default_agent_provider: str
     agent_hard_timeout_seconds: int
     app_internal_root: Path
@@ -173,6 +174,7 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
             os.getenv("MAX_TELEGRAM_MESSAGE_LENGTH", str(DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH))
         ),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),
+        enable_secret_scrub_filter=_parse_bool(os.getenv("ENABLE_SECRET_SCRUB_FILTER", "true"), default=True),
         default_agent_provider=provider,
         agent_hard_timeout_seconds=int(
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
