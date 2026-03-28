@@ -29,12 +29,14 @@ class SessionStatusCommandMixin:
         await send_text(
             update,
             context,
-            (
-                f"Current session: {session['name']}\n"
-                f"Session ID: {active_id}\n"
-                f"Project: {session['project_folder']}\n"
-                f"Provider: {session.get('provider', 'codex')}\n"
-                f"Branch: {session.get('branch_name') or '(current branch)'}"
+            self._t(
+                update,
+                "status.current_session_details",
+                session_name=session["name"],
+                session_id=active_id,
+                project_folder=session["project_folder"],
+                provider=session.get("provider", "codex"),
+                branch_name=session.get("branch_name") or self._t(update, "status.current_branch_placeholder"),
             ),
         )
 
@@ -53,7 +55,7 @@ class SessionStatusCommandMixin:
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
-            await send_text(update, context, f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            await send_text(update, context, self._t(update, "project.project_folder_missing_retry", project_folder=project_folder))
             return
 
         aborted = await asyncio.to_thread(self.deps.agent_runner.abort_running_process, project_path)
@@ -95,6 +97,7 @@ class SessionStatusCommandMixin:
 
         queue_file, queued_messages = pending
         if decision == "group":
+            self._chat_queue_batch_modes.pop(chat_id, None)
             await query.edit_message_text(translate(self._chat_locale(chat_id), "queue.processing_grouped"))
             await self._dispatch_queued_questions(
                 chat_id,
@@ -106,6 +109,7 @@ class SessionStatusCommandMixin:
             await self._drain_chat_message_queue(chat_id, context)
             return
         if decision == "single":
+            self._chat_queue_batch_modes[chat_id] = "single"
             await query.edit_message_text(translate(self._chat_locale(chat_id), "queue.processing_single"))
             await self._dispatch_queued_questions(
                 chat_id,
@@ -114,4 +118,11 @@ class SessionStatusCommandMixin:
                 queued_messages=queued_messages,
                 grouped=False,
             )
+            await self._drain_chat_message_queue(chat_id, context)
+            return
+        if decision == "cancel":
+            self._chat_queue_batch_modes.pop(chat_id, None)
+            queue_file.unlink(missing_ok=True)
+            self._queue_lock_path(queue_file).unlink(missing_ok=True)
+            await query.edit_message_text(translate(self._chat_locale(chat_id), "queue.cancelled"))
             await self._drain_chat_message_queue(chat_id, context)

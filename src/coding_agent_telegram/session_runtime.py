@@ -308,7 +308,7 @@ class SessionRuntime:
                 if result.error_message
                 else self._t(update, "runtime.agent_run_failed")
             )
-            if error_text == "Agent run aborted by /abort.":
+            if getattr(result, "error_code", None) == "agent_aborted":
                 error_text = self._t(update, "runtime.agent_run_aborted")
             await send_text(update, context, error_text)
             return result
@@ -482,7 +482,7 @@ class SessionRuntime:
             result.session_id or active_id,
             len(files),
         )
-        await send_text(update, context, build_summary(session_name, project_folder, files))
+        await send_text(update, context, build_summary(session_name, project_folder, files, locale=self._locale(update)))
         await self._send_diffs(update, context, diffs)
 
     def _merge_snapshot_diffs(self, diffs, snapshot_diffs_by_path):
@@ -595,5 +595,6 @@ class SessionRuntime:
                 file_diff.path,
                 file_diff.diff,
                 self.cfg.max_telegram_message_length,
+                locale=self._locale(update),
             ):
                 await send_code_block(update, context, chunk.header, chunk.code, language=chunk.language)

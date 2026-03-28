@@ -47,6 +47,7 @@ class AgentRunResult:
     assistant_text: str
     error_message: Optional[str]
     raw_events: list[dict]
+    error_code: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -424,8 +425,10 @@ class MultiAgentRunner:
             success = False
             assistant_text = ""
             error_message = "Agent run aborted by /abort."
+            error_code = "agent_aborted"
         else:
             success = proc.returncode == 0 and parsed_success
+            error_code = None
             if not success and not error_message:
                 error_message = stderr.strip() or "Agent command failed."
 
@@ -435,6 +438,7 @@ class MultiAgentRunner:
             assistant_text=assistant_text,
             error_message=error_message,
             raw_events=events,
+            error_code=error_code,
         )
 
     def abort_running_process(self, project_path: Path) -> bool:

@@ -15,8 +15,8 @@ from .base import logger, require_allowed_chat
 class ProjectCommandMixin:
     def _branch_source_intro_lines(self, *, target_exists: bool, new_branch: str) -> list[str]:
         if target_exists:
-            return [f"Switching branch to {new_branch} requires choosing a source first.", ""]
-        return [f"Creating a new branch from the following branch source: {new_branch}", ""]
+            return [self._t(None, "project.branch_switch_requires_source", new_branch=new_branch), ""]
+        return [self._t(None, "project.branch_create_from_source", new_branch=new_branch), ""]
 
     def _branch_source_keyboard(
         self,
@@ -60,9 +60,11 @@ class ProjectCommandMixin:
             await send_text(
                 update,
                 context,
-                (
-                    f"Branch source not found for project '{project_folder}'.\n"
-                    f"Missing local/{source_branch} and origin/{source_branch}."
+                self._t(
+                    update,
+                    "project.branch_source_missing",
+                    project_folder=project_folder,
+                    source_branch=source_branch,
                 ),
             )
             return False
@@ -70,10 +72,10 @@ class ProjectCommandMixin:
         lines = list(intro_lines or [])
         lines.extend(
             [
-                f"Project: {project_folder}",
-                f"Branch target: {new_branch}",
+                self._t(update, "project.project_label", project_folder=project_folder),
+                self._t(update, "project.branch_target_label", new_branch=new_branch),
                 "",
-                "Choose the branch source:",
+                self._t(update, "project.choose_branch_source"),
             ]
         )
         if update.effective_chat is not None:
@@ -111,34 +113,34 @@ class ProjectCommandMixin:
         lines = list(intro_lines or [])
         lines.extend(
             [
-                f"Project: {project_folder}",
-                f"Current branch in repo: {current_branch}",
-                f"Default branch: {default_branch}",
+                self._t(update, "project.project_label", project_folder=project_folder),
+                self._t(update, "project.current_branch_in_repo_label", branch_name=current_branch),
+                self._t(update, "project.default_branch_label", branch_name=default_branch),
                 "",
             ]
         )
         if refresh_result.warnings:
-            lines.append("Refresh warnings:")
+            lines.append(self._t(update, "project.refresh_warnings"))
             for warning in refresh_result.warnings:
                 lines.append(f"- {warning}")
             lines.append("")
-        lines.append("Local branches:")
+        lines.append(self._t(update, "project.local_branches"))
         if branches:
             for branch in branches[:20]:
                 marker = "*" if branch == current_branch else "-"
                 annotations: list[str] = []
                 if branch == default_branch:
-                    annotations.append("default")
+                    annotations.append(self._t(update, "project.annotation_default"))
                 if branch == current_branch:
-                    annotations.append("current branch in repo")
+                    annotations.append(self._t(update, "project.annotation_current_branch_in_repo"))
                 suffix = f" ({', '.join(annotations)})" if annotations else ""
                 lines.append(f"{marker} {branch}{suffix}")
         else:
-            lines.append("- (none)")
+            lines.append(f"- {self._t(update, 'project.none')}")
         lines.extend(
             [
                 "",
-                "Select a branch with:",
+                self._t(update, "project.select_branch_with"),
                 "/branch <new_branch>",
                 "/branch <origin_branch> <new_branch>",
             ]
@@ -150,12 +152,12 @@ class ProjectCommandMixin:
         if await self._notify_if_current_project_busy(update, context):
             return
         if len(context.args) != 1:
-            await send_text(update, context, "Usage: /project <project_folder>\nExample: /project backend")
+            await send_text(update, context, self._t(update, "project.usage_project"))
             return
 
         folder = context.args[0].strip()
         if not is_valid_project_folder(folder):
-            await send_text(update, context, "Invalid project folder. Folder name only is allowed.")
+            await send_text(update, context, self._t(update, "project.invalid_project_folder"))
             return
 
         chat_id = update.effective_chat.id
@@ -169,7 +171,7 @@ class ProjectCommandMixin:
 
         path = resolve_project_path(self.deps.cfg.workspace_root, folder)
         if path.exists() and not path.is_dir():
-            await send_text(update, context, f"Project path exists but is not a directory: {folder}")
+            await send_text(update, context, self._t(update, "project.path_not_directory", folder=folder))
             return
         project_created = False
         if not path.exists():
@@ -193,23 +195,27 @@ class ProjectCommandMixin:
             warning_lines = [
                 "",
                 "",
-                "⚠️ <b>Active Session Mismatch</b>",
-                f"Current session: <b>{html.escape(active_session['name'])}</b>",
-                f"Session project: <code>{html.escape(active_session['project_folder'])}</code>",
-                "Start a new session with <code>/new</code> if you want to work in this newly selected project.",
+                f"⚠️ <b>{html.escape(self._t(update, 'project.active_session_mismatch_title'))}</b>",
+                self._t(update, "project.current_session_html", session_name=f"<b>{html.escape(active_session['name'])}</b>"),
+                self._t(
+                    update,
+                    "project.session_project_html",
+                    project_folder=f"<code>{html.escape(active_session['project_folder'])}</code>",
+                ),
+                self._t(update, "project.start_new_session_for_project_html"),
                 *warning_lines,
             ]
         if is_git_repo and switched_project:
             intro_lines = [
-                f"Project changed to: {folder}",
-                "Branch selection is required before creating or continuing a session in this project.",
+                self._t(update, "project.project_changed_to", folder=folder),
+                self._t(update, "project.branch_selection_required"),
             ]
             if active_session and active_session.get("project_folder") != folder:
                 intro_lines.extend(
                     [
                         "",
-                        f"Active session: {active_session['name']}",
-                        f"Session project: {active_session['project_folder']}",
+                        self._t(update, "project.active_session_label", session_name=active_session["name"]),
+                        self._t(update, "project.session_project_label", project_folder=active_session["project_folder"]),
                     ]
                 )
             await self._send_branch_selection_prompt(
@@ -224,16 +230,12 @@ class ProjectCommandMixin:
                 update,
                 context,
                 (
-                    f"✅ <b>Project Set</b>\n"
-                    f"Project: <code>{html.escape(folder)}</code>\n"
-                    f"Current branch: <code>{html.escape(branch_name)}</code>\n\n"
-                    f"Use <code>/branch &lt;new_branch&gt;</code> or "
-                    f"<code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code> "
-                    f"if you want a dedicated work branch.\n"
-                    f"If <code>&lt;origin_branch&gt;</code> is not specified, the bot uses the default branch: "
-                    f"<code>{html.escape(default_branch or branch_name)}</code>.\n"
-                    f"If you do not set one, the bot will work on the current branch: "
-                    f"<code>{html.escape(branch_name)}</code>"
+                    f"✅ <b>{html.escape(self._t(update, 'project.project_set_title'))}</b>\n"
+                    f"{self._t(update, 'project.project_html', project_folder=f'<code>{html.escape(folder)}</code>')}\n"
+                    f"{self._t(update, 'project.current_branch_html', branch_name=f'<code>{html.escape(branch_name)}</code>')}\n\n"
+                    f"{self._t(update, 'project.branch_usage_html')}\n"
+                    f"{self._t(update, 'project.default_branch_behavior_html', branch_name=f'<code>{html.escape(default_branch or branch_name)}</code>')}\n"
+                    f"{self._t(update, 'project.current_branch_behavior_html', branch_name=f'<code>{html.escape(branch_name)}</code>')}"
                     f"{chr(10).join(warning_lines)}"
                 ),
             )
@@ -242,7 +244,10 @@ class ProjectCommandMixin:
             await send_html_text(
                 update,
                 context,
-                f"✅ <b>Project Set</b>\nProject: <code>{html.escape(folder)}</code>{suffix}",
+                (
+                    f"✅ <b>{html.escape(self._t(update, 'project.project_set_title'))}</b>\n"
+                    f"{self._t(update, 'project.project_html', project_folder=f'<code>{html.escape(folder)}</code>')}{suffix}"
+                ),
             )
         if should_prompt_trust and update.effective_chat is not None:
             keyboard = InlineKeyboardMarkup(
@@ -255,7 +260,7 @@ class ProjectCommandMixin:
             )
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=f"Do you trust this project?\nProject: <code>{html.escape(folder)}</code>",
+                text=self._t(update, "project.trust_prompt_html", project_folder=f"<code>{html.escape(folder)}</code>"),
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
@@ -271,29 +276,29 @@ class ProjectCommandMixin:
         await query.answer()
         payload = (query.data or "").split(":", 2)
         if len(payload) != 3:
-            await query.edit_message_text("Invalid trust decision.")
+            await query.edit_message_text(self._t(update, "project.invalid_trust_decision"))
             return
         _, decision, folder = payload
         if decision not in {"yes", "no"} or not is_valid_project_folder(folder):
-            await query.edit_message_text("Invalid trust decision.")
+            await query.edit_message_text(self._t(update, "project.invalid_trust_decision"))
             return
 
         chat_id = update.effective_chat.id
         path = resolve_project_path(self.deps.cfg.workspace_root, folder)
         if not path.exists() or not path.is_dir():
-            await query.edit_message_text(f"Project folder does not exist: {folder}")
+            await query.edit_message_text(self._t(update, "project.project_folder_missing_only", project_folder=folder))
             return
 
         if decision == "no":
-            await query.edit_message_text(f"Project left untrusted: {folder}")
+            await query.edit_message_text(self._t(update, "project.left_untrusted", folder=folder))
             return
 
         if self.deps.store.is_project_trusted(folder):
-            await query.edit_message_text(f"Project is already trusted: {folder}")
+            await query.edit_message_text(self._t(update, "project.already_trusted", folder=folder))
             return
         self.deps.store.trust_project(folder)
         logger.info("Trusted existing project folder '%s' for chat %s via inline confirmation.", folder, chat_id)
-        await query.edit_message_text(f"Project trusted: {folder}")
+        await query.edit_message_text(self._t(update, "project.trusted", folder=folder))
 
     @require_allowed_chat()
     async def handle_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -303,12 +308,12 @@ class ProjectCommandMixin:
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
         if not project_folder:
-            await send_text(update, context, "⚠️ No project selected.\nPlease run /project <project_folder> first.")
+            await send_text(update, context, self._t(update, "common.no_project_selected"))
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not self.git.is_git_repo(project_path):
-            await send_text(update, context, "⚠️ Current project is not a git repository.")
+            await send_text(update, context, self._t(update, "common.current_project_not_git"))
             return
 
         if not context.args:
@@ -324,7 +329,7 @@ class ProjectCommandMixin:
             await send_text(
                 update,
                 context,
-                "Usage: /branch <new_branch>\nOr: /branch <origin_branch> <new_branch>",
+                self._t(update, "project.usage_branch"),
             )
             return
 
@@ -338,7 +343,7 @@ class ProjectCommandMixin:
             else:
                 source_branch = self.git.default_branch(project_path) or ""
                 if not source_branch:
-                    await send_text(update, context, "Could not determine the default branch for this repository.")
+                    await send_text(update, context, self._t(update, "project.default_branch_unknown"))
                     return
 
         target_exists = self.git.local_branch_exists(project_path, new_branch) or self.git.remote_branch_exists(project_path, new_branch)
@@ -371,12 +376,14 @@ class ProjectCommandMixin:
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         project_folder = chat_state.get("current_project_folder")
         if not project_folder:
-            await query.edit_message_text("No project selected.\nPlease run /project <project_folder> first.")
+            await query.edit_message_text(self._t(update, "common.no_project_selected"))
             return
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
-            await query.edit_message_text(f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            await query.edit_message_text(
+                self._t(update, "project.project_folder_missing_retry", project_folder=project_folder)
+            )
             return
 
         result = await asyncio.to_thread(

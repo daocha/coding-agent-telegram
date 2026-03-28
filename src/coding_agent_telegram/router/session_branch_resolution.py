@@ -10,12 +10,18 @@ from .base import require_allowed_chat
 
 
 class SessionBranchResolutionMixin:
-    def _branch_discrepancy_keyboard(self, stored_branch: str, current_branch: str) -> InlineKeyboardMarkup:
+    def _branch_discrepancy_keyboard(self, update: Update, stored_branch: str, current_branch: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(f"use {stored_branch}", callback_data="branchdiscrepancy:stored"),
-                    InlineKeyboardButton(f"use {current_branch}", callback_data="branchdiscrepancy:current"),
+                    InlineKeyboardButton(
+                        self._t(update, "branch_resolution.use_branch", branch_name=stored_branch),
+                        callback_data="branchdiscrepancy:stored",
+                    ),
+                    InlineKeyboardButton(
+                        self._t(update, "branch_resolution.use_branch", branch_name=current_branch),
+                        callback_data="branchdiscrepancy:current",
+                    ),
                 ]
             ]
         )
@@ -86,14 +92,14 @@ class SessionBranchResolutionMixin:
         lines = [
             error_message.strip(),
             "",
-            f"Do you want to create branch {new_branch} from one of these branches instead of origin/{source_branch}?",
-            f"Project: {project_folder}",
-            f"Branch target: {new_branch}",
+            self._t(None, "branch_resolution.create_from_instead_of_origin", new_branch=new_branch, source_branch=source_branch),
+            self._t(None, "project.project_label", project_folder=project_folder),
+            self._t(None, "project.branch_target_label", new_branch=new_branch),
         ]
         if default_branch:
-            lines.append(f"Default branch: {default_branch}")
+            lines.append(self._t(None, "project.default_branch_label", branch_name=default_branch))
         if current_branch and current_branch != default_branch:
-            lines.append(f"Current branch in repo: {current_branch}")
+            lines.append(self._t(None, "project.current_branch_in_repo_label", branch_name=current_branch))
         await query.edit_message_text("\n".join(lines), reply_markup=keyboard)
         return True
 
@@ -110,15 +116,18 @@ class SessionBranchResolutionMixin:
         if update.effective_chat is not None:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=(
-                    "Branch discrepancy detected before running the active session.\n"
-                    f"Session: {session_name}\n"
-                    f"Project: {project_folder}\n"
-                    f"Stored branch: {stored_branch}\n"
-                    f"Current branch in repo: {current_branch}\n\n"
-                    "Choose which branch to use."
+                text="\n".join(
+                    [
+                        self._t(update, "branch_resolution.discrepancy_detected"),
+                        self._t(update, "branch_resolution.session_label", session_name=session_name),
+                        self._t(update, "project.project_label", project_folder=project_folder),
+                        self._t(update, "branch_resolution.stored_branch_label", branch_name=stored_branch),
+                        self._t(update, "project.current_branch_in_repo_label", branch_name=current_branch),
+                        "",
+                        self._t(update, "branch_resolution.choose_branch_to_use"),
+                    ]
                 ),
-                reply_markup=self._branch_discrepancy_keyboard(stored_branch, current_branch),
+                reply_markup=self._branch_discrepancy_keyboard(update, stored_branch, current_branch),
             )
 
     async def _resolve_branch_discrepancy_if_needed(
@@ -182,24 +191,26 @@ class SessionBranchResolutionMixin:
         chat_id = update.effective_chat.id
         pending_action = self._pending_action(chat_id)
         if pending_action is None:
-            await query.edit_message_text("No pending branch decision was found.")
+            await query.edit_message_text(self._t(update, "branch_resolution.no_pending_decision"))
             return
         branch_resolution = pending_action.get("branch_resolution")
         if not isinstance(branch_resolution, dict) or branch_resolution.get("kind") != "discrepancy":
-            await query.edit_message_text("No pending branch discrepancy was found.")
+            await query.edit_message_text(self._t(update, "branch_resolution.no_pending_discrepancy"))
             return
 
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         active_session_id = chat_state.get("active_session_id")
         session = chat_state.get("sessions", {}).get(active_session_id) if active_session_id else None
         if not isinstance(session, dict):
-            await query.edit_message_text("No active session is available.")
+            await query.edit_message_text(self._t(update, "branch_resolution.no_active_session"))
             return
 
         project_folder = str(session.get("project_folder") or "").strip()
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
-            await query.edit_message_text(f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            await query.edit_message_text(
+                self._t(update, "project.project_folder_missing_retry", project_folder=project_folder)
+            )
             return
 
         stored_branch = str(branch_resolution.get("stored_branch") or "").strip()
@@ -210,7 +221,7 @@ class SessionBranchResolutionMixin:
             pending_action = dict(pending_action)
             pending_action.pop("branch_resolution", None)
             self._store_pending_action(chat_id, pending_action)
-            await query.edit_message_text(f"Using current branch: {current_branch}")
+            await query.edit_message_text(self._t(update, "branch_resolution.using_current_branch", branch_name=current_branch))
             await self._continue_pending_action(update, context)
             return
 
@@ -225,10 +236,7 @@ class SessionBranchResolutionMixin:
             )
             if keyboard is None:
                 await query.edit_message_text(
-                    (
-                        f"Stored branch is no longer available: {stored_branch}\n"
-                        "No fallback source branch is available."
-                    )
+                    self._t(update, "branch_resolution.stored_branch_unavailable_no_fallback", branch_name=stored_branch)
                 )
                 return
             pending_action = dict(pending_action)
@@ -238,17 +246,17 @@ class SessionBranchResolutionMixin:
             }
             self._store_pending_action(chat_id, pending_action)
             fallback_lines = [
-                "Stored branch is no longer available.",
-                f"Missing local/{stored_branch} and origin/{stored_branch}.",
+                self._t(update, "branch_resolution.stored_branch_unavailable"),
+                self._t(update, "branch_resolution.missing_local_and_origin", branch_name=stored_branch),
                 "",
-                f"Do you want to create branch {stored_branch} from one of these branches?",
-                f"Project: {project_folder}",
-                f"Branch target: {stored_branch}",
+                self._t(update, "branch_resolution.create_branch_from_choices", branch_name=stored_branch),
+                self._t(update, "project.project_label", project_folder=project_folder),
+                self._t(update, "project.branch_target_label", new_branch=stored_branch),
             ]
             if default_branch:
-                fallback_lines.append(f"Default branch: {default_branch}")
+                fallback_lines.append(self._t(update, "project.default_branch_label", branch_name=default_branch))
             if current_branch and current_branch != default_branch:
-                fallback_lines.append(f"Current branch in repo: {current_branch}")
+                fallback_lines.append(self._t(update, "project.current_branch_in_repo_label", branch_name=current_branch))
             await query.edit_message_text(
                 "\n".join(fallback_lines),
                 reply_markup=keyboard,
@@ -262,10 +270,12 @@ class SessionBranchResolutionMixin:
         }
         self._store_pending_action(chat_id, pending_action)
         await query.edit_message_text(
-            (
-                "Choose how to restore the stored branch.\n"
-                f"Project: {project_folder}\n"
-                f"Branch target: {stored_branch}"
+            "\n".join(
+                [
+                    self._t(update, "branch_resolution.choose_restore_method"),
+                    self._t(update, "project.project_label", project_folder=project_folder),
+                    self._t(update, "project.branch_target_label", new_branch=stored_branch),
+                ]
             ),
             reply_markup=self._branch_source_keyboard(
                 source_branch=stored_branch,

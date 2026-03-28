@@ -200,7 +200,7 @@ class SwitchCommandMixin:
             await send_text(
                 update,
                 context,
-                f"⚠️ Project folder no longer exists for this session: {session['project_folder']}",
+                self._t(update, "common.project_folder_missing", project_folder=session["project_folder"]),
             )
             return
         if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):

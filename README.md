@@ -1,18 +1,39 @@
 # coding-agent-telegram
 
-A Telegram bot bridge for local coding agents such as Codex CLI and Copilot CLI. It lets you manage multiple project sessions from Telegram while keeping execution on your own machine.
+A Telegram control plane for local coding agents such as Codex CLI and Copilot CLI.
+
+It lets you run and manage real local agent sessions from Telegram while keeping code, credentials, Git state, and execution on your own machine.
 
 The bot accepts private chats only.
+
+## Why This Project Stands Out
+
+- Keep local Codex CLI and Copilot CLI on your own machine while controlling them from Telegram.
+- Switch between Telegram-managed sessions and sessions started directly in native Codex/Copilot CLI.
+- Bind each session to a project, provider, and branch-aware workspace context.
+- Review agent output and file changes directly in Telegram.
+- Queue follow-up questions while a run is in progress instead of losing context.
+- Keep one active agent per project to reduce conflicting writes in the same workspace.
 
 ## ✨ What It Does
 
 - Connect one Telegram account to multiple Telegram bots.
 - Keep sessions isolated per bot and per chat.
-- Bind each session to one project folder and one provider.
-- Run local coding agents inside your workspace.
-- Show Codex output and file changes back in Telegram.
+- Run local coding agents entirely inside your own workspace.
+- Resume work across Telegram and native Codex/Copilot CLI without losing session continuity.
+- Bind each session to one project folder, one provider, and branch context when available.
+- Show agent output and file changes back in Telegram.
 - Accept text messages and photos as task input.
 - Auto-create missing project folders with `/project <folder>`.
+
+## Seamless Session Switching
+
+One of the main strengths of this project is that sessions are not trapped inside Telegram.
+
+- `/switch` shows both Telegram-managed sessions and native Codex/Copilot CLI sessions for the current project.
+- The list is merged, sorted by newest activity first, and can continue work from either side.
+- If you select a native CLI session, the bot imports it into its own state and resumes from there.
+- This makes it practical to start work on a laptop terminal, continue from Telegram, and later switch back to the native CLI again.
 
 ## ✅ Requirements
 
@@ -100,7 +121,23 @@ Then run again:
 ./startup.sh
 ```
 
-### Option B: Install from PyPI with `pip`
+### Option B: Install with a one-line bootstrap script
+
+```bash
+curl -sSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
+```
+
+What `install.sh` does:
+
+- creates `~/.coding-agent-telegram/.venv` if missing
+- installs or upgrades `coding-agent-telegram` inside that virtual environment
+- starts `coding-agent-telegram`
+- on first run, the app creates `~/.coding-agent-telegram/.env_coding_agent_telegram` if neither that file nor `./.env_coding_agent_telegram` exists
+- when that env file is created for the first time, `APP_LOCALE` is initialized from the system language and the app tells you where to change it later
+
+After the first run, update the env file the app is using and run the same command again.
+
+### Option C: Install from PyPI with `pip`
 
 ```bash
 pip install coding-agent-telegram
@@ -128,6 +165,14 @@ Then update the env file the app created or selected and run:
 ```bash
 coding-agent-telegram
 ```
+
+## Core Workflow
+
+1. Set the current project with `/project <project_folder>`.
+2. Choose the provider with `/provider`.
+3. Create or continue a session with `/new [session_name]` or by sending a message.
+4. Switch between existing Telegram or native CLI sessions with `/switch`.
+5. Review output, changed files, and continue the same workflow from either Telegram or the native CLI.
 
 ## 📨 Supported Message Types
 
@@ -396,7 +441,9 @@ Each session stores:
 
 ### Switching between Telegram and native CLI
 
-`/switch` is designed to let you move between:
+`/switch` is designed to let you move between Telegram and native CLI without treating them as separate worlds.
+
+It lets you move between:
 
 - sessions created from Telegram
 - sessions created directly in Codex CLI or Copilot CLI

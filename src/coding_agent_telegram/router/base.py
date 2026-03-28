@@ -124,6 +124,7 @@ class CommandRouterBase:
         self._chat_message_queue_files: dict[int, deque[Path]] = {}
         self._chat_processing_queue_files: dict[int, Path] = {}
         self._chat_pending_queue_decisions: dict[int, tuple[Path, list[str]]] = {}
+        self._chat_queue_batch_modes: dict[int, str] = {}
         self._chat_next_queue_file_index: dict[int, int] = {}
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}

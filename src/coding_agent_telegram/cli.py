@@ -32,6 +32,20 @@ def _bot_id_from_token(token: str) -> str:
     return f"bot-{hashlib.sha256(token.encode('utf-8')).hexdigest()[:BOT_ID_HASH_PREFIX_LENGTH]}"
 
 
+def _env_locale_for_messages(env_path: Path) -> str:
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() == "APP_LOCALE":
+                return value.strip() or "en"
+    except OSError:
+        pass
+    return "en"
+
+
 async def _run_polling_apps(apps: Sequence) -> None:
     started_apps = []
     try:
@@ -112,15 +126,16 @@ def main() -> None:
     try:
         cfg = load_config(env_path)
     except ValueError as exc:
+        locale = created_locale or _env_locale_for_messages(env_path)
         print(str(exc), file=sys.stderr)
         print("", file=sys.stderr)
-        print(f"Created {env_path} if it did not already exist.", file=sys.stderr)
-        print(f"Update these fields in {env_path}:", file=sys.stderr)
+        print(translate(locale, "cli.created_env_if_missing", env_path=env_path), file=sys.stderr)
+        print(translate(locale, "cli.update_fields_in_env", env_path=env_path), file=sys.stderr)
         print("- WORKSPACE_ROOT", file=sys.stderr)
         print("- TELEGRAM_BOT_TOKENS", file=sys.stderr)
         print("- ALLOWED_CHAT_IDS", file=sys.stderr)
         print("", file=sys.stderr)
-        print("Then run: coding-agent-telegram", file=sys.stderr)
+        print(translate(locale, "cli.then_run"), file=sys.stderr)
         raise SystemExit(1)
 
     log_file = setup_logging(cfg.log_level, cfg.log_dir)

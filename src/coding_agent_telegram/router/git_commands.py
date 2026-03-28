@@ -19,17 +19,17 @@ class GitCommandMixin:
             await send_text(
                 update,
                 context,
-                "/commit is disabled.\nSet ENABLE_COMMIT_COMMAND=true in the bot environment to enable it.",
+                self._t(update, "git.commit_disabled"),
             )
             return
 
         if update.message is None or not update.message.text:
-            await send_text(update, context, "Usage: /commit git add ... && git commit ...")
+            await send_text(update, context, self._t(update, "git.usage_commit"))
             return
 
         raw = update.message.text.partition(" ")[2].strip()
         if not raw:
-            await send_text(update, context, "Usage: /commit git add ... && git commit ...")
+            await send_text(update, context, self._t(update, "git.usage_commit"))
             return
 
         session, project_path = await self._active_session_project_or_notify(
@@ -42,17 +42,17 @@ class GitCommandMixin:
 
         commands, ignored = self._validated_commit_commands(raw)
         if not commands:
-            await send_text(update, context, "No valid git commit commands were found.")
+            await send_text(update, context, self._t(update, "git.no_valid_commit_commands"))
             return
         if self._requires_trusted_project(commands) and not self.deps.store.is_project_trusted(session["project_folder"]):
             await send_text(
                 update,
                 context,
-                "This project is not trusted for mutating git operations. Use a project created by /project or mark it trusted first.",
+                self._t(update, "git.project_not_trusted_for_mutation"),
             )
             return
         if not self._commands_use_only_project_paths(project_path, commands):
-            await send_text(update, context, "Unsafe path arguments are not allowed. Only files inside the current project may be used.")
+            await send_text(update, context, self._t(update, "git.unsafe_path_arguments"))
             return
 
         command_results: list[tuple[list[str], object]] = []

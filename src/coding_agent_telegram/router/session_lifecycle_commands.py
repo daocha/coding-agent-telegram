@@ -42,7 +42,7 @@ class SessionLifecycleCommandMixin:
             await self._prompt_for_provider_selection(
                 update,
                 context,
-                prompt_text="Provider selection is required before creating or continuing a session.",
+                prompt_text=self._t(update, "lifecycle.provider_selection_required"),
                 pending_action=pending_action,
             )
             return None
@@ -55,14 +55,14 @@ class SessionLifecycleCommandMixin:
             await send_text(
                 update,
                 context,
-                "No project selected.\nPlease run /project <project_folder> first.\nExample: /project backend",
+                self._t(update, "lifecycle.no_project_selected_example"),
             )
             return None
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
             self._store_pending_action(chat_id, pending_action)
-            await send_text(update, context, f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            await send_text(update, context, self._t(update, "project.project_folder_missing_retry", project_folder=project_folder))
             return None
 
         branch_name = str(chat_state.get("current_branch") or "").strip()
@@ -73,7 +73,7 @@ class SessionLifecycleCommandMixin:
                 context,
                 project_folder=project_folder,
                 project_path=project_path,
-                intro_lines=["Branch selection is required before creating or continuing a session.", ""],
+                intro_lines=[self._t(update, "project.branch_selection_required"), ""],
             )
             return None
 
@@ -105,7 +105,7 @@ class SessionLifecycleCommandMixin:
             await send_text(
                 update,
                 context,
-                f"Session name already exists: {final_session_name}\nPlease use a different session name.",
+                self._t(update, "lifecycle.session_name_exists", session_name=final_session_name),
             )
             return False
 
@@ -116,7 +116,7 @@ class SessionLifecycleCommandMixin:
             project_folder,
             provider,
         )
-        await send_text(update, context, "Creating session...")
+        await send_text(update, context, self._t(update, "lifecycle.creating_session"))
         result = await self._run_with_typing(
             update,
             context,
@@ -126,15 +126,11 @@ class SessionLifecycleCommandMixin:
             f"Create session: {creation_label}",
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.runtime.should_skip_git_repo_check(project_folder),
-            stall_message=(
-                "Session creation appears stuck.\n"
-                "The local agent process is still running but has not produced output.\n"
-                "On macOS this often means a hidden permission dialog is waiting for input on the machine running the bot."
-            ),
+            stall_message=self._t(update, "runtime.replacement_session_stall"),
         )
 
         if not result.success or not result.session_id:
-            await send_text(update, context, result.error_message or "Failed to create a session.")
+            await send_text(update, context, result.error_message or self._t(update, "lifecycle.failed_create_session"))
             return False
 
         if use_session_id_as_name:
@@ -159,12 +155,14 @@ class SessionLifecycleCommandMixin:
         await send_text(
             update,
             context,
-            (
-                f"Session created successfully: {final_session_name}\n"
-                f"Session ID: {result.session_id}\n"
-                f"Project: {project_folder}\n"
-                f"Provider: {provider}\n"
-                f"Branch: {branch_name or '(current branch)'}"
+            self._t(
+                update,
+                "lifecycle.session_created_successfully",
+                session_name=final_session_name,
+                session_id=result.session_id,
+                project_folder=project_folder,
+                provider=provider,
+                branch_name=branch_name or self._t(update, "status.current_branch_placeholder"),
             ),
         )
         return True
@@ -236,7 +234,7 @@ class SessionLifecycleCommandMixin:
         project_folder = str(session.get("project_folder") or "").strip()
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
-            await send_text(update, context, f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            await send_text(update, context, self._t(update, "project.project_folder_missing_retry", project_folder=project_folder))
             return False
         if not self.git.is_git_repo(project_path):
             return True

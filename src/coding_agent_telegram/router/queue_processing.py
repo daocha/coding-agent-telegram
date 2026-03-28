@@ -107,8 +107,7 @@ class QueueProcessingMixin:
         return chat_id in self._chat_pending_queue_decisions
 
     def _run_result_was_aborted(self, result: object) -> bool:
-        error_message = getattr(result, "error_message", None)
-        return isinstance(error_message, str) and error_message.strip().startswith("Agent run aborted by")
+        return getattr(result, "error_code", None) == "agent_aborted"
 
     def _has_pending_queue_files(self, chat_id: int) -> bool:
         queue = self._chat_message_queue_files.get(chat_id)
@@ -164,6 +163,7 @@ class QueueProcessingMixin:
                 [[
                     InlineKeyboardButton(translate(locale, "queue.button_group"), callback_data="queuebatch:group"),
                     InlineKeyboardButton(translate(locale, "queue.button_single"), callback_data="queuebatch:single"),
+                    InlineKeyboardButton(translate(locale, "queue.button_cancel"), callback_data="queuebatch:cancel"),
                 ]]
             ),
         )
@@ -181,6 +181,7 @@ class QueueProcessingMixin:
         if pending is not None:
             pending[0].unlink(missing_ok=True)
             self._queue_lock_path(pending[0]).unlink(missing_ok=True)
+        self._chat_queue_batch_modes.pop(chat_id, None)
         self._chat_next_queue_file_index.pop(chat_id, None)
 
     async def _dispatch_queued_questions(
@@ -256,9 +257,22 @@ class QueueProcessingMixin:
                 queue_file, queued_messages = self._dequeue_chat_message_file(chat_id)
                 if queue_file is None or not queued_messages:
                     if chat_id not in self._chat_processing_queue_files and chat_id not in self._chat_message_queue_files:
+                        self._chat_queue_batch_modes.pop(chat_id, None)
                         self._chat_next_queue_file_index.pop(chat_id, None)
                     return
+                batch_mode = self._chat_queue_batch_modes.get(chat_id)
                 if len(queued_messages) == 1:
+                    continued = await self._dispatch_queued_questions(
+                        chat_id,
+                        context,
+                        queue_file=queue_file,
+                        queued_messages=queued_messages,
+                        grouped=False,
+                    )
+                    if not continued:
+                        return
+                    continue
+                if batch_mode == "single":
                     continued = await self._dispatch_queued_questions(
                         chat_id,
                         context,
