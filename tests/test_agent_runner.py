@@ -544,6 +544,26 @@ def test_copilot_resume_rejects_image_attachments(monkeypatch):
     assert calls == []  # no subprocess launched
 
 
+def test_runner_uses_internal_code_for_generic_command_failure(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout="", process_stderr="", returncode=1),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    result = runner.create_session("codex", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_code == "agent_command_failed"
+    assert result.error_message is None
+
+
 # ---------------------------------------------------------------------------
 # _collect_text_fragments / _looks_textual_key heuristics
 # ---------------------------------------------------------------------------

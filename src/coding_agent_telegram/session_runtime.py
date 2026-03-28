@@ -84,10 +84,9 @@ def _scrub_secrets(text: str) -> str:
     return text
 
 
-def _sanitize_agent_error(text: str) -> str:
+def _sanitize_agent_error(text: str, *, error_code: str | None = None) -> str:
     """Remove absolute filesystem paths from agent error messages before sending to users."""
-    normalized = " ".join((text or "").split())
-    if normalized.startswith("Agent run aborted by"):
+    if error_code == "agent_aborted":
         return "Agent run aborted by /abort."
     return _ABSOLUTE_PATH_RE.sub("<path>", text)
 
@@ -304,7 +303,7 @@ class SessionRuntime:
                 result.error_message or "unknown error",
             )
             error_text = (
-                _sanitize_agent_error(result.error_message)
+                _sanitize_agent_error(result.error_message, error_code=getattr(result, "error_code", None))
                 if result.error_message
                 else self._t(update, "runtime.agent_run_failed")
             )

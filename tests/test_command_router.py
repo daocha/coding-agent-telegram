@@ -1126,7 +1126,7 @@ class AbortableBlockingRunner(BlockingRunner):
                     session_id=session_id,
                     success=False,
                     assistant_text="",
-                    error_message="Agent run aborted by /abort.",
+                    error_message=None,
                     raw_events=[],
                     error_code="agent_aborted",
                 )

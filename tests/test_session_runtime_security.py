@@ -176,9 +176,9 @@ def test_sanitize_agent_error_leaves_plain_messages_unchanged():
 
 def test_sanitize_agent_error_normalizes_abort_message_with_path():
     text = "Agent run aborted by /Users/daocha/.coding-agent-telegram/queued_questions/abc.txt"
-    assert _sanitize_agent_error(text) == "Agent run aborted by /abort."
+    assert _sanitize_agent_error(text, error_code="agent_aborted") == "Agent run aborted by /abort."
 
 
 def test_sanitize_agent_error_normalizes_abort_message_without_path():
     text = "Agent run aborted by."
-    assert _sanitize_agent_error(text) == "Agent run aborted by /abort."
+    assert _sanitize_agent_error(text, error_code="agent_aborted") == "Agent run aborted by /abort."

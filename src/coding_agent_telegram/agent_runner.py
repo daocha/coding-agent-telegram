@@ -424,13 +424,17 @@ class MultiAgentRunner:
         if aborted:
             success = False
             assistant_text = ""
-            error_message = "Agent run aborted by /abort."
+            error_message = None
             error_code = "agent_aborted"
         else:
             success = proc.returncode == 0 and parsed_success
             error_code = None
             if not success and not error_message:
-                error_message = stderr.strip() or "Agent command failed."
+                stripped_stderr = stderr.strip()
+                if stripped_stderr:
+                    error_message = stripped_stderr
+                else:
+                    error_code = "agent_command_failed"
 
         return AgentRunResult(
             session_id=session_id,
