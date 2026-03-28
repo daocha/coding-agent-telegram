@@ -32,19 +32,19 @@
    <td border="0">
 
    ## ✨ Waarom dit project
-- ✅ Lichtgewicht: geen zware frameworks, volledig transparant
-- ✅ Multi-bot: meerdere chats, meerdere sessies
-- ✅ Gebruik Telegram om Codex / Copilot CLI te bedienen
-- ✅ Antwoorden en gewijzigde bestanden eenvoudig beoordelen in codeblokken
-- ✅ Vervolgvragen kunnen in de wachtrij terwijl de agent werkt
-- ✅ Ondersteunt tekst- en afbeeldingsinvoer
+  - ✅ Lichtgewicht: geen zware frameworks, volledig transparant
+  - ✅ Multi-bot: meerdere chats, meerdere sessies
+  - ✅ Gebruik Telegram om Codex / Copilot CLI te bedienen
+  - ✅ Antwoorden en gewijzigde bestanden eenvoudig beoordelen in codeblokken
+  - ✅ Vervolgvragen kunnen in de wachtrij terwijl de agent werkt
+  - ✅ Ondersteunt tekst- en afbeeldingsinvoer
 
    ## 🔁 Naadloos wisselen tussen apparaten en sessies
 
-Start een sessie in Telegram en ga later verder met dezelfde Codex/Copilot CLI-sessie op je computer, zonder gedoe. Met `/switch` kun je ook eenvoudig van Telegram terug naar de command line schakelen.
-
-- Gebruik `/switch` om een lokale sessie voort te zetten
-- Historische sessies worden ook ondersteund
+  Start een sessie in Telegram en ga later verder met dezelfde Codex/Copilot CLI-sessie op je computer, zonder gedoe. Met `/switch` kun je ook eenvoudig van Telegram terug naar de command line schakelen.
+  
+  - Gebruik `/switch` om een lokale sessie voort te zetten
+  - Historische sessies worden ook ondersteund
 
    ## 🛠️ Typische lokale flow
    ```bash
