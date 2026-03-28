@@ -148,6 +148,27 @@ class GitWorkspaceManager:
         result = self._run(project_path, "ls-remote", "--exit-code", "--heads", "origin", branch_name)
         return result.returncode == 0
 
+    def branch_upstream(self, project_path: Path, branch_name: str) -> Optional[str]:
+        if not _validate_branch_name(branch_name):
+            return None
+        result = self._run(project_path, "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{branch_name}")
+        if result.returncode != 0:
+            return None
+        upstream = result.stdout.strip()
+        return upstream or None
+
+    def _set_branch_upstream(self, project_path: Path, branch_name: str, upstream: str) -> GitCommandResult:
+        if not _validate_branch_name(branch_name):
+            return GitCommandResult(False, f"Invalid branch name: {branch_name!r}")
+        if not upstream or upstream.startswith("-"):
+            return GitCommandResult(False, f"Invalid upstream branch: {upstream!r}")
+        result = self._run(project_path, "branch", f"--set-upstream-to={upstream}", branch_name)
+        if result.returncode != 0:
+            message = _sanitize_git_output(result.stderr.strip()) or f"Failed to set upstream for branch: {branch_name}"
+            return GitCommandResult(False, message, stdout=result.stdout.strip(), stderr=result.stderr.strip())
+        message = result.stdout.strip() or f"Set upstream for branch '{branch_name}' to '{upstream}'."
+        return GitCommandResult(True, message, stdout=result.stdout.strip(), stderr=result.stderr.strip())
+
     def refresh_current_branch(self, project_path: Path) -> BranchOperationResult:
         if not self.is_git_repo(project_path):
             return BranchOperationResult(False, "Current project is not a git repository.")
@@ -333,6 +354,11 @@ class GitWorkspaceManager:
                 return rollback_failure(
                     _sanitize_git_output(create.stderr.strip()) or f"Failed to create branch: {new_branch}",
                 )
+            source_upstream = self.branch_upstream(project_path, source_branch)
+            if source_upstream:
+                set_upstream = self._set_branch_upstream(project_path, new_branch, source_upstream)
+                if not set_upstream.success:
+                    return rollback_failure(set_upstream.message)
             return BranchOperationResult(
                 True,
                 f"Created branch '{new_branch}' from local branch '{source_branch}'.",
@@ -369,6 +395,12 @@ class GitWorkspaceManager:
                             False,
                             _sanitize_git_output(checkout_existing.stderr.strip()) or f"Failed to checkout branch: {new_branch}",
                         )
+                current_upstream = self.branch_upstream(project_path, new_branch)
+                desired_upstream = f"origin/{source_branch}"
+                if current_upstream != desired_upstream:
+                    set_upstream = self._set_branch_upstream(project_path, new_branch, desired_upstream)
+                    if not set_upstream.success:
+                        return BranchOperationResult(False, set_upstream.message)
             else:
                 checkout_new = self._run(project_path, "checkout", "-b", new_branch, "--track", f"origin/{source_branch}")
                 if checkout_new.returncode != 0:
@@ -403,6 +435,9 @@ class GitWorkspaceManager:
                 False,
                 _sanitize_git_output(create.stderr.strip()) or f"Failed to create branch: {new_branch}",
             )
+        set_upstream = self._set_branch_upstream(project_path, new_branch, f"origin/{source_branch}")
+        if not set_upstream.success:
+            return rollback_failure(set_upstream.message)
         return BranchOperationResult(
             True,
             f"Created branch '{new_branch}' from origin/{source_branch}.",

@@ -300,6 +300,64 @@ def test_prepare_branch_from_origin_restores_original_branch_when_pull_fails(tmp
     assert manager.current_branch(project) == "main"
 
 
+def test_prepare_branch_from_origin_sets_upstream_for_new_branch(tmp_path: Path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test")
+    _git(project, "config", "user.email", "t@t.com")
+    (project / "f").write_text("x")
+    _git(project, "add", "f")
+    _git(project, "commit", "-m", "init")
+
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", str(origin))
+    _git(project, "remote", "add", "origin", str(origin))
+    _git(project, "push", "-u", "origin", "main")
+
+    result = manager.prepare_branch_from_source(
+        project,
+        source_kind="origin",
+        source_branch="main",
+        new_branch="feature-upstream",
+    )
+
+    assert result.success is True
+    assert manager.current_branch(project) == "feature-upstream"
+    assert manager.branch_upstream(project, "feature-upstream") == "origin/main"
+
+
+def test_prepare_branch_from_local_copies_source_upstream(tmp_path: Path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test")
+    _git(project, "config", "user.email", "t@t.com")
+    (project / "f").write_text("x")
+    _git(project, "add", "f")
+    _git(project, "commit", "-m", "init")
+
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", str(origin))
+    _git(project, "remote", "add", "origin", str(origin))
+    _git(project, "push", "-u", "origin", "main")
+
+    result = manager.prepare_branch_from_source(
+        project,
+        source_kind="local",
+        source_branch="main",
+        new_branch="feature-local-upstream",
+    )
+
+    assert result.success is True
+    assert manager.current_branch(project) == "feature-local-upstream"
+    assert manager.branch_upstream(project, "feature-local-upstream") == "origin/main"
+
+
 def test_remote_branch_exists_returns_false_for_deleted_remote_branch(tmp_path: Path):
     project = tmp_path / "repo"
     project.mkdir()
