@@ -77,3 +77,40 @@ class SessionStatusCommandMixin:
         if decision == "no":
             self._clear_chat_message_queue(chat_id)
             await query.edit_message_text("Pending queued questions were discarded.")
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_queue_batch_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+
+        await query.answer()
+        _, _, decision = query.data.partition("queuebatch:")
+        chat_id = update.effective_chat.id
+        pending = self._chat_pending_queue_decisions.pop(chat_id, None)
+        if pending is None:
+            await query.edit_message_text("No queued batch is waiting for a decision.")
+            return
+
+        queue_file, queued_messages = pending
+        if decision == "group":
+            await query.edit_message_text("Processing the queued questions as one batch.")
+            await self._dispatch_queued_questions(
+                chat_id,
+                context,
+                queue_file=queue_file,
+                queued_messages=queued_messages,
+                grouped=True,
+            )
+            await self._drain_chat_message_queue(chat_id, context)
+            return
+        if decision == "single":
+            await query.edit_message_text("Processing the queued questions one by one.")
+            await self._dispatch_queued_questions(
+                chat_id,
+                context,
+                queue_file=queue_file,
+                queued_messages=queued_messages,
+                grouped=False,
+            )
+            await self._drain_chat_message_queue(chat_id, context)

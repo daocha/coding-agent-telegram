@@ -24,6 +24,60 @@ def test_scrub_secrets_redacts_github_pat():
     assert "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij1234" not in result
 
 
+def test_scrub_secrets_redacts_openai_project_key():
+    text = "OpenAI key sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij1234567890"
+    result = _scrub_secrets(text)
+    assert "<openai-project-key>" in result
+    assert "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ" not in result
+
+
+def test_scrub_secrets_redacts_anthropic_key():
+    text = "Anthropic key sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij1234567890"
+    result = _scrub_secrets(text)
+    assert "<anthropic-key>" in result
+    assert "sk-ant-api03-" not in result
+
+
+def test_scrub_secrets_redacts_stripe_secret_key():
+    text = "Stripe key sk_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
+    result = _scrub_secrets(text)
+    assert "<stripe-secret-key>" in result
+    assert "sk_live_" not in result
+
+
+def test_scrub_secrets_redacts_jwt_like_token():
+    text = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IlRlc3QgVXNlciIsImlhdCI6MTUxNjIzOTAyMn0.c2lnbmF0dXJlVmFsdWVFeGFtcGxlMTIzNDU2Nzg5MA"
+    result = _scrub_secrets(text)
+    assert "<jwt-like-token>" in result
+    assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
+
+
+def test_scrub_secrets_redacts_ssh_public_key_ed25519():
+    text = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINPZxtCMs5sIfsMWpq7SHuqFFpBtSTmFqXWOYdf6dX4i your_email@example.com"
+    result = _scrub_secrets(text)
+    assert "<ssh-public-key>" in result
+    assert "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5" not in result
+
+
+def test_scrub_secrets_redacts_ssh_public_key_rsa():
+    text = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCy1gU1s6n5r4qV2bFJ8XH4m2J3J4k5L6m7N8o9P0q1R2s3T4u5V6w7X8y9Z0 test@example.com"
+    result = _scrub_secrets(text)
+    assert "<ssh-public-key>" in result
+    assert "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ" not in result
+
+
+def test_scrub_secrets_redacts_passwd_like_line():
+    text = "root:x:0:0:root:/root:/bin/bash"
+    result = _scrub_secrets(text)
+    assert result == "<passwd-like-line>"
+
+
+def test_scrub_secrets_redacts_shadow_like_line():
+    text = "root:$6$rounds=656000$saltvalue$hashedsecretvaluegoeshere:19793:0:99999:7:::"
+    result = _scrub_secrets(text)
+    assert result == "<shadow-like-line>"
+
+
 def test_scrub_secrets_redacts_aws_access_key():
     text = "AWS key: AKIAIOSFODNN7EXAMPLE is set."
     result = _scrub_secrets(text)
@@ -52,6 +106,43 @@ def test_scrub_secrets_handles_multiple_secrets_in_same_text():
     assert "<github-token>" in result
     assert "BBHabcdefghij" not in result
     assert "ghs_ABCDE" not in result
+
+
+def test_scrub_secrets_redacts_pem_like_text():
+    text = (
+        "cert:\n"
+        "-----BEGIN PRIVATE KEY-----\n"
+        "abc123ABC123abc123ABC123abc123ABC123abc123ABC123\n"
+        "-----END PRIVATE KEY-----"
+    )
+    result = _scrub_secrets(text)
+    assert "<pem-like-text>" in result
+    assert "BEGIN PRIVATE KEY" not in result
+
+
+def test_scrub_secrets_redacts_certificate_block():
+    text = (
+        "-----BEGIN CERTIFICATE-----\n"
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtesttesttesttest\n"
+        "-----END CERTIFICATE-----"
+    )
+    result = _scrub_secrets(text)
+    assert "<crt-like-text>" in result
+    assert "BEGIN CERTIFICATE" not in result
+
+
+def test_scrub_secrets_redacts_hex_like_text():
+    text = "fingerprint deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    result = _scrub_secrets(text)
+    assert "<hex-like-text>" in result
+    assert "deadbeefdeadbeef" not in result
+
+
+def test_scrub_secrets_redacts_base64_like_text():
+    text = "blob QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0MTIzNDU2Nzg5MDEyMzQ1Njc4OTA="
+    result = _scrub_secrets(text)
+    assert "<base64-like-text>" in result
+    assert "QUJDREVGR0hJ" not in result
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ class MessageCommandMixin:
             return
         user_message = update.message.text
         chat_id = update.effective_chat.id
-        if self._is_project_busy(chat_id):
+        if self._is_project_busy(chat_id) or self._has_pending_queue_decision(chat_id):
             _queue_file, question_number = self._enqueue_chat_message(chat_id, user_message)
             await send_text(
                 update,
