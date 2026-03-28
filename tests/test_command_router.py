@@ -830,6 +830,42 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
 
 
+def test_branch_command_for_new_branch_offers_current_and_default_sources(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-enhancements",
+        default_branch="main",
+        local_branches=["main", "feature-enhancements"],
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["new-feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Creating a new branch from the following branch source: new-feature" in message
+    assert "Current branch in repo: feature-enhancements" in message
+    assert "Default branch: main" in message
+    reply_markup = bot.messages[-1][3]
+    assert reply_markup is not None
+    labels = [button.text for row in reply_markup.inline_keyboard for button in row]
+    assert labels == [
+        "local/feature-enhancements",
+        "origin/feature-enhancements",
+        "local/main",
+        "origin/main",
+    ]
+
+
 def test_branch_command_switches_to_existing_branch(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()

@@ -40,8 +40,47 @@ class ProjectCommandMixin:
                     f"origin/{source_branch}",
                     callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
                 )
-            )
+        )
         return InlineKeyboardMarkup([buttons])
+
+    def _multi_branch_source_keyboard(
+        self,
+        *,
+        new_branch: str,
+        source_branches: list[str],
+        project_path,
+    ) -> InlineKeyboardMarkup | None:
+        rows: list[list[InlineKeyboardButton]] = []
+        seen: set[tuple[str, str]] = set()
+        for source_branch in source_branches:
+            if not source_branch:
+                continue
+            row: list[InlineKeyboardButton] = []
+            if self.git.local_branch_exists(project_path, source_branch):
+                key = ("local", source_branch)
+                if key not in seen:
+                    row.append(
+                        InlineKeyboardButton(
+                            f"local/{source_branch}",
+                            callback_data=f"branchsource:local:{source_branch}:{new_branch}",
+                        )
+                    )
+                    seen.add(key)
+            if self.git.remote_branch_exists(project_path, source_branch):
+                key = ("origin", source_branch)
+                if key not in seen:
+                    row.append(
+                        InlineKeyboardButton(
+                            f"origin/{source_branch}",
+                            callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
+                        )
+                    )
+                    seen.add(key)
+            if row:
+                rows.append(row)
+        if not rows:
+            return None
+        return InlineKeyboardMarkup(rows)
 
     async def _prompt_for_branch_source(
         self,
@@ -50,30 +89,70 @@ class ProjectCommandMixin:
         *,
         project_folder: str,
         project_path,
-        source_branch: str,
+        source_branch: str | None,
         new_branch: str,
         intro_lines: list[str] | None = None,
+        source_branches: list[str] | None = None,
     ) -> bool:
-        allow_local = self.git.local_branch_exists(project_path, source_branch)
-        allow_origin = self.git.remote_branch_exists(project_path, source_branch)
-        if not allow_local and not allow_origin:
-            await send_text(
-                update,
-                context,
-                self._t(
-                    update,
-                    "project.branch_source_missing",
-                    project_folder=project_folder,
-                    source_branch=source_branch,
-                ),
+        keyboard: InlineKeyboardMarkup | None
+        if source_branches is not None:
+            keyboard = self._multi_branch_source_keyboard(
+                new_branch=new_branch,
+                source_branches=source_branches,
+                project_path=project_path,
             )
-            return False
+            if keyboard is None:
+                joined_sources = ", ".join(branch for branch in source_branches if branch)
+                await send_text(
+                    update,
+                    context,
+                    self._t(
+                        update,
+                        "project.branch_source_missing",
+                        project_folder=project_folder,
+                        source_branch=joined_sources,
+                    ),
+                )
+                return False
+        else:
+            source_branch = source_branch or ""
+            allow_local = self.git.local_branch_exists(project_path, source_branch)
+            allow_origin = self.git.remote_branch_exists(project_path, source_branch)
+            if not allow_local and not allow_origin:
+                await send_text(
+                    update,
+                    context,
+                    self._t(
+                        update,
+                        "project.branch_source_missing",
+                        project_folder=project_folder,
+                        source_branch=source_branch,
+                    ),
+                )
+                return False
+            keyboard = self._branch_source_keyboard(
+                source_branch=source_branch,
+                new_branch=new_branch,
+                allow_local=allow_local,
+                allow_origin=allow_origin,
+            )
 
         lines = list(intro_lines or [])
         lines.extend(
             [
                 self._t(update, "project.project_label", project_folder=project_folder),
                 self._t(update, "project.branch_target_label", new_branch=new_branch),
+            ]
+        )
+        if source_branches is not None:
+            current_branch = str(self.git.current_branch(project_path) or "").strip()
+            default_branch = str(self.git.default_branch(project_path) or "").strip()
+            if current_branch:
+                lines.append(self._t(update, "project.current_branch_in_repo_label", branch_name=current_branch))
+            if default_branch and default_branch != current_branch:
+                lines.append(self._t(update, "project.default_branch_label", branch_name=default_branch))
+        lines.extend(
+            [
                 "",
                 self._t(update, "project.choose_branch_source"),
             ]
@@ -82,12 +161,7 @@ class ProjectCommandMixin:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="\n".join(lines),
-                reply_markup=self._branch_source_keyboard(
-                    source_branch=source_branch,
-                    new_branch=new_branch,
-                    allow_local=allow_local,
-                    allow_origin=allow_origin,
-                ),
+                reply_markup=keyboard,
             )
         return True
 
@@ -336,13 +410,18 @@ class ProjectCommandMixin:
         if len(context.args) == 2:
             source_branch = context.args[0].strip()
             new_branch = context.args[1].strip()
+            source_branches = None
         else:
             new_branch = context.args[0].strip()
             if self.git.local_branch_exists(project_path, new_branch) or self.git.remote_branch_exists(project_path, new_branch):
                 source_branch = new_branch
+                source_branches = None
             else:
-                source_branch = self.git.default_branch(project_path) or ""
-                if not source_branch:
+                current_branch = str(self.git.current_branch(project_path) or "").strip()
+                default_branch = str(self.git.default_branch(project_path) or "").strip()
+                source_branches = [branch for branch in [current_branch, default_branch] if branch]
+                source_branch = None
+                if not source_branches:
                     await send_text(update, context, self._t(update, "project.default_branch_unknown"))
                     return
 
@@ -356,6 +435,7 @@ class ProjectCommandMixin:
             source_branch=source_branch,
             new_branch=new_branch,
             intro_lines=self._branch_source_intro_lines(target_exists=target_exists, new_branch=new_branch),
+            source_branches=source_branches,
         )
 
     @require_allowed_chat(answer_callback=True)
