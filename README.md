@@ -1,49 +1,100 @@
-# coding-agent-telegram
+# Coding Agent Telegram 🚀
 
-A Telegram control plane for local coding agents such as Codex CLI and Copilot CLI.
+Control your local AI coding agent from anywhere with Telegram.
 
-It lets you run and manage real local agent sessions from Telegram while keeping code, credentials, Git state, and execution on your own machine.
+- No terminal needed
+- No heavy frameworks
+- Works with locally installed Codex/Copilot CLI agents
 
-The bot accepts private chats only.
+→ Setup with one-liner: 
+```
+curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
+```
 
-## Why This Project Stands Out
+## ✨ Why Use It
 
-- Keep local Codex CLI and Copilot CLI on your own machine while controlling them from Telegram.
-- Switch between Telegram-managed sessions and sessions started directly in native Codex/Copilot CLI.
-- Bind each session to a project, provider, and branch-aware workspace context.
-- Review agent output and file changes directly in Telegram.
-- Queue follow-up questions while a run is in progress instead of losing context.
-- Keep one active agent per project to reduce conflicting writes in the same workspace.
+- Control local Codex CLI and Copilot CLI from Telegram
+- Continue the same session between terminal and Telegram with `/switch`
+- Review agent answers and changed files in Telegram
+- Queue follow-up questions while the agent is still working
+- Support multiple telegram bots
+- Accept Text and Image input
 
-## ✨ What It Does
+## Seamless Device/Session Switching
 
-- Connect one Telegram account to multiple Telegram bots.
-- Keep sessions isolated per bot and per chat.
-- Run local coding agents entirely inside your own workspace.
-- Resume work across Telegram and native Codex/Copilot CLI without losing session continuity.
-- Bind each session to one project folder, one provider, and branch context when available.
-- Show agent output and file changes back in Telegram.
-- Accept text messages and photos as task input.
-- Auto-create missing project folders with `/project <folder>`.
+Start a session on Telegram, later on you can still continue the session Codex/Copilot CLI session on your computer, and switch back again without hassle.
 
-## Seamless Session Switching
+- Use `/switch` in Telegram to continue a local Codex/Copilot CLI session
+- Support historical sessions
 
-One of the main strengths of this project is that sessions are not trapped inside Telegram.
+## 🛠️ Typical Local Flow
+Run
+```bash
+coding-agent-telegram #or run ./startup.sh
+```
 
-- `/switch` shows both Telegram-managed sessions and native Codex/Copilot CLI sessions for the current project.
-- The list is merged, sorted by newest activity first, and can continue work from either side.
-- If you select a native CLI session, the bot imports it into its own state and resumes from there.
-- This makes it practical to start work on a laptop terminal, continue from Telegram, and later switch back to the native CLI again.
+Then in Telegram:
+
+```text
+/project my-project
+/new
+Fix the failing API test in the current project
+```
+
+## 🔐 Security
+
+- Private chat allowlist with `ALLOWED_CHAT_IDS`
+- One active agent per project to reduce conflicting writes
+- Sensitive file diffs are hidden
+- API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
+- Runtime app data stays under `~/.coding-agent-telegram`
+- Existing folders can require trust before mutating git operations
+- Server makes `NO hidden external call`. Everything is under your control.
 
 ## ✅ Requirements
 
 Before starting the server, make sure you have:
 
 - Python 3.9 or newer
-- A Telegram bot token from BotFather
+- Telegram bot token created from _@BotFather_
 - Your Telegram chat ID
 - Codex CLI and/or Copilot CLI installed locally
-- A workspace directory that contains your projects
+- [Codex CLI install](https://developers.openai.com/codex/cli) / [Copilot CLI install](https://github.com/features/copilot/cli)
+
+## 🚀 Quick Start
+
+### Option A: Start with a one-line bootstrap script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
+```
+
+### Option B: Install from PyPI with `pip`
+
+```bash
+pip install coding-agent-telegram
+coding-agent-telegram
+```
+
+### Option C: Run from a cloned repository
+
+```bash
+git clone https://github.com/daocha/coding-agent-telegram
+cd coding-agent-telegram
+./startup.sh
+```
+
+### Start Bot Server
+##### On first run, the app creates the env file, tells you what to fill in.
+##### After updating the environment file then run:
+
+```bash
+# if you follow Option A or Option B, then run
+coding-agent-telegram
+
+# if you follow Option C, then run this again
+./startup.sh
+```
 
 ## 🔑 Telegram Setup
 
@@ -55,7 +106,7 @@ Before starting the server, make sure you have:
    - a display name
    - a bot username ending in `bot`
 4. BotFather will return an HTTP API token.
-5. Put that token into `TELEGRAM_BOT_TOKENS` in your `.env`.
+5. Put that token into `TELEGRAM_BOT_TOKENS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`.
 
 ### Get Your Chat ID
 
@@ -70,296 +121,20 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 3. Find the `chat` object in the JSON response.
 4. Copy the numeric `id` field from that object.
-5. Put that value into `ALLOWED_CHAT_IDS` in your `.env`.
+5. Put that value into `ALLOWED_CHAT_IDS` in your `~/.coding-agent-telegram/.env_coding_agent_telegram`
 
 Notes:
 
 - For private chats, the chat ID is usually a positive integer.
 - If `getUpdates` returns an empty result, send another message to the bot and try again.
 
-## 🚀 Quick Start
-
-### Option A: Run from a cloned repository
-
-#### 1. Clone the repository
-
-```bash
-git clone https://github.com/daocha/coding-agent-telegram
-cd coding-agent-telegram
-```
-
-#### 2. Start with the bootstrap script
-
-```bash
-./startup.sh
-```
-
-What `startup.sh` does:
-
-- creates `~/.coding-agent-telegram/.env_coding_agent_telegram` from `src/coding_agent_telegram/resources/.env.example` if neither that file nor `./.env_coding_agent_telegram` exists
-- when that env file is created for the first time, initializes `APP_LOCALE` from the system language and tells you where to change it later
-- creates the state files if missing
-- creates `.venv` if missing
-- installs the package into the virtual environment
-- starts the Telegram bot server
-
-#### 3. Update The Env File
-
-On first run, update the required fields in the env file the app is using:
-
-- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
-- `~/.coding-agent-telegram/.env_coding_agent_telegram` by default
-- or `./.env_coding_agent_telegram` if that local file already exists
-
-- `WORKSPACE_ROOT`
-- `TELEGRAM_BOT_TOKENS`
-- `ALLOWED_CHAT_IDS`
-
-Then run again:
-
-```bash
-./startup.sh
-```
-
-### Option B: Install with a one-line bootstrap script
-
-```bash
-curl -sSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
-```
-
-What `install.sh` does:
-
-- creates `~/.coding-agent-telegram/.venv` if missing
-- installs or upgrades `coding-agent-telegram` inside that virtual environment
-- starts `coding-agent-telegram`
-- on first run, the app creates `~/.coding-agent-telegram/.env_coding_agent_telegram` if neither that file nor `./.env_coding_agent_telegram` exists
-- when that env file is created for the first time, `APP_LOCALE` is initialized from the system language and the app tells you where to change it later
-
-After the first run, update the env file the app is using and run the same command again.
-
-### Option C: Install from PyPI with `pip`
-
-```bash
-pip install coding-agent-telegram
-coding-agent-telegram
-```
-
-What happens on first run:
-
-- the command creates `~/.coding-agent-telegram/.env_coding_agent_telegram` if neither that file nor `./.env_coding_agent_telegram` exists
-- when that env file is created for the first time, `APP_LOCALE` is initialized from the system language and the command tells you where to change it later
-- it tells you which required fields to update
-- after updating the env file, run `coding-agent-telegram` again
-
-Recommended flow:
-
-```bash
-mkdir -p ~/my-coding-agent-bot
-cd ~/my-coding-agent-bot
-pip install coding-agent-telegram
-coding-agent-telegram
-```
-
-Then update the env file the app created or selected and run:
-
-```bash
-coding-agent-telegram
-```
-
-## Core Workflow
-
-1. Set the current project with `/project <project_folder>`.
-2. Choose the provider with `/provider`.
-3. Create or continue a session with `/new [session_name]` or by sending a message.
-4. Switch between existing Telegram or native CLI sessions with `/switch`.
-5. Review output, changed files, and continue the same workflow from either Telegram or the native CLI.
-
 ## 📨 Supported Message Types
 
 The bot currently accepts:
 
-- plain text messages
+- Text messages
 - photos
-
-Current media behavior:
-
-- photos are supported for Codex sessions
-- videos are not supported
-- video notes are not supported
-- animations are not supported
-- audio and voice messages are not supported
-- documents and stickers are not supported
-
-If an unsupported message type is sent, the bot replies with a short error instead of silently ignoring it.
-
-## ⚙️ Environment Variables
-
-These are the main fields in the env file the app uses:
-
-- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
-- `~/.coding-agent-telegram/.env_coding_agent_telegram` by default
-- or `./.env_coding_agent_telegram` if that local file already exists
-
-### Required
-
-- `WORKSPACE_ROOT`
-  Parent folder that contains your project directories.
-  Example: `WORKSPACE_ROOT=~/git`
-
-- `TELEGRAM_BOT_TOKENS`
-  Comma-separated Telegram bot tokens.
-  Example: `TELEGRAM_BOT_TOKENS=token_one,token_two`
-
-- `ALLOWED_CHAT_IDS`
-  Comma-separated Telegram private chat IDs allowed to use the bot.
-  Example: `ALLOWED_CHAT_IDS=123456789,987654321`
-
-### State and Logging
-
-- Session state files are stored at:
-  - `~/.coding-agent-telegram/state.json`
-  - `~/.coding-agent-telegram/state.json.bak`
-  Backward compatibility: if `./state.json` or `./state.json.bak` already exists and the home file does not, the app keeps using the local file.
-
-- `LOG_LEVEL`
-  Python app log level.
-  Default: `INFO`
-
-- `APP_LOCALE`
-  Locale used for shared bot messages and Telegram command descriptions.
-  Default: `en`
-  Supported values: `en`, `de`, `fr`, `ja`, `ko`, `nl`, `th`, `vi`, `zh-CN`, `zh-HK`, `zh-TW`
-  When a brand-new env file is created from the example, this value is initialized from the system language.
-  To switch languages later, edit `APP_LOCALE` in the env file the app is using.
-
-### Agent Configuration
-
-- `DEFAULT_AGENT_PROVIDER`
-  Default provider for `/new` when none is specified.
-  Supported values: `codex`, `copilot`
-
-- `CODEX_BIN`
-  Command used to launch Codex CLI.
-  Default: `codex`
-
-- `COPILOT_BIN`
-  Command used to launch Copilot CLI.
-  Default: `copilot`
-
-- `CODEX_MODEL`
-  Optional Codex model override.
-  Leave empty to use the Codex CLI default model.
-  Example: `CODEX_MODEL=gpt-5.4`
-
-- `COPILOT_MODEL`
-  Optional Copilot model override.
-  Leave empty to use the Copilot CLI default model.
-  Examples: `COPILOT_MODEL=gpt-5.4`, `COPILOT_MODEL=claude-sonnet-4.6`
-
-Use the official model references before setting these values:
-
-- OpenAI Codex/OpenAI models: `https://developers.openai.com/codex/models`
-- GitHub Copilot supported models: `https://docs.github.com/en/copilot/reference/ai-models/supported-models`
-
-- `COPILOT_AUTOPILOT`
-  Default: `true`
-  Runs Copilot CLI in autopilot mode by default.
-
-- `COPILOT_NO_ASK_USER`
-  Default: `true`
-  Tells Copilot CLI not to stop and ask the user interactive follow-up questions.
-
-- `COPILOT_ALLOW_ALL`
-  Default: `true`
-  Passes `--allow-all`, which enables tools, paths, and URLs without confirmation.
-  This is the default here so Copilot CLI can continue non-interactively inside the Telegram bot flow.
-
-- `COPILOT_ALLOW_ALL_TOOLS`
-  If `true`, pass `--allow-all-tools` to Copilot CLI.
-  Use this only if you are comfortable letting Copilot run tools without approval prompts.
-
-- `COPILOT_ALLOW_TOOLS`
-  Comma-separated list of tools to allow without prompting.
-  Example: `COPILOT_ALLOW_TOOLS=shell(git),shell(npm)`
-
-- `COPILOT_DENY_TOOLS`
-  Comma-separated list of tools to explicitly deny.
-  Example: `COPILOT_DENY_TOOLS=shell(rm),shell(chmod)`
-
-- `COPILOT_AVAILABLE_TOOLS`
-  Optional comma-separated allowlist of tools Copilot may use at all.
-  Example: `COPILOT_AVAILABLE_TOOLS=shell,apply_patch`
-
-GitHub documents these Copilot CLI approval controls here:
-
-- `https://docs.github.com/en/copilot/concepts/about-github-copilot-cli`
-- `https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference`
-
-- `CODEX_APPROVAL_POLICY`
-  Approval mode passed to Codex.
-  Default: `never`
-
-- `CODEX_SANDBOX_MODE`
-  Sandbox mode passed to Codex.
-  Default: `workspace-write`
-
-- `CODEX_SKIP_GIT_REPO_CHECK`
-  If `true`, always bypass Codex's trusted-repo check.
-  If `false`, existing third-party folders stay protected unless trusted by this app.
-
-- `ENABLE_COMMIT_COMMAND`
-  If `true`, enable the `/commit` Telegram command.
-  Default: `false`
-
-- `AGENT_HARD_TIMEOUT_SECONDS`
-  Hard time limit in seconds for a single agent run.
-  When the agent subprocess is still running after this many seconds, the bot sends a timeout message and terminates the process.
-  Set to `0` (the default) to disable the limit entirely.
-  Disabling is recommended for Copilot, which can legitimately take over an hour on complex tasks.
-  Set a value (e.g. `600`) only when you want a hard cap — typically for shorter, bounded Codex jobs.
-  Default: `0` (disabled)
-
-### Telegram Behavior
-
-- `SNAPSHOT_TEXT_FILE_MAX_BYTES`
-  Maximum file size the bot will read as text when building the before/after snapshot for per-run diffs.
-  Default: `200000` bytes, about 200 KB
-
-- `MAX_TELEGRAM_MESSAGE_LENGTH`
-  Max message size used before the app splits responses.
-
-- `ENABLE_SENSITIVE_DIFF_FILTER`
-  Hide diffs for sensitive paths.
-
-### Example Env Snippet
-
-```env
-WORKSPACE_ROOT=~/git
-TELEGRAM_BOT_TOKENS=bot_token_one,bot_token_two
-ALLOWED_CHAT_IDS=123456789
-
-CODEX_BIN=codex
-COPILOT_BIN=copilot
-
-CODEX_MODEL=gpt-5.4
-COPILOT_MODEL=claude-sonnet-4.6
-COPILOT_AUTOPILOT=true
-COPILOT_NO_ASK_USER=true
-COPILOT_ALLOW_ALL=true
-COPILOT_ALLOW_ALL_TOOLS=false
-COPILOT_ALLOW_TOOLS=shell(git),shell(npm)
-COPILOT_DENY_TOOLS=shell(rm)
-COPILOT_AVAILABLE_TOOLS=shell,apply_patch
-
-CODEX_APPROVAL_POLICY=never
-CODEX_SANDBOX_MODE=workspace-write
-CODEX_SKIP_GIT_REPO_CHECK=false
-
-ENABLE_COMMIT_COMMAND=false
-
-SNAPSHOT_TEXT_FILE_MAX_BYTES=200000
-LOG_LEVEL=INFO
-```
+- Codex and Copilot currently supports text and image only, video is not supported.
 
 ## 🤖 Telegram Commands
 
@@ -409,6 +184,85 @@ If only one of those exists, only that option is shown. If neither exists, the b
 - `/push`
   Push `origin <branch>` for the current active session. The bot asks for confirmation before actually pushing. The branch comes from the active session record, or from the current repository branch if the session does not have one stored.
 
+## ⚙️ Environment Variables
+
+Main env file path:
+
+- `CODING_AGENT_TELEGRAM_ENV_FILE` if you explicitly set it
+- otherwise `~/.coding-agent-telegram/.env_coding_agent_telegram`
+- or `./.env_coding_agent_telegram` if that local file already exists
+
+Required:
+
+- `WORKSPACE_ROOT`
+- `TELEGRAM_BOT_TOKENS`
+- `ALLOWED_CHAT_IDS`
+
+Common settings:
+
+- `APP_LOCALE`
+  Default: `en`
+  Supported: `en`, `de`, `fr`, `ja`, `ko`, `nl`, `th`, `vi`, `zh-CN`, `zh-HK`, `zh-TW`
+
+- `DEFAULT_AGENT_PROVIDER`
+  `codex` or `copilot`
+
+- `CODEX_BIN`
+  Default: `codex`
+
+- `COPILOT_BIN`
+  Default: `copilot`
+
+- `CODEX_MODEL`
+- `COPILOT_MODEL`
+
+- `CODEX_APPROVAL_POLICY`
+  Default: `never`
+
+- `CODEX_SANDBOX_MODE`
+  Default: `workspace-write`
+
+- `CODEX_SKIP_GIT_REPO_CHECK`
+
+- `ENABLE_COMMIT_COMMAND`
+  Default: `false`
+
+- `AGENT_HARD_TIMEOUT_SECONDS`
+  Default: `0`
+
+- `SNAPSHOT_TEXT_FILE_MAX_BYTES`
+  Default: `200000`
+
+- `ENABLE_SENSITIVE_DIFF_FILTER`
+- `ENABLE_SECRET_SCRUB_FILTER`
+
+State and logs:
+
+- `~/.coding-agent-telegram/state.json`
+- `~/.coding-agent-telegram/state.json.bak`
+- `~/.coding-agent-telegram/logs`
+
+Model references:
+
+- OpenAI Codex models: `https://developers.openai.com/codex/models`
+- GitHub Copilot supported models: `https://docs.github.com/en/copilot/reference/ai-models/supported-models`
+
+Example:
+
+```env
+APP_LOCALE=en
+WORKSPACE_ROOT=~/git
+TELEGRAM_BOT_TOKENS=bot_token_one
+ALLOWED_CHAT_IDS=123456789
+DEFAULT_AGENT_PROVIDER=codex
+CODEX_BIN=codex
+COPILOT_BIN=copilot
+CODEX_APPROVAL_POLICY=never
+CODEX_SANDBOX_MODE=workspace-write
+ENABLE_SENSITIVE_DIFF_FILTER=true
+ENABLE_SECRET_SCRUB_FILTER=true
+```
+
 ## 🧠 Session Management
 
 Sessions are scoped by:
@@ -438,22 +292,6 @@ Each session stores:
 - provider
 - timestamps
 - active session selection for that bot/chat scope
-
-### Switching between Telegram and native CLI
-
-`/switch` is designed to let you move between Telegram and native CLI without treating them as separate worlds.
-
-It lets you move between:
-
-- sessions created from Telegram
-- sessions created directly in Codex CLI or Copilot CLI
-
-For the current project, the bot lists both kinds together, sorts them by newest activity first, and marks the source with a small icon:
-
-- `🤖` Bot managed session
-- `💻` native CLI session
-
-If you select a native CLI session, the bot imports it into `state.json` and then resumes it like a normal Telegram-managed session. This is what makes cross-device or cross-entry-point continuation possible.
 
 ### Workspace concurrency lock
 
@@ -594,20 +432,6 @@ Package versions are derived from Git tags.
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
-
-## 🛠️ Typical Local Flow
-
-```bash
-./startup.sh
-```
-
-Then in Telegram:
-
-```text
-/project my-project
-/new my-session
-Fix the failing API test in the current project
-```
 
 ## 📌 Notes
 
