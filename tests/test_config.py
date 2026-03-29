@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ from coding_agent_telegram.config import (
     resolve_app_internal_root,
     resolve_default_state_file_path,
     resolve_env_file_path,
+    resolve_user_home,
 )
 
 
@@ -241,6 +243,37 @@ def test_load_config_prefers_home_internal_app_root(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.app_internal_root == home_internal_root
+
+
+def test_resolve_user_home_uses_current_user_when_not_running_under_sudo(monkeypatch, tmp_path):
+    real_home = tmp_path / "real-home"
+    monkeypatch.delenv("SUDO_USER", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: real_home)
+
+    assert resolve_user_home() == real_home
+
+
+def test_default_app_internal_root_uses_sudo_user_home(monkeypatch, tmp_path):
+    root_home = tmp_path / "root-home"
+    sudo_home = tmp_path / "sudo-home"
+    monkeypatch.setattr(Path, "home", lambda: root_home)
+    monkeypatch.setenv("SUDO_USER", "exampleuser")
+    monkeypatch.setattr(config_module.pwd, "getpwnam", lambda _user: SimpleNamespace(pw_dir=str(sudo_home)))
+
+    assert config_module.default_app_internal_root() == sudo_home / ".coding-agent-telegram"
+
+
+def test_resolve_user_home_falls_back_to_current_user_when_sudo_user_is_missing(monkeypatch, tmp_path):
+    root_home = tmp_path / "root-home"
+    monkeypatch.setattr(Path, "home", lambda: root_home)
+    monkeypatch.setenv("SUDO_USER", "missinguser")
+
+    def _raise_key_error(_user):
+        raise KeyError("missing user")
+
+    monkeypatch.setattr(config_module.pwd, "getpwnam", _raise_key_error)
+
+    assert resolve_user_home() == root_home
 
 
 def test_load_config_falls_back_to_workspace_internal_app_root(monkeypatch, tmp_path):
