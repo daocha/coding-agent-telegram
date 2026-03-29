@@ -24,6 +24,7 @@
     <a href="http://github.com/daocha/coding-agent-telegram/releases/latest">
       <img src="https://img.shields.io/github/v/release/daocha/coding-agent-telegram?label=Latest&color=green" alt="Latest Release" />
     </a>
+    <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python 3.9+" />
   </p>
 </div>
 
