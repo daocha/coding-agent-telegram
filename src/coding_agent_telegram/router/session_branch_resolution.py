@@ -157,7 +157,11 @@ class SessionBranchResolutionMixin:
         project_folder = str(session.get("project_folder") or "").strip()
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
-            await send_text(update, context, f"Project folder does not exist: {project_folder}\nRun /project {project_folder} again.")
+            await send_text(
+                update,
+                context,
+                self._t(update, "project.project_folder_missing_retry", project_folder=project_folder),
+            )
             return False
 
         if branch_resolution.get("kind") == "discrepancy":

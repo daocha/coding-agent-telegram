@@ -505,6 +505,13 @@ class ProjectCommandMixin:
             source_kind,
             source_branch,
         )
-        await query.edit_message_text(f"{result.message}\nCurrent branch: {result.current_branch}")
+        await query.edit_message_text(
+            "\n".join(
+                [
+                    result.message,
+                    self._t(update, "project.current_branch_html", branch_name=result.current_branch),
+                ]
+            )
+        )
         if hasattr(self, "_continue_pending_action"):
             await self._continue_pending_action(update, context)

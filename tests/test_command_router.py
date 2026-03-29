@@ -441,7 +441,7 @@ def make_update(chat_id=123, chat_type="private", text="hello"):
     )
 
 
-def make_config(tmp_path: Path) -> AppConfig:
+def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
     return AppConfig(
         workspace_root=tmp_path,
         state_file=tmp_path / "state.json",
@@ -472,6 +472,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
         app_internal_root=tmp_path / ".coding-agent-telegram",
+        locale=locale,
     )
 
 
@@ -649,6 +650,28 @@ def test_project_command_reports_current_branch_for_git_repo(tmp_path: Path):
     assert "Current branch in repo: main" in message
     assert "Select a branch with:" in message
     assert "current_branch" not in store.get_chat_state("bot-a", 123)
+
+
+def test_project_command_is_localized_in_zh_tw(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path, locale="zh-TW")
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    message = bot.messages[0][1]
+    assert "已切換專案至：backend" in message
+    assert "必須先選擇 branch" in message
+    assert "儲存庫目前 branch：main" in message
+    assert "請用以下指令選擇 branch：" in message
 
 
 def test_project_command_warns_when_active_session_belongs_to_another_project(tmp_path: Path):
@@ -892,6 +915,62 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     assert "feature-1" in edited[-1][0]
     assert "Current branch: feature-1" in edited[-1][0]
     assert store.get_chat_state("bot-a", 123)["current_branch"] == "feature-1"
+
+
+def test_branch_command_is_localized_in_zh_tw(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path, locale="zh-TW")
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        default_branch="main",
+        local_branches=["main"],
+        prepare_from_source_result=SimpleNamespace(
+            success=True,
+            message="Created branch 'feature-1' from origin/main.",
+            current_branch="feature-1",
+            default_branch="main",
+        ),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["feature-1"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "要建立新 branch feature-1" in message
+    assert "請選擇 branch 來源：" in message
+    assert "目標 branch：feature-1" in message
+
+    query = SimpleNamespace(
+        data="branchsource:origin:main:feature-1",
+        answer=None,
+        edit_message_text=None,
+    )
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(callback_update, context))
+
+    assert "目前 branch：feature-1" in edited[-1][0]
 
 
 def test_branch_command_for_new_branch_offers_current_and_default_sources(tmp_path: Path):
@@ -4157,6 +4236,22 @@ def test_handle_provider_sends_keyboard_when_no_args(tmp_path: Path):
     # Should have sent a message with a reply_markup keyboard
     assert len(bot.messages) >= 1
     assert bot.messages[-1][3] is not None  # reply_markup present
+
+
+def test_handle_provider_localizes_prompt_text(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = AppConfig(**{**make_config(tmp_path).__dict__, "locale": "zh-TW"})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/provider")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router.handle_provider(update, context))
+
+    assert "目前 provider：codex" in bot.messages[-1][1]
+    assert "請選擇新 session 使用的 provider。" in bot.messages[-1][1]
 
 
 def test_handle_provider_sends_usage_when_args_provided(tmp_path: Path):
