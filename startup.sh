@@ -6,12 +6,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 DEFAULT_ENV_FILE=".env_coding_agent_telegram"
-APP_HOME_DIR="${HOME}/.coding-agent-telegram"
-HOME_ENV_FILE="$APP_HOME_DIR/$DEFAULT_ENV_FILE"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 ENV_FILE="${ENV_FILE:-}"
 ENV_TEMPLATE_FILE="${ENV_TEMPLATE_FILE:-src/coding_agent_telegram/resources/.env.example}"
 VENV_DIR="${VENV_DIR:-.venv}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+
+resolve_user_home() {
+  "$PYTHON_BIN" - <<'PY'
+from pathlib import Path
+import os
+import pwd
+
+sudo_user = os.getenv("SUDO_USER", "").strip()
+if sudo_user and sudo_user != "root":
+    try:
+        print(pwd.getpwnam(sudo_user).pw_dir)
+    except KeyError:
+        print(Path.home())
+else:
+    print(Path.home())
+PY
+}
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "Error: $PYTHON_BIN was not found in PATH." >&2
+  exit 1
+fi
+
+APP_HOME_DIR="$(resolve_user_home)/.coding-agent-telegram"
+HOME_ENV_FILE="$APP_HOME_DIR/$DEFAULT_ENV_FILE"
 STATE_FILE_DEFAULT="$APP_HOME_DIR/state.json"
 STATE_BACKUP_FILE_DEFAULT="$APP_HOME_DIR/state.json.bak"
 LOG_DIR_DEFAULT="$APP_HOME_DIR/logs"
@@ -33,11 +56,6 @@ compute_install_fingerprint() {
   fi
   shasum -a 256 "${files[@]}" | shasum -a 256 | awk '{print $1}'
 }
-
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "Error: $PYTHON_BIN was not found in PATH." >&2
-  exit 1
-fi
 
 if [[ -z "$ENV_FILE" ]]; then
   if [[ -f "$HOME_ENV_FILE" ]]; then

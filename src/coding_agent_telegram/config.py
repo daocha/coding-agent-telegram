@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.resources
 import os
+import pwd
 import re
 import locale as system_locale
 from dataclasses import dataclass
@@ -83,7 +84,17 @@ def _parse_bot_tokens() -> tuple[str, ...]:
 
 
 def default_app_internal_root() -> Path:
-    return Path.home() / DEFAULT_INTERNAL_APP_DIR_NAME
+    return resolve_user_home() / DEFAULT_INTERNAL_APP_DIR_NAME
+
+
+def resolve_user_home() -> Path:
+    sudo_user = os.getenv("SUDO_USER", "").strip()
+    if sudo_user and sudo_user != "root":
+        try:
+            return Path(pwd.getpwnam(sudo_user).pw_dir)
+        except KeyError:
+            pass
+    return Path.home()
 
 
 def detect_system_locale() -> str:
