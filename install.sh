@@ -16,11 +16,19 @@ import sysconfig
 print(sysconfig.get_path("scripts"))
 PY
 )"
+COMMAND_PATH="$(command -v coding-agent-telegram || true)"
 echo "Installed $PACKAGE_SPEC using $PYTHON_BIN."
-echo "Command path: $SCRIPT_DIR/coding-agent-telegram"
-if [[ ":$PATH:" != *":$SCRIPT_DIR:"* ]]; then
+if [[ -n "$COMMAND_PATH" ]]; then
+  echo "Command path: $COMMAND_PATH"
+else
+  echo "Command path: $SCRIPT_DIR/coding-agent-telegram"
+fi
+if [[ -z "$COMMAND_PATH" && ":$PATH:" != *":$SCRIPT_DIR:"* ]]; then
   echo "Note: $SCRIPT_DIR is not currently on PATH."
 fi
 
 echo "Starting coding-agent-telegram..."
-exec "$PYTHON_BIN" -m coding_agent_telegram.cli
+if [[ -n "$COMMAND_PATH" ]]; then
+  exec "$COMMAND_PATH"
+fi
+exec "$PYTHON_BIN" -m coding_agent_telegram
