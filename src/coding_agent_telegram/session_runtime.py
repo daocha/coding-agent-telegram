@@ -361,6 +361,7 @@ class SessionRuntime:
             session_name=session_name,
             project_folder=project_folder,
             project_path=project_path,
+            branch_name=branch_name,
             active_id=active_id,
             result=result,
             before_snapshot=before_snapshot,
@@ -583,6 +584,7 @@ class SessionRuntime:
         session_name: str,
         project_folder: str,
         project_path: Path,
+        branch_name: str,
         active_id: str,
         result,
         before_snapshot: dict[str, str | None],
@@ -610,7 +612,17 @@ class SessionRuntime:
             result.session_id or active_id,
             len(files),
         )
-        await send_text(update, context, build_summary(session_name, project_folder, files, locale=self._locale(update)))
+        await send_text(
+            update,
+            context,
+            build_summary(
+                session_name,
+                project_folder,
+                files,
+                branch_name=branch_name or None,
+                locale=self._locale(update),
+            ),
+        )
         await self._send_diffs(update, context, diffs)
 
     def _merge_snapshot_diffs(self, diffs, snapshot_diffs_by_path):

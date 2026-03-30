@@ -6,6 +6,7 @@ import pytest
 
 from coding_agent_telegram.diff_utils import (
     _parse_status_paths,
+    build_summary,
     changed_files,
     changed_files_from_snapshots,
     chunk_fenced_diff,
@@ -44,6 +45,13 @@ def test_chunk_plain_text_limits():
     assert len(chunks) > 1
     for msg in chunks:
         assert "Codex output" in msg
+
+
+def test_build_summary_includes_branch_next_to_project():
+    summary = build_summary("session-a", "backend", ["src/app.py"], branch_name="feature-1")
+
+    assert "Task completed." in summary
+    assert "Project: backend <feature-1>" in summary
 
 
 def test_parse_status_paths_includes_renames_and_untracked():

@@ -318,12 +318,16 @@ class FakeBot:
         self.messages = []
         self.actions = []
         self.deleted_messages = []
+        self.send_count = 0
+        self.edit_count = 0
 
     async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+        self.send_count += 1
         self.messages.append((chat_id, text, parse_mode, reply_markup))
         return SimpleNamespace(message_id=len(self.messages))
 
     async def edit_message_text(self, chat_id, message_id, text, parse_mode=None, reply_markup=None):
+        self.edit_count += 1
         self.messages.append((chat_id, text, parse_mode, reply_markup))
 
     async def delete_message(self, chat_id, message_id):
@@ -1150,6 +1154,45 @@ class ProgressRunner(DummyRunner):
                     command=("codex", "exec", "resume"),
                     elapsed_seconds=5.0,
                     text="Indexing files...",
+                    source="stdout",
+                )
+            )
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text="done",
+            error_message=None,
+            raw_events=[],
+        )
+
+
+class RapidProgressRunner(DummyRunner):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        if on_progress is not None:
+            on_progress(
+                AgentProgressInfo(
+                    command=("copilot", "chat"),
+                    elapsed_seconds=5.0,
+                    text='"/bin/zsh -lc \\"rg -n foo\\""',
+                    source="stdout",
+                )
+            )
+            on_progress(
+                AgentProgressInfo(
+                    command=("copilot", "chat"),
+                    elapsed_seconds=8.0,
+                    text='"/bin/zsh -lc \\"pytest -q\\""',
                     source="stdout",
                 )
             )
@@ -2880,6 +2923,27 @@ def test_active_session_deletes_live_progress_message_when_final_output_is_sent(
     assert len(bot.deleted_messages) == 1
     assert bot.deleted_messages[0][0] == 123
     assert any("Codex output" in message[1] for message in bot.messages)
+
+
+def test_active_session_reuses_single_live_progress_message(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = RapidProgressRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_progress", "progress-session", "backend", "copilot")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="continue")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    progress_messages = [message for message in bot.messages if "Live agent output" in message[1]]
+    assert len(progress_messages) == 2
+    assert bot.edit_count == 1
 
 
 def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Path):

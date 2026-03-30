@@ -319,8 +319,7 @@ def test_copilot_runner_progress_includes_nested_item_started_details(monkeypatc
     runner.create_session("copilot", Path("/tmp/project"), "hello", on_progress=captured.append)
 
     assert captured
-    assert '"type": "item.started"' in captured[0].text
-    assert '"command": "git status"' in captured[0].text
+    assert captured[0].text == "Check repo state"
 
 
 def test_codex_runner_progress_includes_nested_item_completed_details(monkeypatch):
@@ -345,8 +344,59 @@ def test_codex_runner_progress_includes_nested_item_completed_details(monkeypatc
     runner.create_session("codex", Path("/tmp/project"), "hello", on_progress=captured.append)
 
     assert captured
-    assert '"type": "item.completed"' in captured[0].text
-    assert '"command": "git status"' in captured[0].text
+    assert captured[0].text == "git status (completed)"
+
+
+def test_copilot_runner_progress_extracts_nested_agent_message_text(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"item.completed","item":{"type":"agent_message","text":"I am checking the provider integration points first."}}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == "I am checking the provider integration points first."
+
+
+def test_copilot_runner_progress_summarizes_command_execution(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"item.started","item":{"type":"command_execution","command":"/bin/zsh -lc \\"rg -n foo\\"","status":"in_progress"}}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("copilot", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == '/bin/zsh -lc "rg -n foo"'
 
 
 def test_copilot_runner_extracts_assistant_message_delta_content(monkeypatch):

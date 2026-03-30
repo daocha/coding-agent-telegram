@@ -74,19 +74,20 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 
 <table>
    <tr>
-   <td width="50%" valign="top">
+   <td width="65%" valign="top">
 
    ## 🔐 Sicherheit
 
-- Private Chats werden über `ALLOWED_CHAT_IDS` freigegeben
-- Pro Projekt ist nur ein aktiver Agent erlaubt, um Konflikte zu reduzieren
+- Whitelist für private Chats mit `ALLOWED_CHAT_IDS`
+- Pro Projekt nur ein aktiver Agent, um Konflikte beim Schreiben zu reduzieren
 - Diffs sensibler Dateien werden ausgeblendet
-- API-Schlüssel, Tokens, `.env`-Werte, Zertifikate, SSH-Schlüssel und ähnliche Geheimnisse werden vor dem Senden an Telegram maskiert
+- API-Schlüssel, Tokens, `.env`-Werte, Zertifikate, SSH-Schlüssel und ähnliche geheime Ausgaben werden vor dem Senden an Telegram maskiert
 - Laufzeitdaten der App bleiben unter `~/.coding-agent-telegram`
 - Bestehende Ordner können vor schreibenden Git-Operationen eine Vertrauensbestätigung verlangen
-- Keine versteckten externen Aufrufe: Du behältst die Kontrolle
+- Der Server führt keine versteckten externen Aufrufe aus. Alles bleibt unter deiner Kontrolle.
+- Funktioniert gut mit dem Codex Sandbox mode; du musst `danger-full-access` nicht freigeben
    </td>
-   <td width="50%" valign="top">
+   <td width="35%" valign="top">
 
    ## ✅ Voraussetzungen
 
@@ -101,6 +102,9 @@ Vor dem Start des Servers brauchst du:
    </td>
    </tr>
 </table>
+
+## 🦞 Warum brauche ich das, wenn ich Openclaw bereits habe?
+Openclaw bietet dir sehr umfassende Funktionen und hat mit Pi-Agent bereits eine integrierte Agent-Loop. Es ist vielseitig und für breitere Einsatzfälle gedacht. Ich mag Openclaw ebenfalls und habe selbst damit entwickelt. Für Coding ist es aber nicht immer die beste Wahl, weil der eingebaute große System-Prompt und der zusätzliche Kontext eher ablenken können. Claude Code / Codex / Copilot sind fürs Coding oft effizienter, präziser, weniger abgelenkt und direkter. Dieses Projekt bleibt bewusst einfach und integriert nur Codex / Copilot CLI. Du delegierst also direkt an Codex / Copilot.
 
 ## 🚀 Schnellstart
 

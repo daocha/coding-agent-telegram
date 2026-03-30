@@ -74,19 +74,20 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 
 <table>
    <tr>
-   <td width="50%" valign="top">
+   <td width="65%" valign="top">
       
    ## 🔐 Security
       
-   - Private chat allowlist with `ALLOWED_CHAT_IDS`
+   - Private chat whitelist with `ALLOWED_CHAT_IDS`
    - One active agent per project to reduce conflicting writes
    - Sensitive file diffs are hidden
    - API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
    - Runtime app data stays under `~/.coding-agent-telegram`
    - Existing folders can require trust before mutating git operations
-   - Server makes `NO hidden external call`. Everything is under your control.      
+   - The server does not make hidden external calls. Everything stays under your control.
+   - Works well with Codex Sandbox mode (you don't have to grant `danger-full-access`)
    </td>
-   <td width="50%" valign="top">
+   <td width="35%" valign="top">
       
    ## ✅ Requirements
 
@@ -101,6 +102,9 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    </td>
    </tr>
 </table>
+
+## 🦞 Why do I need it if I have Openclaw already?
+Openclaw offers you full capabilities and has integrated agent loop called Pi-Agent. It's quite comprehensive and designed for more diversified use cases. I am also Openclaw lover and I used to code with Openclaw. However, that is not the best choice for coding due to the built in large system prompt and context. Using Claude Code / Codex / Copilot for coding is still more effecient, accurate, less distracted, and straightforward. This project is quite simple, purely integrating with Codex / Copilot CLI. So you are directly delegating Codex / Copilot to work for you.
 
 ## 🚀 Quick Start
 
