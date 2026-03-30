@@ -105,6 +105,45 @@ class GitWorkspaceManager:
 
         return identity
 
+    def _resolved_commit_signing(self, project_path: Path) -> tuple[tuple[str, ...], dict[str, str]]:
+        signing_args: list[str] = []
+        signing_env: dict[str, str] = {}
+
+        commit_sign = self._run(project_path, "config", "--bool", "--get", "commit.gpgsign")
+        commit_sign_value = commit_sign.stdout.strip().lower() if commit_sign.returncode == 0 else ""
+        if commit_sign_value not in {"true", "yes", "on", "1"}:
+            return (), {}
+
+        signing_args.extend(("-c", "commit.gpgsign=true"))
+        for key in (
+            "user.signingkey",
+            "gpg.format",
+            "gpg.program",
+            "gpg.ssh.program",
+            "gpg.ssh.allowedsignersfile",
+            "gpg.ssh.revocationfile",
+            "gpg.ssh.defaultkeycommand",
+        ):
+            result = self._run(project_path, "config", "--get", key)
+            value = result.stdout.strip() if result.returncode == 0 else ""
+            if value:
+                signing_args.extend(("-c", f"{key}={value}"))
+
+        gnupghome = os.environ.get("GNUPGHOME", "").strip()
+        if gnupghome:
+            signing_env["GNUPGHOME"] = gnupghome
+        else:
+            default_gnupg = Path.home() / ".gnupg"
+            if default_gnupg.exists():
+                signing_env["GNUPGHOME"] = str(default_gnupg)
+
+        for key in ("GPG_TTY", "SSH_AUTH_SOCK"):
+            value = os.environ.get(key, "").strip()
+            if value:
+                signing_env[key] = value
+
+        return tuple(signing_args), signing_env
+
     def is_git_repo(self, project_path: Path) -> bool:
         result = self._run(project_path, "rev-parse", "--is-inside-work-tree")
         return result.returncode == 0 and result.stdout.strip() == "true"
@@ -508,7 +547,9 @@ class GitWorkspaceManager:
                 }
             )
             env.update(self._resolved_commit_identity(project_path))
-            result = self._run(project_path, *self.SAFE_COMMIT_CONFIG, *args, env=env)
+            signing_args, signing_env = self._resolved_commit_signing(project_path)
+            env.update(signing_env)
+            result = self._run(project_path, *self.SAFE_COMMIT_CONFIG, *signing_args, *args, env=env)
 
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
