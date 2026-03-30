@@ -138,7 +138,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🎙️ [可选] Speech-to-Text 功能：准备本地 OpenAI-Whisper 依赖
+## 🎙️ [可选] 语音转文字功能：准备本地 OpenAI-Whisper 依赖
 
 这部分用于可选启用 Telegram 语音消息的本地 Whisper 语音转文字功能。音频文件最大限制为 `20 MB`。
 
@@ -209,55 +209,55 @@ bot 当前接受：
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>为新 session 选择 provider。该选择会按 bot 和 chat 保存，直到你手动修改。</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>设置当前 project 文件夹。如果文件夹不存在，应用会创建并标记为 trusted；如果已存在但仍是 untrusted，应用会明确要求确认 trust。</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>为当前 project 准备或切换 branch。如果 branch 已存在，bot 会把它当作 source candidate；否则会使用 repository 的 default branch 作为 source candidate。</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>使用 `<origin_branch>` 作为 source candidate 来准备或切换 branch。无论哪种形式，bot 之后只会提供实际存在的 source choices：`local/<branch>` 和 `origin/<branch>`。如果只存在其中一个，就只显示那个；如果两个都不存在，bot 会提示缺少 branch source。</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>显示当前 bot 和 chat 的 active session。</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td width="332"><code>/new [session_name]</code></td>
     <td>为当前 project 创建新 session。如果省略名称，bot 会使用真实的 session ID。若缺少 provider、project 或 branch，bot 会引导你完成缺失步骤。</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>显示最新的 session，按从新到旧排序。列表同时包含 bot-managed sessions 和当前 project 的本地 Codex/Copilot CLI sessions。</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>显示已保存 sessions 的其他页。</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>通过 ID 切换到指定 session。如果你选择本地 CLI session，bot 会把它导入 state 并从那里继续。</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>从当前活动 session 创建一个新的压缩 session，并切换到该 session。</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
     <td>在 active session 的 project 内执行已校验的 `git commit` 相关命令。仅当 `ENABLE_COMMIT_COMMAND=true` 时可用。会修改内容的 Git 命令要求 project 已 trusted。</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td width="332"><code>/push</code></td>
     <td>为当前 active session 执行 `origin <branch>` push。push 前 bot 会要求确认。</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>中止当前 project 的 agent run。如果还有 queued questions 在等待，bot 会询问是否继续处理。</td>
   </tr>
 </table>
@@ -285,15 +285,15 @@ bot 当前接受：
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>包含你的项目目录的父文件夹。</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>以逗号分隔的 Telegram bot token。</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>允许使用该 bot 的 Telegram 私聊 chat ID，使用逗号分隔。</td>
   </tr>
 </table>
@@ -302,68 +302,86 @@ bot 当前接受：
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>共享 bot 消息和命令说明所使用的 UI 语言。支持值：<code>en</code>、<code>de</code>、<code>fr</code>、<code>ja</code>、<code>ko</code>、<code>nl</code>、<code>th</code>、<code>vi</code>、<code>zh-CN</code>、<code>zh-HK</code>、<code>zh-TW</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>用于启动 Codex CLI 的命令。默认：<code>codex</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>用于启动 Copilot CLI 的命令。默认：<code>copilot</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>可选的 Codex model 覆盖。留空则使用 Codex CLI 默认 model。示例：<code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>可选的 Copilot model 覆盖。留空则使用 Copilot CLI 默认 model。示例：<code>gpt-5.4</code>、<code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>传递给 Codex 的 approval mode。默认：<code>never</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>传递给 Codex 的 sandbox mode。默认：<code>workspace-write</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>如果启用，将始终跳过 Codex 的 trusted-repo 检查。</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>启用 Telegram 的 <code>/commit</code> 命令。默认：<code>false</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>单次 agent run 的硬超时。默认：<code>0</code>（关闭）。</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>构建每次运行的前后快照 diff 时，bot 会按文本读取的最大文件大小。默认：<code>200000</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>应用拆分回复前使用的最大消息长度。默认：<code>3000</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>隐藏敏感文件的 diff。默认：<code>true</code>。</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>在发送到 Telegram 之前，对 tokens、keys、<code>.env</code> 值、certificates 以及类似秘密输出做脱敏。默认：<code>true</code>（强烈建议开启）。</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>强制把匹配的路径包含进 diff。示例：<code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>在打包默认值之外额外添加 diff 排除规则。示例：<code>.*,personal/*,sensitive*.txt</code> 说明：<code>.*</code> 会匹配隐藏路径，包括隐藏目录中的文件。</td>
+  </tr>
+</table>
+
+
+<h3>语音转文字</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>默认：<code>false</code>。如果为 <code>true</code>，则启用语音消息和音频文件识别。系统会检查所需的二进制或库依赖，缺失时提示用户安装。</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Whisper STT 使用的模型。默认：<code>base</code><br />可用模型：<code>tiny</code> 约 <code>72 MB</code>、<code>base</code> 约 <code>139 MB</code>、<code>large-v3-turbo</code> 约 <code>1.5 GB</code><br />模型会在你第一次发送语音消息时自动下载。一般使用推荐 <code>base</code>。如果你想要更好的准确率和质量，可以尝试 <code>turbo</code>。</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>默认：<code>120</code>。STT 进程的超时时间。通常处理速度已经足够快，但如果你选择 <code>turbo</code>，第一次语音消息可能会因为下载模型而根据网速超过超时限制。</td>
   </tr>
 </table>
 

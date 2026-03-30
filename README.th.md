@@ -138,7 +138,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🎙️ [ทางเลือก] ฟีเจอร์ Speech-to-Text: เตรียมส่วนที่ OpenAI-Whisper ต้องใช้ในเครื่อง
+## 🎙️ [ทางเลือก] ฟีเจอร์เสียงเป็นข้อความ: เตรียมส่วนที่ OpenAI-Whisper ต้องใช้ในเครื่อง
 
 ส่วนนี้ใช้เปิดการแปลงข้อความจากข้อความเสียง Telegram ด้วย Whisper แบบโลคัลตามตัวเลือกของคุณ ไฟล์เสียงถูกจำกัดไว้ที่สูงสุด `20 MB`
 
@@ -209,55 +209,55 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>เลือก provider สำหรับ session ใหม่ โดยค่าที่เลือกจะถูกเก็บแยกตาม bot และ chat จนกว่าคุณจะเปลี่ยน</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>ตั้งค่าโฟลเดอร์ project ปัจจุบัน หากโฟลเดอร์ยังไม่มี แอปจะสร้างและทำเครื่องหมายว่า trusted หากมีอยู่แล้วแต่ยัง untrusted แอปจะถามยืนยัน trust ก่อน</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>เตรียมหรือสลับ branch สำหรับ project ปัจจุบัน หาก branch มีอยู่แล้ว บอตจะถือ branch นั้นเป็น source candidate หากยังไม่มี บอตจะใช้ default branch ของ repository เป็น source candidate</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>เตรียมหรือสลับ branch โดยใช้ `<origin_branch>` เป็น source candidate สำหรับทั้งสองรูปแบบ บอตจะแสดงเฉพาะ source choices ที่มีอยู่จริงเท่านั้น: `local/<branch>` และ `origin/<branch>` หากมีเพียงตัวเดียวก็จะแสดงเพียงตัวนั้น หากไม่มีเลย บอตจะแจ้งว่าไม่พบ branch source</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>แสดง active session ของ bot และ chat ปัจจุบัน</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td width="332"><code>/new [session_name]</code></td>
     <td>สร้าง session ใหม่สำหรับ project ปัจจุบัน หากไม่ระบุชื่อ บอตจะใช้ session ID จริง หากยังไม่มี provider, project หรือ branch บอตจะพาคุณไปยังขั้นตอนที่ขาดอยู่</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>แสดง session ล่าสุด โดยเรียงจากใหม่ไปเก่า รายการนี้รวมทั้ง bot-managed sessions และ local Codex/Copilot CLI sessions ของ project ปัจจุบัน</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>แสดงหน้าถัดไปของ sessions ที่จัดเก็บไว้</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>สลับไปยัง session ที่ระบุด้วย ID หากเลือก local CLI session บอตจะ import เข้าสู่ state แล้วทำงานต่อจากตรงนั้น</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>สร้าง session แบบย่อใหม่จาก session ที่กำลังใช้งาน แล้วสลับไปที่ session นั้น</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
     <td>รันคำสั่งที่เกี่ยวข้องกับ `git commit` ซึ่งผ่านการตรวจสอบแล้วภายใน project ของ active session ใช้ได้เมื่อ `ENABLE_COMMIT_COMMAND=true` เท่านั้น คำสั่ง Git ที่มีการแก้ไขต้องใช้ project ที่ trusted</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td width="332"><code>/push</code></td>
     <td>push `origin <branch>` สำหรับ active session ปัจจุบัน โดยบอตจะขอการยืนยันก่อน push</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>ยกเลิก agent run ปัจจุบันของ project นี้ หากมี queued questions รออยู่ บอตจะถามว่าจะให้ประมวลผลต่อหรือไม่</td>
   </tr>
 </table>
@@ -285,15 +285,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>โฟลเดอร์หลักที่เก็บโฟลเดอร์โปรเจกต์ของคุณ</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>Telegram bot tokens แบบคั่นด้วย comma</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>Telegram private chat IDs แบบคั่นด้วย comma ที่ได้รับอนุญาตให้ใช้บอต</td>
   </tr>
 </table>
@@ -302,68 +302,92 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>ภาษา UI สำหรับข้อความของบอตและคำอธิบายคำสั่งที่ใช้ร่วมกัน ค่าที่รองรับ: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>คำสั่งที่ใช้เรียก Codex CLI ค่าเริ่มต้น: <code>codex</code></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>คำสั่งที่ใช้เรียก Copilot CLI ค่าเริ่มต้น: <code>copilot</code></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>กำหนด model ของ Codex เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Codex CLI ตัวอย่าง: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>กำหนด model ของ Copilot เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Copilot CLI ตัวอย่าง: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>โหมด approval ที่ส่งให้ Codex ค่าเริ่มต้น: <code>never</code></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>โหมด sandbox ที่ส่งให้ Codex ค่าเริ่มต้น: <code>workspace-write</code></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>หากเปิดไว้ จะข้ามการตรวจ trusted-repo ของ Codex เสมอ</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>เปิดใช้งานคำสั่ง Telegram <code>/commit</code> ค่าเริ่มต้น: <code>false</code></td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>ฮาร์ดไทม์เอาต์สำหรับ agent run หนึ่งครั้ง ค่าเริ่มต้น: <code>0</code> (ปิดใช้งาน)</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>ขนาดไฟล์สูงสุดที่บอตจะอ่านเป็นข้อความเพื่อสร้าง before/after snapshot สำหรับ diff ของแต่ละ run ค่าเริ่มต้น: <code>200000</code></td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>ขนาดข้อความสูงสุดก่อนที่แอปจะแบ่งการตอบกลับ ค่าเริ่มต้น: <code>3000</code></td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>ซ่อน diff สำหรับไฟล์ที่มีข้อมูลอ่อนไหว ค่าเริ่มต้น: <code>true</code></td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>ปิดบัง tokens, keys, ค่า <code>.env</code>, certificates และข้อมูลลักษณะคล้ายความลับก่อนส่งไปยัง Telegram ค่าเริ่มต้น: <code>true</code> (แนะนำอย่างยิ่ง)</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>บังคับรวม path ที่ตรงเงื่อนไขเข้าใน diff ตัวอย่าง: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>เพิ่มกฎยกเว้น diff เพิ่มเติมทับบนค่าเริ่มต้นของแพ็กเกจ ตัวอย่าง: <code>.*,personal/*,sensitive*.txt</code> หมายเหตุ: <code>.*</code> จะตรงกับ path ที่ซ่อนอยู่ รวมถึงไฟล์ใน hidden directory</td>
+  </tr>
+</table>
+
+
+
+
+
+
+
+
+<h3>เสียงเป็นข้อความ</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>ค่าเริ่มต้น: <code>false</code> หากเป็น <code>true</code> จะเปิดใช้การรู้จำข้อความเสียงและไฟล์เสียง ระบบจะตรวจสอบไบนารีหรือไลบรารีที่จำเป็น และแจ้งให้ผู้ใช้ติดตั้งหากยังขาดอยู่</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>โมเดลสำหรับ Whisper STT ค่าเริ่มต้น: <code>base</code><br />โมเดลที่ใช้ได้: <code>tiny</code> ประมาณ <code>72 MB</code>, <code>base</code> ประมาณ <code>139 MB</code>, <code>large-v3-turbo</code> ประมาณ <code>1.5 GB</code><br />โมเดลจะถูกดาวน์โหลดอัตโนมัติเมื่อคุณส่งข้อความเสียงครั้งแรก แนะนำให้ใช้ <code>base</code> สำหรับการใช้งานทั่วไป หากต้องการความแม่นยำและคุณภาพที่ดีขึ้นสามารถลอง <code>turbo</code> ได้</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>ค่าเริ่มต้น: <code>120</code> ระยะหมดเวลาของกระบวนการ STT โดยทั่วไปการประมวลผลเร็วพออยู่แล้ว แต่หากเลือก <code>turbo</code> การส่งข้อความเสียงครั้งแรกอาจใช้เวลานานเกินกำหนดระหว่างดาวน์โหลดโมเดล ขึ้นอยู่กับความเร็วอินเทอร์เน็ตของคุณ</td>
   </tr>
 </table>
 

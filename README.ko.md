@@ -138,7 +138,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🎙️ [선택 사항] Speech-to-Text 기능: 로컬 OpenAI-Whisper 전제 조건 준비
+## 🎙️ [선택 사항] 음성 텍스트 변환 기능: 로컬 OpenAI-Whisper 전제 조건 준비
 
 이 기능을 사용하면 Telegram 음성 노트에 대해 로컬 Whisper 기반 음성-텍스트 기능을 선택적으로 활성화할 수 있습니다. 오디오 파일은 최대 `20 MB` 까지만 지원됩니다.
 
@@ -209,55 +209,55 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>새 session용 provider 를 선택합니다. 선택 내용은 바꿀 때까지 bot/chat 단위로 저장됩니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>현재 project folder를 설정합니다. 폴더가 없으면 앱이 만들고 trusted 로 표시합니다. 이미 존재하지만 아직 untrusted 이면 trust 확인을 요청합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>현재 project에서 branch 를 준비하거나 전환합니다. branch 가 이미 있으면 source candidate 로 취급하고, 없으면 repository 의 default branch 를 source candidate 로 사용합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>`<origin_branch>` 를 source candidate 로 사용해 branch 를 준비하거나 전환합니다. 두 형식 모두 bot 은 실제로 존재하는 source choice 만 보여줍니다: `local/<branch>`, `origin/<branch>`. 하나만 있으면 그것만 보이고, 둘 다 없으면 branch source 가 없다고 알립니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>현재 bot/chat 의 active session 을 보여줍니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td width="332"><code>/new [session_name]</code></td>
     <td>현재 project에 새 session을 만듭니다. 이름을 생략하면 실제 session ID를 사용합니다. provider, project, branch 가 없으면 bot 이 필요한 단계를 안내합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>가장 최근 session 을 최신순으로 보여줍니다. 현재 project 의 bot-managed session 과 로컬 Codex/Copilot CLI session 이 함께 표시됩니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>저장된 session 의 다른 페이지를 보여줍니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>ID 로 특정 session 으로 전환합니다. 로컬 CLI session 을 선택하면 bot 이 state 에 가져와 이어서 진행합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>활성 session 에서 새 compact session 을 만들고 그쪽으로 전환합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
     <td>active session project 안에서 검증된 `git commit` 관련 명령을 실행합니다. `ENABLE_COMMIT_COMMAND=true` 일 때만 사용할 수 있습니다. 변경성 Git 명령은 trusted project 가 필요합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td width="332"><code>/push</code></td>
     <td>현재 active session 에 대해 `origin <branch>` 를 push 합니다. push 전에 bot 이 확인합니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>현재 project 의 agent run 을 중단합니다. 대기 중인 queued question 이 있으면 계속할지 묻습니다.</td>
   </tr>
 </table>
@@ -285,15 +285,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>프로젝트 디렉터리를 담는 상위 폴더입니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>쉼표로 구분된 Telegram bot token 목록입니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>이 bot 사용을 허용할 Telegram 개인 chat ID 목록입니다.</td>
   </tr>
 </table>
@@ -302,68 +302,86 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>공용 bot 메시지와 명령 설명에 사용할 UI locale 입니다. 지원 값: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Codex CLI 를 실행할 명령입니다. 기본값: <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Copilot CLI 를 실행할 명령입니다. 기본값: <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>선택적 Codex model override 입니다. 비워 두면 Codex CLI 기본 model 을 사용합니다. 예: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>선택적 Copilot model override 입니다. 비워 두면 Copilot CLI 기본 model 을 사용합니다. 예: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Codex 에 전달할 approval mode 입니다. 기본값: <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Codex 에 전달할 sandbox mode 입니다. 기본값: <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>활성화하면 Codex trusted-repo check 를 항상 건너뜁니다.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Telegram <code>/commit</code> 명령을 활성화합니다. 기본값: <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>단일 agent run 의 하드 타임아웃입니다. 기본값: <code>0</code> (비활성화).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>실행별 diff 스냅샷을 만들 때 bot 이 텍스트로 읽을 최대 파일 크기입니다. 기본값: <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>응답을 분할하기 전 최대 메시지 크기입니다. 기본값: <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>민감한 파일의 diff 를 숨깁니다. 기본값: <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>tokens, keys, <code>.env</code> 값, certificates 등 비밀스러운 출력을 Telegram 으로 보내기 전에 마스킹합니다. 기본값: <code>true</code> (강력 권장).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>일치하는 경로를 diff 에 강제로 포함합니다. 예: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>패키지 기본값 위에 추가 diff 제외 규칙을 더합니다. 예: <code>.*,personal/*,sensitive*.txt</code> 참고: <code>.*</code> 는 hidden directory 안 파일을 포함한 hidden path 에도 매칭됩니다.</td>
+  </tr>
+</table>
+
+
+<h3>음성 텍스트 변환</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>기본값: <code>false</code>. <code>true</code>이면 음성 메시지와 오디오 파일 인식을 활성화합니다. 시스템은 필요한 바이너리나 라이브러리를 확인하고, 누락된 경우 설치를 안내합니다.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Whisper STT에 사용할 모델입니다. 기본값: <code>base</code><br />사용 가능한 모델: <code>tiny</code> 약 <code>72 MB</code>, <code>base</code> 약 <code>139 MB</code>, <code>large-v3-turbo</code> 약 <code>1.5 GB</code><br />모델은 첫 음성 메시지 전송 시 자동으로 다운로드됩니다. 일반적인 사용에는 <code>base</code>를 권장합니다. 더 나은 정확도와 품질이 필요하면 <code>turbo</code>를 시도할 수 있습니다.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>기본값: <code>120</code>. STT 프로세스 제한 시간입니다. 보통은 충분히 빠르지만 <code>turbo</code>를 선택하면 첫 음성 메시지에서 모델 다운로드로 인해 인터넷 속도에 따라 제한 시간을 초과할 수 있습니다.</td>
   </tr>
 </table>
 

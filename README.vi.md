@@ -138,7 +138,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🎙️ [Tùy chọn] Tính năng Speech-to-Text: chuẩn bị các điều kiện cần cục bộ của OpenAI-Whisper
+## 🎙️ [Tùy chọn] Tính năng chuyển giọng nói thành văn bản: chuẩn bị các điều kiện cần cục bộ của OpenAI-Whisper
 
 Phần này dùng để bật tùy chọn chuyển tin nhắn thoại Telegram thành văn bản bằng Whisper chạy cục bộ. Tệp âm thanh được giới hạn tối đa `20 MB`.
 
@@ -209,55 +209,55 @@ Hiện tại bot chấp nhận:
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>Chọn provider cho các session mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Đặt thư mục project hiện tại. Nếu thư mục chưa tồn tại, app sẽ tạo và đánh dấu là trusted. Nếu đã tồn tại nhưng vẫn untrusted, app sẽ yêu cầu xác nhận trust rõ ràng.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>Chuẩn bị hoặc chuyển branch cho project hiện tại. Nếu branch đã tồn tại, bot coi branch đó là source candidate. Nếu chưa có, bot dùng default branch của repository làm source candidate.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Chuẩn bị hoặc chuyển branch bằng cách dùng `<origin_branch>` làm source candidate. Với cả hai dạng, bot chỉ đưa ra các source choice thật sự tồn tại: `local/<branch>` và `origin/<branch>`. Nếu chỉ có một lựa chọn thì chỉ hiện lựa chọn đó. Nếu không có lựa chọn nào, bot sẽ báo thiếu branch source.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>Hiển thị active session cho bot và chat hiện tại.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td width="332"><code>/new [session_name]</code></td>
     <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu provider, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>Hiển thị các session mới nhất, mới nhất trước. Danh sách bao gồm cả session do bot quản lý và local Codex/Copilot CLI session của project hiện tại.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>Hiển thị trang khác của các session đã lưu.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>Chuyển sang một session cụ thể bằng ID. Nếu bạn chọn local CLI session, bot sẽ import nó và tiếp tục từ đó.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>Tạo một session rút gọn mới từ session đang hoạt động rồi chuyển sang session đó.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
     <td>Chạy các lệnh liên quan đến `git commit` đã được kiểm tra trong project của active session. Chỉ có khi `ENABLE_COMMIT_COMMAND=true`. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td width="332"><code>/push</code></td>
     <td>Push `origin <branch>` cho active session hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>Hủy agent run hiện tại của project hiện tại. Nếu còn queued questions chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
   </tr>
 </table>
@@ -285,15 +285,15 @@ Hiện tại bot chấp nhận:
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>Thư mục cha chứa các thư mục project của bạn.</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>Các Telegram bot token, ngăn cách bằng dấu phẩy.</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>Các Telegram private chat ID được phép dùng bot, ngăn cách bằng dấu phẩy.</td>
   </tr>
 </table>
@@ -302,68 +302,86 @@ Hiện tại bot chấp nhận:
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>Ngôn ngữ UI cho các thông điệp bot dùng chung và mô tả lệnh. Giá trị hỗ trợ: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Lệnh dùng để chạy Codex CLI. Mặc định: <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Lệnh dùng để chạy Copilot CLI. Mặc định: <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>Ghi đè model Codex nếu cần. Để trống để dùng model mặc định của Codex CLI. Ví dụ: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Ghi đè model Copilot nếu cần. Để trống để dùng model mặc định của Copilot CLI. Ví dụ: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Chế độ approval truyền cho Codex. Mặc định: <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Chế độ sandbox truyền cho Codex. Mặc định: <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Nếu bật, luôn bỏ qua trusted-repo check của Codex.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Bật lệnh Telegram <code>/commit</code>. Mặc định: <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Timeout cứng cho một lần agent run. Mặc định: <code>0</code> (tắt).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>Kích thước file tối đa mà bot sẽ đọc dưới dạng văn bản khi tạo before/after snapshot cho diff của từng run. Mặc định: <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>Kích thước tin nhắn tối đa trước khi app tách phản hồi. Mặc định: <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>Ẩn diff của các file nhạy cảm. Mặc định: <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>Che tokens, keys, giá trị <code>.env</code>, certificates và các đầu ra giống bí mật trước khi gửi về Telegram. Mặc định: <code>true</code> (rất nên bật).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>Luôn đưa các path khớp điều kiện vào diff. Ví dụ: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>Thêm các rule loại trừ diff ngoài bộ mặc định của package. Ví dụ: <code>.*,personal/*,sensitive*.txt</code> Lưu ý: <code>.*</code> khớp cả path ẩn, gồm cả file trong thư mục ẩn.</td>
+  </tr>
+</table>
+
+
+<h3>Chuyển giọng nói thành văn bản</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Mặc định: <code>false</code>. Nếu bật <code>true</code>, hệ thống sẽ nhận dạng tin nhắn thoại và tệp âm thanh. Hệ thống sẽ kiểm tra các binary hoặc thư viện cần thiết và nhắc người dùng cài đặt nếu còn thiếu.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Mô hình dùng cho Whisper STT. Mặc định: <code>base</code><br />Các mô hình khả dụng: <code>tiny</code> khoảng <code>72 MB</code>, <code>base</code> khoảng <code>139 MB</code>, <code>large-v3-turbo</code> khoảng <code>1.5 GB</code><br />Mô hình sẽ được tự động tải xuống khi bạn gửi tin nhắn thoại đầu tiên. Khuyến nghị: <code>base</code> cho nhu cầu chung. Nếu muốn độ chính xác và chất lượng tốt hơn, bạn có thể thử <code>turbo</code>.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Mặc định: <code>120</code>. Thời gian chờ cho tiến trình STT. Thông thường STT đủ nhanh, nhưng nếu bạn chọn <code>turbo</code>, lần gửi tin nhắn thoại đầu tiên có thể vượt quá thời gian chờ do phải tải mô hình, tùy theo tốc độ mạng.</td>
   </tr>
 </table>
 

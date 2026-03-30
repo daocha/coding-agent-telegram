@@ -138,7 +138,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🎙️ [任意] Speech-to-Text 機能: ローカル OpenAI-Whisper の前提条件を準備
+## 🎙️ [任意] 音声文字起こし機能: ローカル OpenAI-Whisper の前提条件を準備
 
 これにより、Telegram のボイスノートに対するローカル Whisper ベースの音声文字起こしを任意で有効にできます。音声ファイルは最大 `20 MB` に制限されます。
 
@@ -209,55 +209,55 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>新しい session 用の provider を選択します。選択は変更するまで bot と chat ごとに保存されます。</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>現在のプロジェクトフォルダを設定します。フォルダが存在しない場合は作成して trusted として扱います。既存で untrusted の場合は明示的に trust を確認します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>現在のプロジェクトで branch を準備または切り替えます。branch が既に存在する場合はその branch を source candidate として扱います。存在しない場合は repository の default branch を source candidate に使います。</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>`<origin_branch>` を source candidate として branch を準備または切り替えます。どちらの形式でも bot は実在する source choice のみを提示します: `local/<branch>` と `origin/<branch>`。片方だけ存在する場合はその選択肢だけが表示され、どちらも無い場合は branch source が無いと通知します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>現在の bot と chat の active session を表示します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td width="332"><code>/new [session_name]</code></td>
     <td>現在のプロジェクトに新しい session を作成します。名前を省略すると実際の session ID を使います。provider、project、branch が不足している場合は bot が不足分を案内します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>最新の session を新しい順で表示します。現在のプロジェクトに対する bot-managed session とローカルの Codex/Copilot CLI session の両方を含みます。</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>保存済み session の別ページを表示します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>ID を指定して特定の session に切り替えます。ローカル CLI session を選ぶと bot がそれを取り込み、そこから続行します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>アクティブな session から新しい compact 済み session を作成し、そこへ切り替えます。</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
     <td>active session の project 内で、検証済みの `git commit` 関連コマンドを実行します。`ENABLE_COMMIT_COMMAND=true` のときだけ利用できます。変更を伴う Git コマンドには trusted project が必要です。</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td width="332"><code>/push</code></td>
     <td>現在の active session に対して `origin <branch>` を push します。push 前に bot が確認します。</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>現在のプロジェクトで実行中の agent run を中断します。queued questions がある場合は続行するか確認します。</td>
   </tr>
 </table>
@@ -285,15 +285,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>プロジェクトディレクトリを含む親フォルダです。</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>カンマ区切りの Telegram bot token です。</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>この bot の利用を許可する Telegram プライベート chat ID をカンマ区切りで指定します。</td>
   </tr>
 </table>
@@ -302,68 +302,86 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>共有 bot メッセージとコマンド説明の UI 言語です。対応値: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Codex CLI を起動するコマンドです。既定値: <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Copilot CLI を起動するコマンドです。既定値: <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>Codex モデルの任意上書きです。空欄なら Codex CLI の既定モデルを使います。例: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Copilot モデルの任意上書きです。空欄なら Copilot CLI の既定モデルを使います。例: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Codex に渡す approval mode。既定: <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Codex に渡す sandbox mode。既定: <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>有効にすると Codex の trusted-repo check を常にスキップします。</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Telegram の <code>/commit</code> コマンドを有効にします。既定: <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>単一の agent run に対するハードタイムアウト。既定: <code>0</code>（無効）。</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>実行ごとの diff 用に before/after snapshot を作る際、bot がテキストとして読む最大ファイルサイズです。既定: <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>応答を分割する前に使う最大メッセージサイズ。既定: <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>機密ファイルの diff を隠します。既定: <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>tokens、keys、<code>.env</code> 値、certificates などの秘密らしい出力を Telegram 送信前にマスクします。既定: <code>true</code>（強く推奨）。</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>一致するパスを diff に強制的に含めます。例: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>パッケージ既定値に加えて diff 除外を追加します。例: <code>.*,personal/*,sensitive*.txt</code> 注: <code>.*</code> は hidden directory 内のファイルも含む hidden path に一致します。</td>
+  </tr>
+</table>
+
+
+<h3>音声文字起こし</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>デフォルト: <code>false</code>。<code>true</code> の場合、音声メッセージと音声ファイルの認識を有効にします。必要なバイナリやライブラリを起動時に確認し、不足していればインストールを案内します。</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Whisper STT で使うモデルです。デフォルト: <code>base</code><br />利用可能なモデル: <code>tiny</code> 約 <code>72 MB</code>、<code>base</code> 約 <code>139 MB</code>、<code>large-v3-turbo</code> 約 <code>1.5 GB</code><br />モデルは最初の音声メッセージ時に自動でダウンロードされます。一般用途では <code>base</code> を推奨します。より高い精度や品質が必要なら <code>turbo</code> を試してください。</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>デフォルト: <code>120</code>。STT プロセスのタイムアウトです。通常は十分高速ですが、<code>turbo</code> を選ぶと最初の音声メッセージでモデルをダウンロードする間に、回線速度によってはタイムアウトすることがあります。</td>
   </tr>
 </table>
 

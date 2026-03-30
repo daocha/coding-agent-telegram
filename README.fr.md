@@ -138,7 +138,7 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-## 🎙️ [Optionnel] Fonction Speech-to-Text : préparer les prérequis locaux OpenAI-Whisper
+## 🎙️ [Optionnel] Fonction de transcription vocale : préparer les prérequis locaux OpenAI-Whisper
 
 Cela active la transcription locale optionnelle des notes vocales Telegram avec Whisper. Les fichiers audio sont limités à `20 MB` maximum.
 
@@ -209,55 +209,55 @@ Le bot accepte actuellement :
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>Choisir le provider pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Définir le dossier de projet courant. Si le dossier n’existe pas, l’app le crée et le marque trusted. S’il existe déjà mais reste untrusted, l’app vous demande une confirmation.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>Préparer ou changer une branch pour le projet courant. Si la branch existe déjà, le bot la traite comme source candidate. Sinon il utilise la branch par défaut du dépôt.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Préparer ou changer une branch en utilisant `<origin_branch>` comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : `local/<branch>` et `origin/<branch>`. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>Afficher la session active pour le bot et le chat courants.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td width="332"><code>/new [session_name]</code></td>
     <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si provider, projet ou branch manque, le bot vous guide.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>Afficher les sessions les plus récentes, de la plus récente à la plus ancienne. La liste inclut les sessions gérées par le bot et les sessions locales Codex/Copilot CLI du projet courant.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>Afficher une autre page des sessions enregistrées.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>Basculer vers une session précise via son ID. Si vous choisissez une session CLI locale, le bot l’importe et reprend à partir d’elle.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>Créer une nouvelle session compactée à partir de la session active et basculer dessus.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
     <td>Exécuter des commandes liées à `git commit` validées dans le projet de la session active. Disponible uniquement si `ENABLE_COMMIT_COMMAND=true`. Les commandes Git mutantes exigent un projet trusted.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td width="332"><code>/push</code></td>
     <td>Pousser `origin <branch>` pour la session active courante. Le bot demande une confirmation avant le push.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>Annuler l’exécution d’agent en cours pour le projet courant. Si des questions attendent dans la file, le bot demande si elles doivent continuer.</td>
   </tr>
 </table>
@@ -285,15 +285,15 @@ Le bot accepte actuellement :
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>Dossier parent qui contient vos répertoires de projet.</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>Liste de tokens de bot Telegram séparés par des virgules.</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>Liste d’IDs de chat privés Telegram autorisés, séparés par des virgules.</td>
   </tr>
 </table>
@@ -302,68 +302,88 @@ Le bot accepte actuellement :
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>Langue de l’interface pour les messages partagés du bot et les descriptions de commandes. Valeurs prises en charge : <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Commande utilisée pour lancer Codex CLI. Valeur par défaut : <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Commande utilisée pour lancer Copilot CLI. Valeur par défaut : <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>Remplacement optionnel du modèle Codex. Laissez vide pour utiliser le modèle par défaut de Codex CLI. Exemple : <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">Modèles OpenAI Codex/OpenAI</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Remplacement optionnel du modèle Copilot. Laissez vide pour utiliser le modèle par défaut de Copilot CLI. Exemples : <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">Modèles pris en charge par GitHub Copilot</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Mode d’approbation transmis à Codex. Défaut : <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Mode sandbox transmis à Codex. Défaut : <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Si activé, contourne toujours les vérifications de dépôt trusted de Codex.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Active la commande Telegram <code>/commit</code>. Défaut : <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Timeout dur pour une exécution d’agent. Défaut : <code>0</code> (désactivé).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>Taille maximale de fichier que le bot lira en texte pour construire le snapshot avant/après des diffs. Défaut : <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>Taille maximale d’un message avant découpage de la réponse. Défaut : <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>Masquer les diffs des fichiers sensibles. Défaut : <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>Masquer tokens, clés, valeurs <code>.env</code>, certificats et sorties similaires avant envoi vers Telegram. Défaut : <code>true</code> (fortement recommandé).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>Toujours inclure les chemins correspondants dans les diffs. Exemple : <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>Ajouter des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package. Exemple : <code>.*,personal/*,sensitive*.txt</code> Remarque : <code>.*</code> inclut les chemins cachés, y compris les fichiers dans les dossiers cachés.</td>
+  </tr>
+</table>
+
+
+
+
+<h3>Reconnaissance vocale</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Valeur par défaut : <code>false</code>. Si activé, la reconnaissance des messages vocaux et des fichiers audio est disponible. Le système vérifie les binaires ou bibliothèques requis et invite l’utilisateur à les installer si nécessaire.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Modèle utilisé pour la STT Whisper. Valeur par défaut : <code>base</code><br />Modèles disponibles : <code>tiny</code> environ <code>72 MB</code>, <code>base</code> environ <code>139 MB</code>, <code>large-v3-turbo</code> environ <code>1.5 GB</code><br />Les modèles sont téléchargés automatiquement lors de votre premier message vocal. Recommandé : <code>base</code> pour un usage général. Si vous souhaitez une meilleure précision et qualité, vous pouvez essayer <code>turbo</code>.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Valeur par défaut : <code>120</code>. Délai d’expiration du processus STT. En général, le traitement est assez rapide. Mais si vous choisissez <code>turbo</code>, le premier message vocal peut dépasser ce délai pendant le téléchargement du modèle selon la vitesse de votre connexion.</td>
   </tr>
 </table>
 
