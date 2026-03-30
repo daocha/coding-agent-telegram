@@ -247,11 +247,21 @@ def collect_diffs(project_path: Path, files: list[str]) -> list[FileDiff]:
     return results
 
 
-def build_summary(session_name: str, project_folder: str, files: list[str], *, locale: str = DEFAULT_LOCALE) -> str:
+def build_summary(
+    session_name: str,
+    project_folder: str,
+    files: list[str],
+    *,
+    branch_name: str | None = None,
+    locale: str = DEFAULT_LOCALE,
+) -> str:
+    project_line = translate(locale, "diff.project_label", project_folder=project_folder)
+    if branch_name:
+        project_line = f"{project_line} <{branch_name}>"
     lines = [
         translate(locale, "diff.task_completed"),
         translate(locale, "diff.session_label", session_name=session_name),
-        translate(locale, "diff.project_label", project_folder=project_folder),
+        project_line,
         "",
         translate(locale, "diff.changed_files"),
     ]

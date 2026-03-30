@@ -256,7 +256,7 @@ class CommandRouterBase:
 
         stall_message = kwargs.pop("stall_message", None)
         progress_label = kwargs.pop("progress_label", None)
-        progress_state = {"message_id": None, "last_text": "", "closed": False, "futures": set()}
+        progress_state = {"message_id": None, "last_text": "", "closed": False, "futures": set(), "lock": asyncio.Lock()}
         if stall_message:
             kwargs["on_stall"] = self._make_stall_notifier(update, context, stall_message)
         if progress_label:
@@ -322,35 +322,36 @@ class CommandRouterBase:
             chat = update.effective_chat
             if chat is None or progress_state.get("closed"):
                 return
-            body = info.text.strip()
-            if len(body) > PROGRESS_PREVIEW_MAX_CHARS:
-                body = body[: PROGRESS_PREVIEW_MAX_CHARS - 1].rstrip() + "..."
-            message_text = f"{label} ({int(info.elapsed_seconds)}s)\n{body}"
-            if message_text == progress_state["last_text"]:
-                return
-            progress_state["last_text"] = message_text
-            if progress_state.get("closed"):
-                return
-            if progress_state["message_id"] is None:
-                message = await context.bot.send_message(chat_id=chat.id, text=message_text)
-                message_id = getattr(message, "message_id", None)
-                if progress_state.get("closed") and message_id is not None and hasattr(context.bot, "delete_message"):
-                    try:
-                        await context.bot.delete_message(chat_id=chat.id, message_id=message_id)
-                    except BadRequest:
-                        pass
+            async with progress_state["lock"]:
+                body = info.text.strip()
+                if len(body) > PROGRESS_PREVIEW_MAX_CHARS:
+                    body = body[: PROGRESS_PREVIEW_MAX_CHARS - 1].rstrip() + "..."
+                message_text = f"{label} ({int(info.elapsed_seconds)}s)\n{body}"
+                if message_text == progress_state["last_text"]:
                     return
-                progress_state["message_id"] = message_id
-                return
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat.id,
-                    message_id=progress_state["message_id"],
-                    text=message_text,
-                )
-            except BadRequest:
-                message = await context.bot.send_message(chat_id=chat.id, text=message_text)
-                progress_state["message_id"] = getattr(message, "message_id", None)
+                progress_state["last_text"] = message_text
+                if progress_state.get("closed"):
+                    return
+                if progress_state["message_id"] is None:
+                    message = await context.bot.send_message(chat_id=chat.id, text=message_text)
+                    message_id = getattr(message, "message_id", None)
+                    if progress_state.get("closed") and message_id is not None and hasattr(context.bot, "delete_message"):
+                        try:
+                            await context.bot.delete_message(chat_id=chat.id, message_id=message_id)
+                        except BadRequest:
+                            pass
+                        return
+                    progress_state["message_id"] = message_id
+                    return
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat.id,
+                        message_id=progress_state["message_id"],
+                        text=message_text,
+                    )
+                except BadRequest:
+                    message = await context.bot.send_message(chat_id=chat.id, text=message_text)
+                    progress_state["message_id"] = getattr(message, "message_id", None)
 
         def notify(info: AgentProgressInfo) -> None:
             future = asyncio.run_coroutine_threadsafe(publish(info), loop)

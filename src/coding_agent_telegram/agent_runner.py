@@ -265,13 +265,7 @@ class MultiAgentRunner:
             event = json.loads(stripped)
         except json.JSONDecodeError:
             return stripped
-
-        if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
-            return self._summarize_structured_event(event)
-        extracted = self._extract_codex_assistant_text(event)
-        if extracted:
-            return extracted
-        return self._summarize_structured_event(event)
+        return self._extract_codex_progress_event_text(event)
 
     def _extract_copilot_progress_text(self, chunk: str, *, is_stderr: bool) -> str:
         stripped = chunk.strip()
@@ -283,13 +277,80 @@ class MultiAgentRunner:
             event = json.loads(stripped)
         except json.JSONDecodeError:
             return stripped
+        return self._extract_copilot_progress_event_text(event)
 
+    def _extract_codex_progress_event_text(self, event: AssistantEvent) -> str:
         if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
+            item = event.get("item")
+            if isinstance(item, dict) and str(item.get("type") or "") in {"agent_message", "assistant_message"}:
+                extracted_item_text = self._extract_codex_assistant_text(item)
+                if extracted_item_text:
+                    return extracted_item_text
+            summarized_item = self._summarize_progress_item(event)
+            if summarized_item:
+                return summarized_item
             return self._summarize_structured_event(event)
+
+        extracted = self._extract_codex_assistant_text(event)
+        if extracted:
+            return extracted
+        if isinstance(event, dict):
+            return self._summarize_structured_event(event)
+        if isinstance(event, list):
+            return json.dumps(event, ensure_ascii=False)
+        return str(event)
+
+    def _extract_copilot_progress_event_text(self, event: AssistantEvent) -> str:
+        if isinstance(event, dict) and str(event.get("type") or "").startswith("item."):
+            item = event.get("item")
+            if isinstance(item, dict) and str(item.get("type") or "") in {"agent_message", "assistant_message"}:
+                extracted_item_text = self._extract_copilot_assistant_text(item)
+                if extracted_item_text:
+                    return extracted_item_text
+            summarized_item = self._summarize_progress_item(event)
+            if summarized_item:
+                return summarized_item
+            return self._summarize_structured_event(event)
+
         extracted = self._extract_copilot_assistant_text(event)
         if extracted:
             return extracted
-        return self._summarize_structured_event(event)
+        if isinstance(event, dict):
+            return self._summarize_structured_event(event)
+        if isinstance(event, list):
+            return json.dumps(event, ensure_ascii=False)
+        return str(event)
+
+    def _summarize_progress_item(self, event: dict[str, Any]) -> str:
+        event_type = str(event.get("type") or "")
+        phase = event_type.split(".", 1)[1] if "." in event_type else ""
+        item = event.get("item")
+        if not isinstance(item, dict):
+            return ""
+
+        item_type = str(item.get("type") or "")
+        command = str(item.get("command") or "").strip()
+        description = str(item.get("description") or "").strip()
+        aggregated_output = str(item.get("aggregated_output") or "").strip()
+
+        if item_type in {"command_execution", "shell", "command"}:
+            prefix = description or command
+            if not prefix:
+                prefix = item_type.replace("_", " ")
+            if phase == "completed":
+                return f"{prefix} (completed)"
+            if phase == "started":
+                return prefix
+            status = str(item.get("status") or "").strip()
+            if status:
+                return f"{prefix} ({status})"
+            if aggregated_output:
+                first_line = aggregated_output.splitlines()[0].strip()
+                if first_line:
+                    return f"{prefix}: {first_line}"
+            return prefix
+
+        return ""
 
     def _run(
         self,
