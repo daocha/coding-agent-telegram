@@ -279,7 +279,6 @@ class CommandRouterBase:
             # Give thread-safe Telegram notifications one event-loop turn to run
             # before we close the progress channel and finalize the response.
             await asyncio.sleep(0)
-            progress_state["closed"] = True
             pending_progress = tuple(progress_state["futures"])
             if pending_progress:
                 try:
@@ -289,6 +288,7 @@ class CommandRouterBase:
                     )
                 except asyncio.TimeoutError:
                     pass
+            progress_state["closed"] = True
             for future in tuple(progress_state["futures"]):
                 future.cancel()
             if progress_state["message_id"] is not None and hasattr(context.bot, "delete_message"):
