@@ -38,7 +38,7 @@
   - ✅ Telegram zum Steuern von Codex / Copilot CLI verwenden
   - ✅ Antworten und geänderte Dateien bequem in Code-Blöcken prüfen
   - ✅ Folgefragen während eines laufenden Agentenlaufs in die Queue stellen
-  - ✅ Akzeptiert ✏️ Text-, 🌄 Bild- und 🎙️ Sprachnachrichten sowie Audiodateien
+  - ✅ Akzeptiert ✏️ Text-, 🌄 Bild- und 🎙️ Sprachnachrichten
 
    ## 🔁 Nahtlos zwischen Geräten und Sessions wechseln
 

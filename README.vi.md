@@ -38,7 +38,7 @@
   - ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
   - ✅ Dễ xem câu trả lời và các file đã thay đổi trong code block
   - ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
-  - ✅ Chấp nhận tin nhắn ✏️ văn bản, 🌄 hình ảnh, 🎙️ thoại và cả tệp âm thanh
+  - ✅ Chấp nhận tin nhắn ✏️ văn bản, 🌄 hình ảnh và 🎙️ thoại
 
    ## 🔁 Chuyển thiết bị/phiên liền mạch
 

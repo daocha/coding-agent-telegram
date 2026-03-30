@@ -3917,7 +3917,7 @@ def test_unsupported_message_type_is_rejected(tmp_path: Path):
 
     asyncio.run(router.handle_unsupported_message(update, context))
 
-    assert "This bot currently accepts only text messages and photos." in bot.messages[-1][1]
+    assert "This bot currently accepts text messages, photos, voice messages, and audio files." in bot.messages[-1][1]
 
 
 def _make_commit_router(tmp_path: Path, *, git_manager=None, trusted: bool = True) -> tuple[CommandRouter, Path]:

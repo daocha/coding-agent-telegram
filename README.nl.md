@@ -38,7 +38,7 @@
   - ✅ Gebruik Telegram om Codex / Copilot CLI te bedienen
   - ✅ Antwoorden en gewijzigde bestanden eenvoudig beoordelen in codeblokken
   - ✅ Vervolgvragen kunnen in de wachtrij terwijl de agent werkt
-  - ✅ Accepteert ✏️ tekst-, 🌄 afbeelding- en 🎙️ spraakberichten, evenals audiobestanden
+  - ✅ Accepteert ✏️ tekst-, 🌄 afbeelding- en 🎙️ spraakberichten
 
    ## 🔁 Naadloos wisselen tussen apparaten en sessies
 

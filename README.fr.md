@@ -38,7 +38,7 @@
   - ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
   - ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
   - ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
-  - ✅ Accepte les messages ✏️ texte, 🌄 image et 🎙️ vocaux ainsi que les fichiers audio
+  - ✅ Accepte les messages ✏️ texte, 🌄 image et 🎙️ vocaux
 
    ## 🔁 Changement fluide entre appareils et sessions
 

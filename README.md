@@ -38,7 +38,7 @@
    - ✅ Use Telegram to control Codex / Copilot CLI
    - ✅ Easily review files changed by agent in code block
    - ✅ Queue follow-up messages while the agent is working
-   - ✅ Accept ✏️ Text, 🌄 Image, and 🎙️ Voice messages as well as Audio files
+   - ✅ Accept ✏️ Text, 🌄 Image, and 🎙️ Voice messages
 
    ## 🔁 Seamless Device/Session Switching
    
