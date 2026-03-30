@@ -164,6 +164,98 @@ def test_run_safe_commit_command_prefers_explicit_git_identity_env(tmp_path: Pat
     assert name == "Env User <env@example.com>"
 
 
+def test_resolved_commit_signing_reads_enabled_signing_config(tmp_path: Path, monkeypatch):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test User")
+    _git(project, "config", "user.email", "test@example.com")
+    _git(project, "config", "commit.gpgsign", "true")
+    _git(project, "config", "user.signingkey", "ABC123")
+    _git(project, "config", "gpg.format", "openpgp")
+    _git(project, "config", "gpg.ssh.allowedsignersfile", str(tmp_path / "allowed_signers"))
+
+    monkeypatch.setenv("GNUPGHOME", str(tmp_path / "gnupg"))
+    monkeypatch.setenv("GPG_TTY", "/dev/ttys001")
+
+    signing_args, signing_env = manager._resolved_commit_signing(project)
+
+    assert "commit.gpgsign=true" in signing_args
+    assert "user.signingkey=ABC123" in signing_args
+    assert "gpg.format=openpgp" in signing_args
+    assert f"gpg.ssh.allowedsignersfile={tmp_path / 'allowed_signers'}" in signing_args
+    assert signing_env["GNUPGHOME"] == str(tmp_path / "gnupg")
+    assert signing_env["GPG_TTY"] == "/dev/ttys001"
+
+
+def test_run_safe_commit_command_preserves_signing_config_when_enabled(tmp_path: Path, monkeypatch):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test User")
+    _git(project, "config", "user.email", "test@example.com")
+    captured = {}
+
+    def fake_run(project_path, *args, env=None):
+        captured["args"] = args
+        captured["env"] = dict(env or {})
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(manager, "_run", fake_run)
+    monkeypatch.setattr(
+        manager,
+        "_resolved_commit_signing",
+        lambda _project_path: (
+            (
+                "-c",
+                "commit.gpgsign=true",
+                "-c",
+                "user.signingkey=ABC123",
+                "-c",
+                "gpg.ssh.allowedsignersfile=/tmp/allowed_signers",
+            ),
+            {"GNUPGHOME": "/tmp/gnupg"},
+        ),
+    )
+
+    result = manager.run_safe_commit_command(project, ["commit", "-m", "init"])
+
+    assert result.success is True
+    assert "commit.gpgsign=true" in captured["args"]
+    assert "user.signingkey=ABC123" in captured["args"]
+    assert "gpg.ssh.allowedsignersfile=/tmp/allowed_signers" in captured["args"]
+    assert captured["env"]["GNUPGHOME"] == "/tmp/gnupg"
+
+
+def test_run_safe_commit_command_does_not_add_signing_config_when_disabled(tmp_path: Path, monkeypatch):
+    project = tmp_path / "repo"
+    project.mkdir()
+    manager = GitWorkspaceManager()
+
+    _git(project, "init", "-b", "main")
+    _git(project, "config", "user.name", "Test User")
+    _git(project, "config", "user.email", "test@example.com")
+
+    captured = {}
+
+    def fake_run(project_path, *args, env=None):
+        captured["args"] = args
+        captured["env"] = dict(env or {})
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(manager, "_run", fake_run)
+
+    result = manager.run_safe_commit_command(project, ["commit", "-m", "init"])
+
+    assert result.success is True
+    assert "commit.gpgsign=true" not in captured["args"]
+    assert "user.signingkey=ABC123" not in captured["args"]
+
+
 # ---------------------------------------------------------------------------
 # _validate_branch_name
 # ---------------------------------------------------------------------------

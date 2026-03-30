@@ -65,7 +65,7 @@ class CommandRouterBase:
     SWITCH_PAGE_SIZE = 5
     ALLOWED_COMMIT_SUBCOMMANDS = {"add", "commit", "restore", "rm", "status"}
     TRUST_REQUIRED_COMMIT_SUBCOMMANDS = {"add", "restore", "rm"}
-    ENFORCED_COMMIT_ARGS = ["--no-verify", "--no-post-rewrite", "--no-gpg-sign"]
+    ENFORCED_COMMIT_ARGS = ["--no-verify", "--no-post-rewrite"]
     SAFE_COMMIT_OPTION_RULES = {
         "add": {
             "flags": {"-A", "--all", "-u", "--update"},
@@ -284,7 +284,7 @@ class CommandRouterBase:
                 try:
                     await asyncio.wait_for(
                         asyncio.gather(*(asyncio.wrap_future(future) for future in pending_progress), return_exceptions=True),
-                        timeout=0.1,
+                        timeout=1.0,
                     )
                 except asyncio.TimeoutError:
                     pass
@@ -351,7 +351,14 @@ class CommandRouterBase:
                     )
                 except BadRequest:
                     message = await context.bot.send_message(chat_id=chat.id, text=message_text)
-                    progress_state["message_id"] = getattr(message, "message_id", None)
+                    message_id = getattr(message, "message_id", None)
+                    if progress_state.get("closed") and message_id is not None and hasattr(context.bot, "delete_message"):
+                        try:
+                            await context.bot.delete_message(chat_id=chat.id, message_id=message_id)
+                        except BadRequest:
+                            pass
+                        return
+                    progress_state["message_id"] = message_id
 
         def notify(info: AgentProgressInfo) -> None:
             future = asyncio.run_coroutine_threadsafe(publish(info), loop)

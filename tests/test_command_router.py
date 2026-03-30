@@ -337,6 +337,13 @@ class FakeBot:
         self.actions.append((chat_id, action))
 
 
+class SlowProgressBot(FakeBot):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+        if "Live agent output" in text:
+            await asyncio.sleep(0.2)
+        return await super().send_message(chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)
+
+
 class FakeGitManager:
     def __init__(
         self,
@@ -2946,6 +2953,25 @@ def test_active_session_reuses_single_live_progress_message(tmp_path: Path):
     assert bot.edit_count == 1
 
 
+def test_active_session_deletes_live_progress_message_even_if_progress_send_is_slow(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ProgressRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_progress", "progress-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="continue")
+    bot = SlowProgressBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert len(bot.deleted_messages) == 1
+
+
 def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -3472,13 +3498,13 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
 
     assert router.git.safe_git_commands == [
         (backend, ["add", "-u"]),
-        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
+        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite"]),
     ]
     assert router.git.git_commands == []
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert f"${shlex.join(['git', 'add', '-u'])}" in bot.messages[-1][1]
     assert html.escape(
-        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite'])}"
     ) in bot.messages[-1][1]
     assert "---------------" in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
@@ -3619,11 +3645,11 @@ def test_commit_allows_common_safe_short_forms(tmp_path: Path):
 
     assert router.git.safe_git_commands == [
         (backend, ["status", "-sb"]),
-        (backend, ["commit", "-msafe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
+        (backend, ["commit", "-msafe", "--no-verify", "--no-post-rewrite"]),
     ]
     assert f"${shlex.join(['git', 'status', '-sb'])}" in bot.messages[-1][1]
     assert html.escape(
-        f"${shlex.join(['git', 'commit', '-msafe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign'])}"
+        f"${shlex.join(['git', 'commit', '-msafe', '--no-verify', '--no-post-rewrite'])}"
     ) in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
 
@@ -3645,7 +3671,7 @@ def test_commit_allows_shell_style_backslash_newline_continuations(tmp_path: Pat
 
     assert router.git.safe_git_commands == [
         (backend, ["add", "src/app.py", "tests/test_app.py"]),
-        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign"]),
+        (backend, ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite"]),
     ]
     assert "[Completed]" in bot.messages[-1][1]
 
@@ -3664,11 +3690,11 @@ def test_commit_inserts_enforced_flags_before_pathspec_separator(tmp_path: Path)
     assert router.git.safe_git_commands == [
         (
             backend,
-            ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign", "--", "tracked.txt"],
+            ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--", "tracked.txt"],
         ),
     ]
     assert html.escape(
-        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign', '--', 'tracked.txt'])}"
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--', 'tracked.txt'])}"
     ) in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
 
@@ -3687,11 +3713,11 @@ def test_commit_inserts_enforced_flags_before_implicit_pathspec(tmp_path: Path):
     assert router.git.safe_git_commands == [
         (
             backend,
-            ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "--no-gpg-sign", "tracked.txt"],
+            ["commit", "-m", "safe", "--no-verify", "--no-post-rewrite", "tracked.txt"],
         ),
     ]
     assert html.escape(
-        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', '--no-gpg-sign', 'tracked.txt'])}"
+        f"${shlex.join(['git', 'commit', '-m', 'safe', '--no-verify', '--no-post-rewrite', 'tracked.txt'])}"
     ) in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
 
