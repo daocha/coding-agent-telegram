@@ -153,11 +153,7 @@ coding-agent-telegram-stt-install
 ./install-stt.sh
 ```
 
-Add this to `~/.coding-agent-telegram/.env_coding_agent_telegram` only after prerequisites are ready:
-
-```text
-ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
-```
+The installer writes the STT env flags automatically after prerequisites are ready.
 
 Estimated local footprint:
 
@@ -177,7 +173,7 @@ Notes:
 
 - Whisper downloads the selected model automatically on first use into `~/.cache/whisper`.
 - If you choose `OPENAI_WHISPER_MODEL=turbo`, the first voice transcription is more likely to hit the timeout while `large-v3-turbo.pt` is still downloading.
-- After a voice note is transcribed, the bot echoes the recognized transcript back to Telegram before sending it into the agent. This helps troubleshoot recognition mistakes.
+- After a voice note is transcribed, the bot immediately sends the recognized transcript back to Telegram before the agent reply. If the run can start immediately it says “working on it”; if the project is busy it shows that the transcript was queued instead.
 
 ## 🔑 Telegram Setup
 

@@ -86,3 +86,20 @@ def test_transcribe_file_timeout_marks_likely_first_download(monkeypatch, tmp_pa
 
     assert exc.value.code == "timeout"
     assert exc.value.likely_first_download is True
+
+
+def test_transcribe_file_includes_process_detail_on_failure(monkeypatch, tmp_path):
+    audio_path = tmp_path / "voice.ogg"
+    audio_path.write_bytes(b"voice")
+    transcriber = WhisperSpeechToText(_cfg(tmp_path))
+
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, "stdout note", "stderr note")
+
+    monkeypatch.setattr("coding_agent_telegram.speech_to_text.subprocess.run", fake_run)
+
+    with pytest.raises(SpeechToTextError) as exc:
+        transcriber.transcribe_file(audio_path)
+
+    assert exc.value.code == "failed"
+    assert "stderr note" in (exc.value.detail or "")
