@@ -74,19 +74,20 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 
 <table>
    <tr>
-   <td width="50%" valign="top">
+   <td width="65%" valign="top">
 
    ## 🔐 セキュリティ
 
-- `ALLOWED_CHAT_IDS` によるプライベートチャットの許可リスト
-- 競合する書き込みを減らすため、1プロジェクトにつきアクティブなエージェントは1つだけ
+- `ALLOWED_CHAT_IDS` によるプライベートチャットのホワイトリスト
+- 競合する書き込みを減らすため、1 project につきアクティブな agent は 1 つだけ
 - 機密ファイルの diff は非表示
-- API キー、トークン、`.env` の値、証明書、SSH キーなどの機密らしい出力は Telegram へ返す前にマスク
+- API キー、トークン、`.env` の値、証明書、SSH キーなど秘密らしい出力は Telegram へ返す前にマスク
 - 実行時データは `~/.coding-agent-telegram` 配下に保存
-- 既存フォルダでは、変更を伴う Git 操作の前に trust 確認を求める場合あり
-- 隠れた外部呼び出しなし。すべて自分で管理可能
+- 既存フォルダでは、変更を伴う Git operation の前に trust 確認を求める場合あり
+- サーバーは隠れた外部呼び出しを行いません。すべて自分で管理できます。
+- Codex Sandbox mode と相性がよく、`danger-full-access` を許可する必要はありません
    </td>
-   <td width="50%" valign="top">
+   <td width="35%" valign="top">
 
    ## ✅ 必要なもの
 
@@ -101,6 +102,9 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    </td>
    </tr>
 </table>
+
+## 🦞 すでに Openclaw があるのに、なぜこれが必要ですか？
+Openclaw は非常に多機能で、Pi-Agent という統合 agent loop も備えています。用途の幅も広く、とても包括的です。私自身も Openclaw が好きで、以前は Openclaw で coding していました。ですが、coding に限ると、組み込みの大きな system prompt や追加 context のせいで、必ずしも最適とは限りません。Claude Code / Codex / Copilot のほうが、coding ではより効率的で、精度が高く、気が散りにくく、まっすぐです。この project は意図的にシンプルで、Codex / Copilot CLI だけを統合します。つまり、Codex / Copilot に直接作業を委ねられます。
 
 ## 🚀 クイックスタート
 

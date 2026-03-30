@@ -84,7 +84,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    - API keys, tokens, `.env` values, certificates, SSH keys, and similar secret-like output are redacted before sending back to Telegram
    - Runtime app data stays under `~/.coding-agent-telegram`
    - Existing folders can require trust before mutating git operations
-   - Server makes `NO hidden additional call`. Everything is under your control.
+   - The server does not make hidden external calls. Everything stays under your control.
    - Works well with Codex Sandbox mode (you don't have to grant `danger-full-access`)
    </td>
    <td width="35%" valign="top">
