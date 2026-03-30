@@ -2638,6 +2638,59 @@ def test_pending_action_blocks_queue_drain_until_prerequisites_are_resolved(tmp_
     asyncio.run(exercise())
 
 
+def test_provider_callback_drains_queued_messages_after_pending_message_runs(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_message(make_update(text="first question", message_id=101), context)
+        await router.handle_message(make_update(text="second question", message_id=202), context)
+
+        query = SimpleNamespace(
+            data="provider:set:codex",
+            answer=None,
+            edit_message_text=None,
+        )
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=query,
+            message=SimpleNamespace(text=None, photo=None, caption=None, message_id=None),
+        )
+        edited = []
+
+        async def fake_answer():
+            return None
+
+        async def fake_edit(text, reply_markup=None):
+            edited.append((text, reply_markup))
+
+        query.answer = fake_answer
+        query.edit_message_text = fake_edit
+
+        await router.handle_provider_callback(callback_update, context)
+
+        assert edited[-1][0] == "Current provider set to: codex"
+        assert len(runner.create_calls) == 1
+        assert len(runner.resume_calls) == 2
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert runner.resume_calls[1]["user_message"] == "second question"
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state.get("pending_action") is None
+        assert not router._has_pending_queue_files(123)
+
+    asyncio.run(exercise())
+
+
 def test_message_prompts_for_branch_discrepancy_before_running_bot_managed_session(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()

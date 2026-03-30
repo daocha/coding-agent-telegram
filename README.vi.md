@@ -210,7 +210,7 @@ Hiện tại bot chấp nhận:
 <table>
   <tr>
     <td width="332"><code>/provider</code></td>
-    <td>Chọn provider cho các session mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
+    <td>Chọn nhà cung cấp cho các session mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
@@ -222,15 +222,15 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Chuẩn bị hoặc chuyển branch bằng cách dùng `<origin_branch>` làm source candidate. Với cả hai dạng, bot chỉ đưa ra các source choice thật sự tồn tại: `local/<branch>` và `origin/<branch>`. Nếu chỉ có một lựa chọn thì chỉ hiện lựa chọn đó. Nếu không có lựa chọn nào, bot sẽ báo thiếu branch source.</td>
+    <td>Chuẩn bị hoặc chuyển branch bằng cách dùng <code>&lt;origin_branch&gt;</code> làm source candidate. Với cả hai dạng, bot chỉ đưa ra các source choice thật sự tồn tại: <code>local/&lt;branch&gt;</code> và <code>origin/&lt;branch&gt;</code>. Nếu chỉ có một lựa chọn thì chỉ hiện lựa chọn đó. Nếu không có lựa chọn nào, bot sẽ báo thiếu branch source.</td>
   </tr>
   <tr>
     <td width="332"><code>/current</code></td>
-    <td>Hiển thị active session cho bot và chat hiện tại.</td>
+    <td>Hiển thị phiên hoạt động cho bot và chat hiện tại.</td>
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
-    <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu provider, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
+    <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu nhà cung cấp, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
@@ -250,11 +250,11 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Chạy các lệnh liên quan đến `git commit` đã được kiểm tra trong project của active session. Chỉ có khi `ENABLE_COMMIT_COMMAND=true`. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
+    <td>Chạy các lệnh liên quan đến `git commit` đã được kiểm tra trong project của phiên hoạt động. Chỉ có khi `ENABLE_COMMIT_COMMAND=true`. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Push `origin <branch>` cho active session hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+    <td>Push `origin <branch>` cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -390,15 +390,15 @@ Hiện tại bot chấp nhận:
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Hauptdatei für den Session-Status.</td>
+    <td>Tệp trạng thái phiên chính.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Tệp sao lưu trạng thái.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log-Verzeichnis.</td>
+    <td>Thư mục log.</td>
   </tr>
 </table>
 
@@ -433,29 +433,29 @@ Ví dụ:
 - Bot B + chat của bạn -> việc frontend
 - Bot C + chat của bạn -> việc infra
 
-active session cũng gắn với:
+phiên hoạt động cũng gắn với:
 
-- project folder
-- provider
+- thư mục dự án
+- nhà cung cấp
 - branch name nếu có
 
 <details>
 <summary><b>Mỗi session lưu:</b></summary>
 
 - tên session
-- project folder
+- thư mục dự án
 - branch name
-- provider
+- nhà cung cấp
 - timestamps
-- active session được chọn cho phạm vi bot/chat đó
+- phiên hoạt động được chọn cho phạm vi bot/chat đó
 </details>
 
-### 🔓 Workspace concurrency lock
+### 🔓 Khóa đồng thời workspace
 
-Chỉ có thể có một agent run hoạt động trên mỗi **project folder** tại một thời điểm, bất kể chat hay Telegram bot nào khởi chạy.
+Chỉ có thể có một agent run hoạt động trên mỗi **thư mục dự án** tại một thời điểm, bất kể chat hay Telegram bot nào khởi chạy.
 
-- **project is busy**: workspace đó đã có một agent run đang chạy
-- **agent is busy**: chính run đó vẫn đang xử lý yêu cầu hiện tại
+- **dự án đang bận**: workspace đó đã có một agent run đang chạy
+- **tác nhân đang bận**: chính run đó vẫn đang xử lý yêu cầu hiện tại
 
 Bot cố ý áp dụng giới hạn này để hai agent không ghi vào cùng một workspace cùng lúc. Điều đó giúp tránh sửa đổi xung đột và giảm nguy cơ hỏng dữ liệu.
 
@@ -477,7 +477,7 @@ Nếu run hiện tại bị abort và vẫn còn queued questions, bot sẽ khô
 
 ## ⚠️ Diff (thay đổi file)
 
-_Trong mỗi agent run, bot cũng tạo một snapshot before/after nhẹ của project để có thể tóm tắt các file thay đổi và gửi diff về Telegram. Snapshot này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
+_Trong mỗi agent run, bot cũng tạo một snapshot before/after nhẹ của project để có thể tóm tắt các file thay đổi và gửi diff về Telegram. Bản chụp nhanh này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
 
 **Ghi chú về snapshot:**
 
@@ -518,8 +518,8 @@ Bot coi project và branch là một cặp đi cùng nhau.
 
 Khi bạn tạo hoặc đổi branch, bot sẽ hướng dẫn rõ source:
 
-- `local/<branch>` nghĩa là dùng local branch làm source
-- `origin/<branch>` nghĩa là cập nhật từ remote branch trước rồi mới chuyển
+- <code>local/&lt;branch&gt;</code> nghĩa là dùng local branch làm source
+- <code>origin/&lt;branch&gt;</code> nghĩa là cập nhật từ remote branch trước rồi mới chuyển
 
 Nếu bot phát hiện branch lưu trong session không khớp với branch hiện tại của repository, bot sẽ không tiếp tục một cách mù quáng. Bot sẽ hỏi bạn muốn dùng branch nào:
 
@@ -533,11 +533,11 @@ Nếu source branch bạn muốn không còn, bot sẽ đưa ra các fallback so
 - thư mục đã tồn tại sẽ tuân theo `CODEX_SKIP_GIT_REPO_CHECK`
 - thư mục được tạo qua `/project <name>` sẽ được app này đánh dấu là trusted
 - thư mục đã có sẵn được chọn qua `/project <name>` sẽ vẫn là untrusted cho đến khi bạn xác nhận trust trong Telegram
-- vì vậy các project folder mới tạo có thể dùng ngay
+- vì vậy các thư mục dự án mới tạo có thể dùng ngay
 - có thể tắt hoàn toàn `/commit` bằng `ENABLE_COMMIT_COMMAND`
 - các thao tác `/commit` có sửa đổi chỉ được phép trên trusted project
 
-## 🪵 Logs
+## 🪵 Nhật ký
 
 Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
 
@@ -552,7 +552,7 @@ Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
 - chọn project
 - tạo session
 - chuyển session
-- báo cáo active session
+- báo cáo phiên hoạt động
 - chạy bình thường (bao gồm audit log line với prompt đã được rút gọn)
 - thay session sau khi resume thất bại
 - warnings và runtime errors

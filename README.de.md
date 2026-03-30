@@ -209,7 +209,7 @@ Der Bot akzeptiert derzeit:
 
 <table>
   <tr>
-    <td width="332"><code>/provider</code></td>
+    <td width="332"><code>/Anbieter</code></td>
     <td>Provider für neue Sessions wählen. Die Auswahl wird pro Bot und Chat gespeichert, bis du sie änderst.</td>
   </tr>
   <tr>
@@ -222,7 +222,7 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Eine branch mit `<origin_branch>` als Quellkandidaten vorbereiten oder wechseln. Für beide Formen bietet der Bot anschließend nur die Quelloptionen an, die tatsächlich existieren: `local/<branch>` und `origin/<branch>`. Wenn nur eine davon existiert, wird nur diese angezeigt. Wenn keine existiert, meldet der Bot, dass die branch-Quelle fehlt.</td>
+    <td>Eine branch mit <code>&lt;origin_branch&gt;</code> als Quellkandidaten vorbereiten oder wechseln. Für beide Formen bietet der Bot anschließend nur die Quelloptionen an, die tatsächlich existieren: <code>local/&lt;branch&gt;</code> und <code>origin/&lt;branch&gt;</code>. Wenn nur eine davon existiert, wird nur diese angezeigt. Wenn keine existiert, meldet der Bot, dass die branch-Quelle fehlt.</td>
   </tr>
   <tr>
     <td width="332"><code>/current</code></td>
@@ -396,7 +396,7 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Sicherungsdatei für den Status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
@@ -522,8 +522,8 @@ Der Bot behandelt Projekt und branch als zusammengehörig.
 
 Wenn du eine branch erstellst oder wechselst, führt dich der Bot explizit durch die Quelle:
 
-- `local/<branch>` bedeutet: lokale branch als Quelle verwenden
-- `origin/<branch>` bedeutet: zuerst von der Remote-branch aktualisieren und dann wechseln
+- <code>local/&lt;branch&gt;</code> bedeutet: lokale branch als Quelle verwenden
+- <code>origin/&lt;branch&gt;</code> bedeutet: zuerst von der Remote-branch aktualisieren und dann wechseln
 
 Wenn der Bot feststellt, dass die in der Session gespeicherte branch und die aktuelle Repository-branch nicht übereinstimmen, macht er nicht blind weiter. Er fragt dich, welche branch verwendet werden soll:
 
@@ -541,7 +541,7 @@ Wenn die bevorzugte Quell-branch fehlt, bietet der Bot stattdessen Fallback-Quel
 - `/commit` kann mit `ENABLE_COMMIT_COMMAND` komplett deaktiviert werden
 - Schreibende `/commit`-Operationen sind nur für vertrauenswürdige Projekte erlaubt
 
-## 🪵 Logs
+## 🪵 Protokolle
 
 Logs werden **sowohl auf stdout als auch in eine rotierende Log-Datei** geschrieben unter:
 
@@ -581,7 +581,7 @@ Logs werden **sowohl auf stdout als auch in eine rotierende Log-Datei** geschrie
 - `pyproject.toml`
   Packaging- und Abhängigkeitskonfiguration
 
-## 📦 Release-Versionierung
+## 📦 Veröffentlichung-Versionierung
 
 Paketversionen werden aus Git-Tags abgeleitet.
 

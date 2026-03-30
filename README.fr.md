@@ -210,7 +210,7 @@ Le bot accepte actuellement :
 <table>
   <tr>
     <td width="332"><code>/provider</code></td>
-    <td>Choisir le provider pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
+    <td>Choisir le fournisseur pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>
   <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
@@ -222,7 +222,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Préparer ou changer une branch en utilisant `<origin_branch>` comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : `local/<branch>` et `origin/<branch>`. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
+    <td>Préparer ou changer une branch en utilisant <code>&lt;origin_branch&gt;</code> comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : <code>local/&lt;branch&gt;</code> et <code>origin/&lt;branch&gt;</code>. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
   </tr>
   <tr>
     <td width="332"><code>/current</code></td>
@@ -230,7 +230,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
-    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si provider, projet ou branch manque, le bot vous guide.</td>
+    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si fournisseur, projet ou branch manque, le bot vous guide.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
@@ -392,15 +392,15 @@ Le bot accepte actuellement :
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Hauptdatei für den Session-Status.</td>
+    <td>Fichier principal de l’état des sessions.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Fichier de sauvegarde de l’état.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log-Verzeichnis.</td>
+    <td>Répertoire des logs.</td>
   </tr>
 </table>
 
@@ -437,27 +437,27 @@ Exemple :
 
 La session active est aussi liée à :
 
-- project folder
-- provider
+- dossier de projet
+- fournisseur
 - nom de branch quand disponible
 
 <details>
 <summary><b>Chaque session stocke :</b></summary>
 
 - nom de session
-- project folder
+- dossier de projet
 - nom de branch
-- provider
+- fournisseur
 - horodatages
 - sélection de session active pour cette portée bot/chat
 </details>
 
 ### 🔓 Verrou de concurrence du workspace
 
-Une seule exécution d'agent peut être active à la fois par **project folder**, quel que soit le chat ou le bot Telegram qui l'a déclenchée.
+Une seule exécution d'agent peut être active à la fois par **dossier de projet**, quel que soit le chat ou le bot Telegram qui l'a déclenchée.
 
-- **project is busy** : un agent est déjà en cours dans ce workspace
-- **agent is busy** : cette exécution unique traite encore la requête courante
+- **le projet est occupé** : un agent est déjà en cours dans cet espace de travail
+- **l’agent est occupé** : cette exécution unique traite encore la requête courante
 
 Le bot impose cette limite pour éviter que deux agents écrivent en même temps dans le même workspace. Cela réduit les modifications conflictuelles et le risque de corruption.
 
@@ -520,8 +520,8 @@ Le bot traite le projet et la branch comme un ensemble.
 
 Quand vous créez ou changez une branch, le bot vous guide explicitement sur la source :
 
-- `local/<branch>` : utiliser la branch locale comme source
-- `origin/<branch>` : mettre à jour depuis la branch distante puis basculer
+- <code>local/&lt;branch&gt;</code> : utiliser la branch locale comme source
+- <code>origin/&lt;branch&gt;</code> : mettre à jour depuis la branch distante puis basculer
 
 Si le bot détecte que la branch stockée dans la session ne correspond pas à la branch courante du dépôt, il ne continue pas à l'aveugle. Il vous demande quelle branch utiliser :
 
@@ -539,7 +539,7 @@ Si votre branch source préférée est introuvable, le bot propose des sources d
 - `/commit` peut être désactivé complètement avec `ENABLE_COMMIT_COMMAND`
 - les opérations `/commit` qui modifient des fichiers ne sont autorisées que pour les projets trusted
 
-## 🪵 Logs
+## 🪵 Journaux
 
 Les logs sont écrits **à la fois sur stdout et dans un fichier rotatif** sous :
 

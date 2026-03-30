@@ -10,7 +10,7 @@
   "bot.command.switch": "列出工作階段或切換",
   "bot.error.command_failed": "⚠️ 指令失敗。請檢查伺服器日誌。",
   "bot.error.session_store": "⚠️ {error}",
-  "common.agent_already_running": "⏳ 專案 '{project_folder}' 已有代理正在執行。請等待其完成。",
+  "common.agent_already_running": "⏳ 專案 '{project_folder}' 上已有代理正在執行。請等待其完成。",
   "common.current_project_not_git": "⚠️ 目前專案不是 Git 儲存庫。",
   "common.no_active_session": "沒有使用中的工作階段。\n請先執行 /project 和 /new。",
   "common.no_project_selected": "尚未選擇專案。\n請先執行 /project <project_folder>。",

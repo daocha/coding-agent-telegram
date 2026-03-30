@@ -210,7 +210,7 @@ De bot accepteert momenteel:
 <table>
   <tr>
     <td width="332"><code>/provider</code></td>
-    <td>Kies de provider voor nieuwe sessies. De keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
+    <td>Kies de aanbieder voor nieuwe sessies. Die keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
   </tr>
   <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
@@ -222,7 +222,7 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Bereid een branch voor of wissel ernaar met `<origin_branch>` als source candidate. Voor beide vormen biedt de bot daarna alleen de source choices aan die echt bestaan: `local/<branch>` en `origin/<branch>`. Als er maar één bestaat, zie je alleen die. Als geen van beide bestaat, meldt de bot dat de branch-source ontbreekt.</td>
+    <td>Bereid een branch voor of wissel ernaar met <code>&lt;origin_branch&gt;</code> als source candidate. Voor beide vormen biedt de bot daarna alleen de source choices aan die echt bestaan: <code>local/&lt;branch&gt;</code> en <code>origin/&lt;branch&gt;</code>. Als er maar één bestaat, zie je alleen die. Als geen van beide bestaat, meldt de bot dat de branch-source ontbreekt.</td>
   </tr>
   <tr>
     <td width="332"><code>/current</code></td>
@@ -230,7 +230,7 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
-    <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte session ID. Als provider, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
+    <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte sessie-ID. Als aanbieder, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
@@ -392,15 +392,15 @@ De bot accepteert momenteel:
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Hauptdatei für den Session-Status.</td>
+    <td>Hoofdbestand voor de sessiestatus.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Back-upbestand voor de status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log-Verzeichnis.</td>
+    <td>Logmap.</td>
   </tr>
 </table>
 
@@ -438,7 +438,7 @@ Voorbeeld:
 De actieve sessie is ook gekoppeld aan:
 
 - projectmap
-- provider
+- aanbieder
 - branch-naam wanneer beschikbaar
 
 <details>
@@ -447,17 +447,17 @@ De actieve sessie is ook gekoppeld aan:
 - sessienaam
 - projectmap
 - branch-naam
-- provider
+- aanbieder
 - tijdstempels
 - actieve sessiekeuze voor die bot/chat-scope
 </details>
 
-### 🔓 Workspace concurrency lock
+### 🔓 Workspace-vergrendeling voor gelijktijdigheid
 
 Er kan maar één agent-run tegelijk actief zijn per **projectmap**, ongeacht welke chat of welke Telegram-bot die heeft gestart.
 
-- **project is busy**: er draait al een agent-run in die workspace
-- **agent is busy**: die ene run verwerkt de huidige aanvraag nog
+- **project is bezig**: er draait al een agent-run in die workspace
+- **agent is bezig**: die ene run verwerkt de huidige aanvraag nog
 
 De bot dwingt dit af zodat twee agents niet tegelijk naar dezelfde workspace schrijven. Dat verkleint de kans op conflicterende wijzigingen en datacorruptie.
 
@@ -520,8 +520,8 @@ De bot behandelt project en branch als één geheel.
 
 Wanneer je een branch maakt of wisselt, begeleidt de bot je expliciet bij de bron:
 
-- `local/<branch>` betekent de lokale branch als bron gebruiken
-- `origin/<branch>` betekent eerst vanaf de remote branch verversen en daarna wisselen
+- <code>local/&lt;branch&gt;</code> betekent de lokale branch als bron gebruiken
+- <code>origin/&lt;branch&gt;</code> betekent eerst vanaf de remote branch verversen en daarna wisselen
 
 Als de bot ziet dat de in de sessie opgeslagen branch niet overeenkomt met de huidige repository-branch, gaat hij niet blind verder. Hij vraagt welke branch gebruikt moet worden:
 
@@ -539,7 +539,7 @@ Als je voorkeursbron-branch ontbreekt, biedt de bot fallback-bronnen aan op basi
 - `/commit` kan volledig worden uitgeschakeld met `ENABLE_COMMIT_COMMAND`
 - muterende `/commit`-bewerkingen zijn alleen toegestaan voor trusted projecten
 
-## 🪵 Logs
+## 🪵 Logboeken
 
 Logs worden **zowel naar stdout als naar een roterend logbestand** geschreven onder:
 
@@ -577,9 +577,9 @@ Logs worden **zowel naar stdout als naar een roterend logbestand** geschreven on
 - `pyproject.toml`
   packaging- en dependencyconfiguratie
 
-## 📦 Release-versiebeheer
+## 📦 Uitgaveversiebeheer
 
-Packageversies worden afgeleid van Git-tags.
+Pakketversies worden afgeleid van Git-tags.
 
 - TestPyPI/testen: `v2026.3.26.dev1`
 - PyPI-prerelease: `v2026.3.26rc1`
