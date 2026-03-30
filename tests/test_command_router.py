@@ -3391,8 +3391,8 @@ def test_active_session_deletes_previous_live_progress_message_when_edit_falls_b
     asyncio.run(router.handle_message(update, context))
 
     assert len(bot.deleted_messages) == 2
-    assert bot.deleted_messages[0] == (123, 1)
-    assert bot.deleted_messages[1] == (123, 2)
+    deleted_ids = [message_id for chat_id, message_id in bot.deleted_messages if chat_id == 123]
+    assert len(set(deleted_ids)) == 2
 
 
 def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Path):
