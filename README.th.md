@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### ตัวเลือกเสริม: เตรียมความพร้อม Whisper สำหรับแปลงเสียงเป็นข้อความแบบโลคัล
+
+ส่วนนี้ใช้เปิดการแปลงข้อความจากข้อความเสียง Telegram ด้วย Whisper แบบโลคัลตามตัวเลือกของคุณ
+
+```bash
+# ถ้าติดตั้งด้วย pip
+coding-agent-telegram-stt-install
+
+# ถ้าใช้งานจาก repository ที่ clone มา
+./install-stt.sh
+```
+
+ค่า env ที่แนะนำ:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+หมายเหตุ:
+
+- Whisper จะดาวน์โหลดโมเดลที่เลือกโดยอัตโนมัติครั้งแรกไปยัง `~/.cache/whisper`
+- หากเลือก `OPENAI_WHISPER_MODEL=turbo` การถอดข้อความจากเสียงครั้งแรกมีโอกาสหมดเวลามากขึ้น ขณะ `large-v3-turbo.pt` ยังดาวน์โหลดไม่เสร็จ
+- หลังจากถอดข้อความจากเสียงแล้ว บอตจะส่งข้อความที่รู้จำได้กลับไปใน Telegram ก่อน แล้วจึงส่งต่อให้เอเจนต์ เพื่อช่วยตรวจสอบความคลาดเคลื่อนของการรู้จำ
+
 ## 🔑 ตั้งค่า Telegram
 
 ### รับ Bot Token
@@ -170,6 +196,13 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - หาก `getUpdates` คืนค่ากลับมาเป็นค่าว่าง ให้ส่งข้อความหาบอตอีกครั้งแล้วลองใหม่
 
 ## 📨 ประเภทข้อความที่รองรับ
+
+บอตรองรับสิ่งต่อไปนี้ในตอนนี้:
+
+- ข้อความตัวอักษร
+- รูปภาพ
+- ข้อความเสียง เมื่อกำหนด `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` และติดตั้งส่วนที่ Whisper ต้องใช้ในเครื่องแล้ว
+- ปัจจุบัน Codex และ Copilot รองรับเฉพาะข้อความและรูปภาพ ยังไม่รองรับวิดีโอ
 
 ## 🤖 คำสั่ง Telegram
 

@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### 任意: ローカル Whisper 音声文字起こしの前提条件を準備
+
+これにより、Telegram の音声メッセージに対するローカル Whisper ベースの音声文字起こしを任意で有効にできます。
+
+```bash
+# pip でインストールした場合
+coding-agent-telegram-stt-install
+
+# クローンしたリポジトリから使う場合
+./install-stt.sh
+```
+
+推奨される env 設定:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+メモ:
+
+- Whisper は選択したモデルを初回利用時に `~/.cache/whisper` へ自動ダウンロードします。
+- `OPENAI_WHISPER_MODEL=turbo` を選ぶと、`large-v3-turbo.pt` のダウンロード中に最初の音声文字起こしがタイムアウトしやすくなります。
+- 音声メッセージを文字起こしした後、ボットはまず認識したテキストを Telegram に返し、その後でエージェントへ渡します。これにより認識ミスを確認しやすくなります。
+
 ## 🔑 Telegram セットアップ
 
 ### Bot Token を取得
@@ -170,6 +196,13 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - `getUpdates` が空なら、bot にもう一度メッセージを送り、再試行してください。
 
 ## 📨 対応メッセージタイプ
+
+このボットが現在受け付けるもの:
+
+- テキストメッセージ
+- 写真
+- `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` が設定され、ローカル Whisper の前提条件がインストールされている場合の音声メッセージ
+- Codex と Copilot は現在、テキストと画像のみをサポートしており、動画はサポートしていません
 
 ## 🤖 Telegram コマンド
 

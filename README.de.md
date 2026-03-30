@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### Optional: lokale Whisper-Sprach-zu-Text-Voraussetzungen vorbereiten
+
+Damit aktivierst du optional lokale Whisper-basierte Sprach-zu-Text-Unterstützung für Telegram-Sprachnachrichten.
+
+```bash
+# wenn du per pip installiert hast
+coding-agent-telegram-stt-install
+
+# wenn du aus einem geklonten Repository startest
+./install-stt.sh
+```
+
+Empfohlene Env-Einstellungen:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Hinweise:
+
+- Whisper lädt das ausgewählte Modell beim ersten Aufruf automatisch nach `~/.cache/whisper` herunter.
+- Wenn du `OPENAI_WHISPER_MODEL=turbo` wählst, ist es wahrscheinlicher, dass die erste Sprachnachricht das Zeitlimit erreicht, während `large-v3-turbo.pt` noch heruntergeladen wird.
+- Nach der Transkription einer Sprachnachricht sendet der Bot das erkannte Transkript zuerst zurück an Telegram und gibt es danach an den Agenten weiter. So lassen sich Erkennungsfehler leichter prüfen.
+
 ## 🔑 Telegram-Einrichtung
 
 ### Bot-Token holen
@@ -175,6 +201,7 @@ Der Bot akzeptiert derzeit:
 
 - Textnachrichten
 - Fotos
+- Sprachnachrichten, wenn `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` gesetzt ist und die lokalen Whisper-Voraussetzungen installiert sind
 - Codex und Copilot unterstützen aktuell nur Text und Bilder, kein Video.
 
 ## 🤖 Telegram-Befehle

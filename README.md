@@ -141,6 +141,44 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### Optional: prepare local Whisper speech-to-text prerequisites
+
+This enables optional local Whisper-based voice-message speech-to-text for Telegram voice notes.
+
+```bash
+# if you installed from pip
+coding-agent-telegram-stt-install
+
+# if you run from a cloned repository
+./install-stt.sh
+```
+
+Add this to `~/.coding-agent-telegram/.env_coding_agent_telegram` only after prerequisites are ready:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+```
+
+Estimated local footprint:
+
+- `openai-whisper`: about `50 MB`
+- `ffmpeg` package: about `50 MB`
+- Whisper model downloads vary by model: `tiny` about `72 MB`, `base` about `139 MB`, `large-v3-turbo` about `1.5 GB`
+
+Recommended env settings for the local Whisper backend:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Notes:
+
+- Whisper downloads the selected model automatically on first use into `~/.cache/whisper`.
+- If you choose `OPENAI_WHISPER_MODEL=turbo`, the first voice transcription is more likely to hit the timeout while `large-v3-turbo.pt` is still downloading.
+- After a voice note is transcribed, the bot echoes the recognized transcript back to Telegram before sending it into the agent. This helps troubleshoot recognition mistakes.
+
 ## 🔑 Telegram Setup
 
 ### Get a Bot Token
@@ -179,6 +217,7 @@ The bot currently accepts:
 
 - Text messages
 - photos
+- voice messages when `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` and local Whisper prerequisites are installed
 - Codex and Copilot currently supports text and image only, video is not supported.
 
 ## 🤖 Telegram Commands

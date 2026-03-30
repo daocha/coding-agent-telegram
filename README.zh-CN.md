@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### 可选：准备本地 Whisper 语音转文字依赖
+
+这部分用于可选启用 Telegram 语音消息的本地 Whisper 语音转文字功能。
+
+```bash
+# 如果你是通过 pip 安装
+coding-agent-telegram-stt-install
+
+# 如果你是从克隆的仓库运行
+./install-stt.sh
+```
+
+推荐的 env 设置：
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+说明：
+
+- Whisper 会在首次使用时自动把所选模型下载到 `~/.cache/whisper`。
+- 如果你选择 `OPENAI_WHISPER_MODEL=turbo`，第一次语音转写更容易在 `large-v3-turbo.pt` 仍在下载时触发超时。
+- 语音消息转写完成后，bot 会先把识别出的文本回传到 Telegram，再把它交给 agent。这样更方便排查识别错误。
+
 ## 🔑 Telegram 设置
 
 ### 获取 Bot Token
@@ -170,6 +196,13 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - 如果 `getUpdates` 返回空结果，请先再给 bot 发一条消息，然后重试。
 
 ## 📨 支持的消息类型
+
+bot 当前接受：
+
+- 文本消息
+- 图片
+- 当 `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 且已安装本地 Whisper 依赖时的语音消息
+- Codex 和 Copilot 当前只支持文本和图片，不支持视频
 
 ## 🤖 Telegram 命令
 

@@ -14,6 +14,7 @@ from coding_agent_telegram.config import create_initial_env_file, load_config, r
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.logging_utils import setup_logging
 from coding_agent_telegram.session_store import SessionStore
+from coding_agent_telegram.stt_setup import ensure_stt_runtime_or_exit
 
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,8 @@ def main() -> None:
         print("", file=sys.stderr)
         print(translate(locale, "cli.then_run"), file=sys.stderr)
         raise SystemExit(1)
+
+    ensure_stt_runtime_or_exit(cfg.enable_openai_whisper_speech_to_text)
 
     log_file = setup_logging(cfg.log_level, cfg.log_dir)
     logger.info("Logging to %s", log_file)

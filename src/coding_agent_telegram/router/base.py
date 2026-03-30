@@ -25,6 +25,7 @@ from coding_agent_telegram.git_utils import GitWorkspaceManager, _sanitize_git_o
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
 from coding_agent_telegram.session_store import SessionStore
+from coding_agent_telegram.speech_to_text import WhisperSpeechToText
 from coding_agent_telegram.telegram_sender import send_text
 
 
@@ -108,6 +109,7 @@ class CommandRouterBase:
         self.deps = deps
         self.git = GitWorkspaceManager()
         self.photo_attachments = PhotoAttachmentStore(deps.cfg.app_internal_root)
+        self.speech_to_text = WhisperSpeechToText(deps.cfg)
         self.runtime = SessionRuntime(
             cfg=deps.cfg,
             store=deps.store,

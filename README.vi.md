@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### Tùy chọn: chuẩn bị các điều kiện cần cục bộ cho Whisper speech-to-text
+
+Phần này dùng để bật tùy chọn chuyển tin nhắn thoại Telegram thành văn bản bằng Whisper chạy cục bộ.
+
+```bash
+# nếu bạn cài bằng pip
+coding-agent-telegram-stt-install
+
+# nếu bạn chạy từ repository đã clone
+./install-stt.sh
+```
+
+Thiết lập env được khuyến nghị:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Lưu ý:
+
+- Whisper sẽ tự động tải model đã chọn vào `~/.cache/whisper` ở lần dùng đầu tiên.
+- Nếu bạn chọn `OPENAI_WHISPER_MODEL=turbo`, lần chuyển giọng nói đầu tiên có khả năng chạm timeout cao hơn khi `large-v3-turbo.pt` vẫn đang được tải.
+- Sau khi một tin nhắn thoại được chép lại, bot sẽ gửi lại bản transcript đã nhận dạng vào Telegram trước rồi mới chuyển cho tác nhân. Điều này giúp kiểm tra lỗi nhận dạng dễ hơn.
+
 ## 🔑 Thiết lập Telegram
 
 ### Lấy Bot Token
@@ -170,6 +196,13 @@ Lưu ý:
 - Nếu `getUpdates` trả về rỗng, hãy gửi thêm một tin nhắn cho bot rồi thử lại.
 
 ## 📨 Loại tin nhắn được hỗ trợ
+
+Hiện tại bot chấp nhận:
+
+- tin nhắn văn bản
+- ảnh
+- tin nhắn thoại khi `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` và các điều kiện cần cục bộ của Whisper đã được cài đặt
+- hiện tại Codex và Copilot chỉ hỗ trợ văn bản và hình ảnh, chưa hỗ trợ video
 
 ## 🤖 Lệnh Telegram
 

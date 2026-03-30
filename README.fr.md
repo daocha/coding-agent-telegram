@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### Optionnel : préparer les prérequis locaux Whisper pour la reconnaissance vocale
+
+Cela active la transcription locale optionnelle des messages vocaux Telegram avec Whisper.
+
+```bash
+# si vous avez installé avec pip
+coding-agent-telegram-stt-install
+
+# si vous utilisez un dépôt cloné
+./install-stt.sh
+```
+
+Réglages env recommandés :
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Remarques :
+
+- Whisper télécharge automatiquement le modèle sélectionné lors du premier usage dans `~/.cache/whisper`.
+- Si vous choisissez `OPENAI_WHISPER_MODEL=turbo`, la première transcription vocale a davantage de chances d’atteindre le délai pendant que `large-v3-turbo.pt` est encore en cours de téléchargement.
+- Après transcription d’un message vocal, le bot renvoie d’abord le texte reconnu dans Telegram avant de l’envoyer à l’agent. Cela aide à diagnostiquer les erreurs de reconnaissance.
+
 ## 🔑 Configuration Telegram
 
 ### Obtenir un Bot Token
@@ -170,6 +196,13 @@ Remarques :
 - Si `getUpdates` renvoie une réponse vide, envoyez un autre message au bot puis réessayez.
 
 ## 📨 Types de messages pris en charge
+
+Le bot accepte actuellement :
+
+- les messages texte
+- les photos
+- les messages vocaux quand `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` et que les prérequis locaux de Whisper sont installés
+- Codex et Copilot prennent actuellement en charge uniquement le texte et les images, pas la vidéo
 
 ## 🤖 Commandes Telegram
 

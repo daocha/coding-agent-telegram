@@ -106,7 +106,6 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
         | tg_filters.Sticker.ALL
         | tg_filters.VIDEO
         | tg_filters.VIDEO_NOTE
-        | tg_filters.VOICE
     )
 
     app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
@@ -127,6 +126,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo, block=False))
+    app.add_handler(MessageHandler(allowed_private & tg_filters.VOICE, router.handle_voice, block=False))
     app.add_handler(MessageHandler(allowed_private & tg_filters.TEXT & ~tg_filters.COMMAND, router.handle_message, block=False))
     app.add_handler(MessageHandler(allowed_private & unsupported_media, router.handle_unsupported_message))
     app.add_error_handler(build_error_handler(router.deps.cfg.locale))

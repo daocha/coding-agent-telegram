@@ -137,6 +137,32 @@ coding-agent-telegram
 ./startup.sh
 ```
 
+### 선택 사항: 로컬 Whisper 음성-텍스트 전제 조건 준비
+
+이 기능을 사용하면 Telegram 음성 메시지에 대해 로컬 Whisper 기반 음성-텍스트 기능을 선택적으로 활성화할 수 있습니다.
+
+```bash
+# pip 으로 설치한 경우
+coding-agent-telegram-stt-install
+
+# 클론한 저장소에서 실행하는 경우
+./install-stt.sh
+```
+
+권장 env 설정:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+참고:
+
+- Whisper 는 선택한 모델을 처음 사용할 때 `~/.cache/whisper` 로 자동 다운로드합니다.
+- `OPENAI_WHISPER_MODEL=turbo` 를 선택하면 `large-v3-turbo.pt` 를 다운로드하는 동안 첫 음성 전사가 시간 초과에 걸릴 가능성이 더 높습니다.
+- 음성 메시지를 전사한 뒤 봇은 먼저 인식된 텍스트를 Telegram 에 다시 보여주고, 그 다음 에이전트에 전달합니다. 그래서 인식 오류를 확인하기 쉽습니다.
+
 ## 🔑 Telegram 설정
 
 ### Bot Token 받기
@@ -170,6 +196,13 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - `getUpdates` 결과가 비어 있으면 bot 에 다시 메시지를 보내고 재시도하세요.
 
 ## 📨 지원되는 메시지 유형
+
+현재 이 봇이 받는 메시지:
+
+- 텍스트 메시지
+- 사진
+- `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 로 설정되어 있고 로컬 Whisper 전제 조건이 설치된 경우의 음성 메시지
+- Codex 와 Copilot 은 현재 텍스트와 이미지만 지원하며, 비디오는 지원하지 않습니다
 
 ## 🤖 Telegram 명령어
 
