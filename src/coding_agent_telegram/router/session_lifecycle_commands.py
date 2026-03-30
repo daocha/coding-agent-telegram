@@ -214,8 +214,15 @@ class SessionLifecycleCommandMixin:
                     return False
             if not await self._ensure_active_session_ready_for_run(update, context):
                 return False
-            self._store_pending_action(chat_id, None)
-            self._last_run_results[chat_id] = await self.runtime.run_active_session(update, context, user_message=user_message)
+            try:
+                self._last_run_results[chat_id] = await self.runtime.run_active_session(
+                    update,
+                    context,
+                    user_message=user_message,
+                    suppress_working_notice=bool(pending_action.get("suppress_working_notice")),
+                )
+            finally:
+                self._store_pending_action(chat_id, None)
             return True
 
         self._store_pending_action(chat_id, None)
