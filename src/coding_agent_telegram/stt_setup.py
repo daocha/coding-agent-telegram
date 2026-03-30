@@ -31,7 +31,6 @@ STT_SIZE_GUIDANCE = (
 @dataclass(frozen=True)
 class SttPrereqStatus:
     ffmpeg: bool
-    ffprobe: bool
     whisper_module: bool
 
     @property
@@ -39,8 +38,6 @@ class SttPrereqStatus:
         missing: list[str] = []
         if not self.ffmpeg:
             missing.append("ffmpeg")
-        if not self.ffprobe:
-            missing.append("ffprobe")
         if not self.whisper_module:
             missing.append("openai-whisper (Python module)")
         return missing
@@ -50,12 +47,23 @@ class SttPrereqStatus:
         return not self.missing
 
 
-def detect_stt_prereqs() -> SttPrereqStatus:
+def _has_whisper_module(python_bin: str | None = None) -> bool:
+    if python_bin is None:
+        return importlib.util.find_spec("whisper") is not None
+    result = subprocess.run(
+        [python_bin, "-c", "import importlib.util, sys; raise SystemExit(0 if importlib.util.find_spec('whisper') else 1)"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def detect_stt_prereqs(*, python_bin: str | None = None) -> SttPrereqStatus:
     importlib.invalidate_caches()
     return SttPrereqStatus(
         ffmpeg=shutil.which("ffmpeg") is not None,
-        ffprobe=shutil.which("ffprobe") is not None,
-        whisper_module=importlib.util.find_spec("whisper") is not None,
+        whisper_module=_has_whisper_module(python_bin),
     )
 
 
@@ -172,15 +180,10 @@ def _run_shell_command(command: str) -> bool:
 def _ensure_ffmpeg_installed() -> bool:
     while True:
         status = detect_stt_prereqs()
-        if status.ffmpeg and status.ffprobe:
+        if status.ffmpeg:
             return True
 
-        missing = []
-        if not status.ffmpeg:
-            missing.append("ffmpeg")
-        if not status.ffprobe:
-            missing.append("ffprobe")
-        print(f"Missing required system binaries: {', '.join(missing)}")
+        print("Missing required system binary: ffmpeg")
 
         manager, command_parts = _package_manager()
         if manager == "apt-get":
@@ -208,7 +211,7 @@ def _ensure_ffmpeg_installed() -> bool:
 
 def _ensure_whisper_installed(python_bin: str) -> bool:
     while True:
-        status = detect_stt_prereqs()
+        status = detect_stt_prereqs(python_bin=python_bin)
         if status.whisper_module:
             return True
 
@@ -242,6 +245,30 @@ def install_stt_dependencies(*, env_file: str | None = None, python_bin: str | N
     return 0
 
 
+def offer_stt_install_for_new_env(
+    *,
+    env_file: str | None = None,
+    python_bin: str | None = None,
+    installer_label: str,
+) -> int:
+    env_path = _resolve_env_path(env_file)
+    print("A new env file was created for coding-agent-telegram.")
+    print(STT_SIZE_GUIDANCE)
+    if not _prompt_yes_no(
+        f"Do you want to enable local Whisper speech-to-text now? This will run {installer_label}.",
+        default=False,
+    ):
+        print(f"Keeping {ENABLE_STT_ENV}=false in {env_path}.")
+        return 0
+
+    result = install_stt_dependencies(env_file=str(env_path), python_bin=python_bin)
+    if result != 0:
+        print(f"Speech-to-text setup did not complete. Keeping {ENABLE_STT_ENV}=false unless you enable it later.")
+        _set_env_flag(env_path, False)
+        return 0
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -254,11 +281,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     install_parser = subparsers.add_parser("install", help="Install missing speech-to-text prerequisites.")
     install_parser.add_argument("--env-file", help="Explicit env file path to update.")
     install_parser.add_argument("--python-bin", help="Python executable to use for pip installation.")
+    offer_parser = subparsers.add_parser("offer", help="Prompt whether to enable speech-to-text for a new env file.")
+    offer_parser.add_argument("--env-file", help="Explicit env file path to update.")
+    offer_parser.add_argument("--python-bin", help="Python executable to use for pip installation.")
+    offer_parser.add_argument("--installer-label", required=True, help="User-facing installer command label.")
 
     args = parser.parse_args(argv)
 
     if args.command == "install":
         return install_stt_dependencies(env_file=args.env_file, python_bin=args.python_bin)
+    if args.command == "offer":
+        return offer_stt_install_for_new_env(
+            env_file=args.env_file,
+            python_bin=args.python_bin,
+            installer_label=args.installer_label,
+        )
     return 1
 
 

@@ -226,6 +226,7 @@ class CommandRouterBase:
             update,
             context,
             self._t(update, "common.project_busy", project_folder=project_folder),
+            reply_to_message_id=getattr(update.message, "message_id", None),
         )
         return True
 
@@ -247,6 +248,7 @@ class CommandRouterBase:
                     update,
                     context,
                     self._t(update, "common.agent_already_running", project_folder=workspace_lock_key),
+                    reply_to_message_id=getattr(update.message, "message_id", None),
                 )
                 return None
             async with lock:
@@ -352,8 +354,18 @@ class CommandRouterBase:
                         text=message_text,
                     )
                 except BadRequest:
+                    previous_message_id = progress_state["message_id"]
                     message = await context.bot.send_message(chat_id=chat.id, text=message_text)
                     message_id = getattr(message, "message_id", None)
+                    if (
+                        previous_message_id is not None
+                        and previous_message_id != message_id
+                        and hasattr(context.bot, "delete_message")
+                    ):
+                        try:
+                            await context.bot.delete_message(chat_id=chat.id, message_id=previous_message_id)
+                        except BadRequest:
+                            pass
                     if progress_state.get("closed") and message_id is not None and hasattr(context.bot, "delete_message"):
                         try:
                             await context.bot.delete_message(chat_id=chat.id, message_id=message_id)

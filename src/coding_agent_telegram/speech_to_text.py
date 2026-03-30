@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from pathlib import Path
 from coding_agent_telegram.config import AppConfig, DEFAULT_OPENAI_WHISPER_MODEL
 
 
+logger = logging.getLogger(__name__)
 _MODEL_CACHE_FILENAMES = {
     "tiny": "tiny.pt",
     "tiny.en": "tiny.en.pt",
@@ -30,10 +32,11 @@ _MODEL_CACHE_FILENAMES = {
 
 
 class SpeechToTextError(RuntimeError):
-    def __init__(self, code: str, *, likely_first_download: bool = False) -> None:
+    def __init__(self, code: str, *, likely_first_download: bool = False, detail: str | None = None) -> None:
         super().__init__(code)
         self.code = code
         self.likely_first_download = likely_first_download
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,16 @@ class WhisperSpeechToText:
 
     def _likely_first_download(self) -> bool:
         return not self._model_cache_path().exists()
+
+    def _summarize_process_output(self, result: subprocess.CompletedProcess[str]) -> str:
+        parts: list[str] = [f"whisper exited with status {result.returncode}"]
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        if stderr:
+            parts.append(f"stderr: {stderr[:500]}")
+        if stdout:
+            parts.append(f"stdout: {stdout[:500]}")
+        return "; ".join(parts)
 
     def transcribe_file(self, audio_path: Path) -> SpeechToTextResult:
         likely_first_download = self._likely_first_download()
@@ -89,21 +102,39 @@ class WhisperSpeechToText:
                     timeout=self.timeout_seconds,
                 )
             except subprocess.TimeoutExpired as exc:
-                raise SpeechToTextError("timeout", likely_first_download=likely_first_download) from exc
+                raise SpeechToTextError(
+                    "timeout",
+                    likely_first_download=likely_first_download,
+                    detail=f"whisper timed out after {self.timeout_seconds} seconds",
+                ) from exc
 
             if result.returncode != 0:
-                raise SpeechToTextError("failed", likely_first_download=likely_first_download)
+                detail = self._summarize_process_output(result)
+                logger.warning("Whisper transcription failed for %s using model %s: %s", audio_path, self.model, detail)
+                raise SpeechToTextError("failed", likely_first_download=likely_first_download, detail=detail)
 
             transcript_path = Path(output_dir) / f"{audio_path.stem}.json"
             if not transcript_path.exists():
-                raise SpeechToTextError("failed", likely_first_download=likely_first_download)
+                raise SpeechToTextError(
+                    "failed",
+                    likely_first_download=likely_first_download,
+                    detail=f"whisper finished without writing transcript json for {audio_path.name}",
+                )
 
             try:
                 payload = json.loads(transcript_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
-                raise SpeechToTextError("failed", likely_first_download=likely_first_download) from exc
+                raise SpeechToTextError(
+                    "failed",
+                    likely_first_download=likely_first_download,
+                    detail=f"failed to parse whisper transcript json for {audio_path.name}: {exc}",
+                ) from exc
 
         text = str(payload.get("text") or "").strip()
         if not text:
-            raise SpeechToTextError("empty", likely_first_download=likely_first_download)
+            raise SpeechToTextError(
+                "empty",
+                likely_first_download=likely_first_download,
+                detail=f"whisper returned an empty transcript for {audio_path.name}",
+            )
         return SpeechToTextResult(text=text, model=self.model)

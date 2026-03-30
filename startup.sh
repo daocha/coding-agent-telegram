@@ -67,6 +67,7 @@ if [[ -z "$ENV_FILE" ]]; then
   fi
 fi
 
+NEW_ENV_CREATED=0
 if [[ ! -f "$ENV_FILE" ]]; then
   if [[ -f "$ENV_TEMPLATE_FILE" ]]; then
     ENV_FILE_TARGET="$ENV_FILE" ENV_TEMPLATE_SOURCE="$ENV_TEMPLATE_FILE" PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY'
@@ -81,15 +82,12 @@ app_locale = create_initial_env_file(env_path, template_path)
 print(translate(app_locale, "bootstrap.env_created_locale_line", env_path=env_path, app_locale=app_locale))
 print(translate(app_locale, "bootstrap.env_created_change_line", env_path=env_path))
 PY
+    NEW_ENV_CREATED=1
   else
     echo "Error: $ENV_FILE is missing and $ENV_TEMPLATE_FILE was not found." >&2
     exit 1
   fi
 fi
-
-set -a
-source "$ENV_FILE"
-set +a
 
 STATE_FILE="$STATE_FILE_DEFAULT"
 STATE_BACKUP_FILE="$STATE_BACKUP_FILE_DEFAULT"
@@ -107,6 +105,49 @@ LOG_DIR="$LOG_DIR_DEFAULT"
 
 mkdir -p "$(dirname "$STATE_FILE")" "$(dirname "$STATE_BACKUP_FILE")" "$LOG_DIR"
 touch "$STATE_FILE" "$STATE_BACKUP_FILE"
+
+if [[ ! -d "$VENV_DIR" ]]; then
+  "$PYTHON_BIN" -m venv "$VENV_DIR"
+fi
+
+source "$VENV_DIR/bin/activate"
+
+python -m pip install --upgrade pip >/dev/null
+INSTALL_STATE_FILE="$VENV_DIR/$INSTALL_STATE_FILE_NAME"
+CURRENT_INSTALL_FINGERPRINT="$(compute_install_fingerprint)"
+STORED_INSTALL_FINGERPRINT=""
+if [[ -f "$INSTALL_STATE_FILE" ]]; then
+  STORED_INSTALL_FINGERPRINT="$(<"$INSTALL_STATE_FILE")"
+fi
+
+NEEDS_REINSTALL=0
+if [[ "$FORCE_REINSTALL" == "1" ]]; then
+  NEEDS_REINSTALL=1
+elif ! python -c "import coding_agent_telegram" >/dev/null 2>&1; then
+  NEEDS_REINSTALL=1
+elif [[ "$CURRENT_INSTALL_FINGERPRINT" != "$STORED_INSTALL_FINGERPRINT" ]]; then
+  NEEDS_REINSTALL=1
+fi
+
+if [[ "$NEEDS_REINSTALL" == "1" ]]; then
+  echo "Installing local package into $VENV_DIR."
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM="$LOCAL_PRETEND_VERSION" \
+    python -m pip install -e .
+  printf '%s\n' "$CURRENT_INSTALL_FINGERPRINT" > "$INSTALL_STATE_FILE"
+else
+  echo "Existing editable install detected; skipping reinstall."
+fi
+
+if [[ "$NEW_ENV_CREATED" == "1" ]]; then
+  python -m coding_agent_telegram.stt_setup offer \
+    --env-file "$ENV_FILE" \
+    --python-bin "$VENV_DIR/bin/python" \
+    --installer-label "./install-stt.sh"
+fi
+
+set -a
+source "$ENV_FILE"
+set +a
 
 required_vars=(
   WORKSPACE_ROOT
@@ -159,43 +200,11 @@ case "$DEFAULT_AGENT_PROVIDER" in
     ;;
 esac
 
-if [[ ! -d "$VENV_DIR" ]]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-fi
-
-source "$VENV_DIR/bin/activate"
-
-python -m pip install --upgrade pip >/dev/null
-INSTALL_STATE_FILE="$VENV_DIR/$INSTALL_STATE_FILE_NAME"
-CURRENT_INSTALL_FINGERPRINT="$(compute_install_fingerprint)"
-STORED_INSTALL_FINGERPRINT=""
-if [[ -f "$INSTALL_STATE_FILE" ]]; then
-  STORED_INSTALL_FINGERPRINT="$(<"$INSTALL_STATE_FILE")"
-fi
-
-NEEDS_REINSTALL=0
-if [[ "$FORCE_REINSTALL" == "1" ]]; then
-  NEEDS_REINSTALL=1
-elif ! python -c "import coding_agent_telegram" >/dev/null 2>&1; then
-  NEEDS_REINSTALL=1
-elif [[ "$CURRENT_INSTALL_FINGERPRINT" != "$STORED_INSTALL_FINGERPRINT" ]]; then
-  NEEDS_REINSTALL=1
-fi
-
-if [[ "$NEEDS_REINSTALL" == "1" ]]; then
-  echo "Installing local package into $VENV_DIR."
-  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM="$LOCAL_PRETEND_VERSION" \
-    python -m pip install -e .
-  printf '%s\n' "$CURRENT_INSTALL_FINGERPRINT" > "$INSTALL_STATE_FILE"
-else
-  echo "Existing editable install detected; skipping reinstall."
-fi
-
 echo "Post-installation guide:"
 echo "1. Confirm $ENV_FILE contains WORKSPACE_ROOT, TELEGRAM_BOT_TOKENS, and ALLOWED_CHAT_IDS."
 echo "2. State files are ready at $STATE_FILE and $STATE_BACKUP_FILE."
 echo "3. Application logs will be written under $LOG_DIR."
-echo "4. Optional voice-to-text: set ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true after running ./install-stt.sh"
+echo "4. Optional voice-to-text: run ./install-stt.sh if you want local Whisper support."
 echo "5. Start the server with: ./startup.sh"
 echo "6. In Telegram, start conversations."
 echo "Starting coding-agent-telegram..."

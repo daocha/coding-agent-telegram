@@ -20,6 +20,25 @@ TELEGRAM_REQUEST_CONNECTION_POOL_SIZE = 20
 TELEGRAM_GET_UPDATES_CONNECTION_POOL_SIZE = 2
 
 
+def _describe_message_types(message) -> list[str]:
+    types: list[str] = []
+    for field_name in (
+        "text",
+        "photo",
+        "voice",
+        "audio",
+        "document",
+        "video",
+        "video_note",
+        "animation",
+        "sticker",
+    ):
+        value = getattr(message, field_name, None)
+        if value:
+            types.append(field_name)
+    return types
+
+
 def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_LOCALE) -> list[BotCommand]:
     commands = [
         BotCommand("provider", translate(locale, "bot.command.provider")),
@@ -108,6 +127,20 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
         | tg_filters.VIDEO_NOTE
     )
 
+    async def log_incoming_private_message(update, _context) -> None:
+        message = getattr(update, "message", None)
+        chat = getattr(update, "effective_chat", None)
+        if message is None or chat is None:
+            return
+        logger.info(
+            "Incoming Telegram message chat=%s message_id=%s types=%s text_preview=%.120r",
+            chat.id,
+            getattr(message, "message_id", None),
+            ",".join(_describe_message_types(message)) or "unknown",
+            getattr(message, "text", None) or "",
+        )
+
+    app.add_handler(MessageHandler(allowed_private, log_incoming_private_message, block=False), group=-1)
     app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
     app.add_handler(CommandHandler("project", router.handle_project, filters=allowed_private))
     app.add_handler(CommandHandler("branch", router.handle_branch, filters=allowed_private))
@@ -126,6 +159,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo, block=False))
+    app.add_handler(MessageHandler(allowed_private & tg_filters.AUDIO, router.handle_audio, block=False))
     app.add_handler(MessageHandler(allowed_private & tg_filters.VOICE, router.handle_voice, block=False))
     app.add_handler(MessageHandler(allowed_private & tg_filters.TEXT & ~tg_filters.COMMAND, router.handle_message, block=False))
     app.add_handler(MessageHandler(allowed_private & unsupported_media, router.handle_unsupported_message))
