@@ -38,7 +38,7 @@
   - ✅ ใช้ Telegram เพื่อควบคุม Codex / Copilot CLI
   - ✅ ตรวจคำตอบและไฟล์ที่ถูกแก้ได้ง่ายใน code block
   - ✅ ส่งคำถามต่อคิวไว้ได้ระหว่างที่ agent กำลังทำงาน
-  - ✅ รองรับข้อความและรูปภาพ
+  - ✅ รองรับ ✏️ ข้อความ, 🌄 รูปภาพ, 🎙️ ข้อความเสียง และไฟล์เสียง
 
    ## 🔁 สลับอุปกรณ์และเซสชันได้ลื่นไหล
 
@@ -99,6 +99,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - ติดตั้ง Codex CLI และ/หรือ Copilot CLI ไว้ในเครื่องแล้ว
 - [ติดตั้ง Codex CLI](https://developers.openai.com/codex/cli)
 - [ติดตั้ง Copilot CLI](https://github.com/features/copilot/cli)
+- [ทางเลือก] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### เริ่ม Bot Server
+### 🌐 เริ่ม Bot Server
 ##### ครั้งแรกแอปจะสร้างไฟล์ env และบอกว่าต้องกรอกค่าใดบ้าง
 ##### หลังแก้ไฟล์ env แล้ว ให้รันอีกครั้ง:
 ```bash
@@ -137,9 +138,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### ตัวเลือกเสริม: เตรียมความพร้อม Whisper สำหรับแปลงเสียงเป็นข้อความแบบโลคัล
+## 🎙️ [ทางเลือก] ฟีเจอร์ Speech-to-Text: เตรียมส่วนที่ OpenAI-Whisper ต้องใช้ในเครื่อง
 
-ส่วนนี้ใช้เปิดการแปลงข้อความจากข้อความเสียง Telegram ด้วย Whisper แบบโลคัลตามตัวเลือกของคุณ
+ส่วนนี้ใช้เปิดการแปลงข้อความจากข้อความเสียง Telegram ด้วย Whisper แบบโลคัลตามตัวเลือกของคุณ ไฟล์เสียงถูกจำกัดไว้ที่สูงสุด `20 MB`
 
 ```bash
 # ถ้าติดตั้งด้วย pip
@@ -201,7 +202,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 - ข้อความตัวอักษร
 - รูปภาพ
-- ข้อความเสียง เมื่อกำหนด `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` และติดตั้งส่วนที่ Whisper ต้องใช้ในเครื่องแล้ว
+- ข้อความเสียงและไฟล์เสียง เมื่อกำหนด `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` และติดตั้งส่วนที่ Whisper ต้องใช้ในเครื่องแล้ว
 - ปัจจุบัน Codex และ Copilot รองรับเฉพาะข้อความและรูปภาพ ยังไม่รองรับวิดีโอ
 
 ## 🤖 คำสั่ง Telegram

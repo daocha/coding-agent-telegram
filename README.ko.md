@@ -38,7 +38,7 @@
   - ✅ Telegram 으로 Codex / Copilot CLI 를 제어
   - ✅ 에이전트 응답과 변경 파일을 코드 블록으로 쉽게 검토
   - ✅ 에이전트가 작업 중일 때도 후속 질문을 큐에 저장
-  - ✅ 텍스트와 이미지 입력 지원
+  - ✅ ✏️ 텍스트, 🌄 이미지, 🎙️ 음성 메시지와 오디오 파일 지원
 
    ## 🔁 기기/세션 간 자연스러운 전환
 
@@ -99,6 +99,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - 로컬에 설치된 Codex CLI 및/또는 Copilot CLI
 - [Codex CLI 설치](https://developers.openai.com/codex/cli)
 - [Copilot CLI 설치](https://github.com/features/copilot/cli)
+- [선택 사항] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Bot 서버 시작
+### 🌐 Bot 서버 시작
 ##### 첫 실행 시 앱이 env 파일을 만들고 어떤 항목을 채워야 하는지 알려줍니다.
 ##### env 파일을 수정한 뒤 다시 실행하세요:
 ```bash
@@ -137,9 +138,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### 선택 사항: 로컬 Whisper 음성-텍스트 전제 조건 준비
+## 🎙️ [선택 사항] Speech-to-Text 기능: 로컬 OpenAI-Whisper 전제 조건 준비
 
-이 기능을 사용하면 Telegram 음성 메시지에 대해 로컬 Whisper 기반 음성-텍스트 기능을 선택적으로 활성화할 수 있습니다.
+이 기능을 사용하면 Telegram 음성 노트에 대해 로컬 Whisper 기반 음성-텍스트 기능을 선택적으로 활성화할 수 있습니다. 오디오 파일은 최대 `20 MB` 까지만 지원됩니다.
 
 ```bash
 # pip 으로 설치한 경우
@@ -201,7 +202,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 - 텍스트 메시지
 - 사진
-- `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 로 설정되어 있고 로컬 Whisper 전제 조건이 설치된 경우의 음성 메시지
+- `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 로 설정되어 있고 로컬 Whisper 전제 조건이 설치된 경우의 음성 메시지와 오디오 파일
 - Codex 와 Copilot 은 현재 텍스트와 이미지만 지원하며, 비디오는 지원하지 않습니다
 
 ## 🤖 Telegram 명령어

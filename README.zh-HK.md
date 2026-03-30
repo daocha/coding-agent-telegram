@@ -38,7 +38,7 @@
   - ✅ 使用 Telegram 控制 Codex / Copilot CLI
   - ✅ 可在 code block 中輕鬆查看 agent 回覆及改動檔案
   - ✅ agent 執行中仍可把後續問題排入佇列
-  - ✅ 支援文字與圖片輸入
+  - ✅ 支援 ✏️ 文字、🌄 圖片、🎙️ 語音訊息以及音訊檔案
 
    ## 🔁 裝置與工作階段無縫切換
 
@@ -99,6 +99,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - 已在本機安裝 Codex CLI 及/或 Copilot CLI
 - [安裝 Codex CLI](https://developers.openai.com/codex/cli)
 - [安裝 Copilot CLI](https://github.com/features/copilot/cli)
+- [可選] Whisper、ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### 啟動 Bot Server
+### 🌐 啟動 Bot Server
 ##### 第一次執行時，app 會建立 env 檔案，並告訴你需要填寫哪些欄位。
 ##### 更新 env 檔案後，再次執行：
 ```bash
@@ -137,9 +138,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### 可選：準備本機 Whisper 語音轉文字依賴
+## 🎙️ [可選] Speech-to-Text 功能：準備本機 OpenAI-Whisper 依賴
 
-這部分可選啟用 Telegram 語音訊息的本機 Whisper 語音轉文字功能。
+這部分可選啟用 Telegram 語音訊息的本機 Whisper 語音轉文字功能。音訊檔案最大限制為 `20 MB`。
 
 ```bash
 # 如果你是用 pip 安裝
@@ -201,7 +202,7 @@ bot 目前接受：
 
 - 文字訊息
 - 圖片
-- 當 `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 且已安裝本機 Whisper 依賴時的語音訊息
+- 當 `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 且已安裝本機 Whisper 依賴時的語音訊息與音訊檔案
 - Codex 與 Copilot 目前只支援文字與圖片，不支援影片
 
 ## 🤖 Telegram 指令
@@ -355,6 +356,18 @@ bot 目前接受：
   <tr>
     <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>在送往 Telegram 之前，對 tokens、keys、<code>.env</code> 值、certificates 及類似秘密輸出做遮罩。預設：<code>true</code>（強烈建議啟用）。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>預設：<code>false</code>。如果為 <code>true</code>，就會啟用音訊訊息與語音檔案識別。系統會檢查所需的 binary 或 library 依賴，缺少時會提示用戶安裝。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Whisper STT 使用的模型。預設：<code>base</code><br />可用模型：<code>tiny</code> 約 <code>72 MB</code>、<code>base</code> 約 <code>139 MB</code>、<code>large-v3-turbo</code> 約 <code>1.5 GB</code><br />模型會在你第一次傳送語音訊息時自動下載。建議一般使用選 <code>base</code>。如果你想要更好的準確率與品質，可以嘗試 <code>turbo</code>。</td>
+  </tr>
+  <tr>
+    <td width="250"><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>預設：<code>120</code>。STT 進程的逾時時間。一般來說處理速度已足夠快，但如果你選擇 <code>turbo</code>，首次下載可能會視乎網速而超出逾時限制。</td>
   </tr>
   <tr>
     <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>

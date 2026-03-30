@@ -38,7 +38,7 @@
   - ✅ Gebruik Telegram om Codex / Copilot CLI te bedienen
   - ✅ Antwoorden en gewijzigde bestanden eenvoudig beoordelen in codeblokken
   - ✅ Vervolgvragen kunnen in de wachtrij terwijl de agent werkt
-  - ✅ Ondersteunt tekst- en afbeeldingsinvoer
+  - ✅ Accepteert ✏️ tekst-, 🌄 afbeelding- en 🎙️ spraakberichten, evenals audiobestanden
 
    ## 🔁 Naadloos wisselen tussen apparaten en sessies
 
@@ -99,6 +99,7 @@ Voordat je de server start, zorg dat je hebt:
 - Codex CLI en/of Copilot CLI lokaal geïnstalleerd
 - [Codex CLI installatie](https://developers.openai.com/codex/cli)
 - [Copilot CLI installatie](https://github.com/features/copilot/cli)
+- [Optioneel] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Botserver starten
+### 🌐 Botserver starten
 ##### Bij de eerste start maakt de app het env-bestand aan en vertelt welke velden je moet invullen.
 ##### Start na het bijwerken van het env-bestand opnieuw:
 ```bash
@@ -137,9 +138,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### Optioneel: lokale Whisper-spraak-naar-tekst-vereisten voorbereiden
+## 🎙️ [Optioneel] Speech-to-Text-functie: lokale OpenAI-Whisper-vereisten voorbereiden
 
-Hiermee schakel je optionele lokale Whisper-gebaseerde spraak-naar-tekst in voor Telegram-spraakberichten.
+Hiermee schakel je optionele lokale Whisper-gebaseerde spraak-naar-tekst in voor Telegram-spraaknotities. Audiobestanden zijn beperkt tot maximaal `20 MB`.
 
 ```bash
 # als je via pip hebt geïnstalleerd
@@ -201,7 +202,7 @@ De bot accepteert momenteel:
 
 - tekstberichten
 - foto’s
-- spraakberichten wanneer `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` is ingesteld en de lokale Whisper-vereisten zijn geïnstalleerd
+- spraakberichten en audiobestanden wanneer `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` is ingesteld en de lokale Whisper-vereisten zijn geïnstalleerd
 - Codex en Copilot ondersteunen momenteel alleen tekst en afbeeldingen, geen video
 
 ## 🤖 Telegram-commando's

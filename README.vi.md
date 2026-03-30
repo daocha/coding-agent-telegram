@@ -38,7 +38,7 @@
   - ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
   - ✅ Dễ xem câu trả lời và các file đã thay đổi trong code block
   - ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
-  - ✅ Hỗ trợ đầu vào văn bản và hình ảnh
+  - ✅ Chấp nhận tin nhắn ✏️ văn bản, 🌄 hình ảnh, 🎙️ thoại và cả tệp âm thanh
 
    ## 🔁 Chuyển thiết bị/phiên liền mạch
 
@@ -99,6 +99,7 @@ Trước khi khởi động server, hãy chuẩn bị:
 - Codex CLI và/hoặc Copilot CLI đã được cài cục bộ
 - [Cài Codex CLI](https://developers.openai.com/codex/cli)
 - [Cài Copilot CLI](https://github.com/features/copilot/cli)
+- [Tùy chọn] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Khởi động bot server
+### 🌐 Khởi động bot server
 ##### Ở lần chạy đầu, app sẽ tạo file env và cho bạn biết cần điền trường nào.
 ##### Sau khi cập nhật file env, hãy chạy lại:
 ```bash
@@ -137,9 +138,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### Tùy chọn: chuẩn bị các điều kiện cần cục bộ cho Whisper speech-to-text
+## 🎙️ [Tùy chọn] Tính năng Speech-to-Text: chuẩn bị các điều kiện cần cục bộ của OpenAI-Whisper
 
-Phần này dùng để bật tùy chọn chuyển tin nhắn thoại Telegram thành văn bản bằng Whisper chạy cục bộ.
+Phần này dùng để bật tùy chọn chuyển tin nhắn thoại Telegram thành văn bản bằng Whisper chạy cục bộ. Tệp âm thanh được giới hạn tối đa `20 MB`.
 
 ```bash
 # nếu bạn cài bằng pip
@@ -201,7 +202,7 @@ Hiện tại bot chấp nhận:
 
 - tin nhắn văn bản
 - ảnh
-- tin nhắn thoại khi `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` và các điều kiện cần cục bộ của Whisper đã được cài đặt
+- tin nhắn thoại và tệp âm thanh khi `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` và các điều kiện cần cục bộ của Whisper đã được cài đặt
 - hiện tại Codex và Copilot chỉ hỗ trợ văn bản và hình ảnh, chưa hỗ trợ video
 
 ## 🤖 Lệnh Telegram

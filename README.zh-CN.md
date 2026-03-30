@@ -38,7 +38,7 @@
   - ✅ 使用 Telegram 控制 Codex / Copilot CLI
   - ✅ 可以在代码块中轻松查看 agent 回复和改动文件
   - ✅ agent 工作时也能继续排队后续问题
-  - ✅ 支持文本和图片输入
+  - ✅ 支持 ✏️ 文本、🌄 图片、🎙️ 语音消息以及音频文件
 
    ## 🔁 设备与会话无缝切换
 
@@ -99,6 +99,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - 已在本地安装 Codex CLI 和/或 Copilot CLI
 - [安装 Codex CLI](https://developers.openai.com/codex/cli)
 - [安装 Copilot CLI](https://github.com/features/copilot/cli)
+- [可选] Whisper、ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### 启动 Bot Server
+### 🌐 启动 Bot Server
 ##### 首次运行时，应用会创建 env 文件，并告诉你需要填写哪些字段。
 ##### 更新 env 文件后，再次运行：
 ```bash
@@ -137,9 +138,9 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### 可选：准备本地 Whisper 语音转文字依赖
+## 🎙️ [可选] Speech-to-Text 功能：准备本地 OpenAI-Whisper 依赖
 
-这部分用于可选启用 Telegram 语音消息的本地 Whisper 语音转文字功能。
+这部分用于可选启用 Telegram 语音消息的本地 Whisper 语音转文字功能。音频文件最大限制为 `20 MB`。
 
 ```bash
 # 如果你是通过 pip 安装
@@ -201,7 +202,7 @@ bot 当前接受：
 
 - 文本消息
 - 图片
-- 当 `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 且已安装本地 Whisper 依赖时的语音消息
+- 当 `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 且已安装本地 Whisper 依赖时的语音消息和音频文件
 - Codex 和 Copilot 当前只支持文本和图片，不支持视频
 
 ## 🤖 Telegram 命令

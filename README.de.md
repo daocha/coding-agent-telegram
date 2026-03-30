@@ -38,7 +38,7 @@
   - ✅ Telegram zum Steuern von Codex / Copilot CLI verwenden
   - ✅ Antworten und geänderte Dateien bequem in Code-Blöcken prüfen
   - ✅ Folgefragen während eines laufenden Agentenlaufs in die Queue stellen
-  - ✅ Unterstützt Text- und Bildeingaben
+  - ✅ Akzeptiert ✏️ Text-, 🌄 Bild- und 🎙️ Sprachnachrichten sowie Audiodateien
 
    ## 🔁 Nahtlos zwischen Geräten und Sessions wechseln
 
@@ -99,6 +99,7 @@ Vor dem Start des Servers brauchst du:
 - Lokal installiertes Codex CLI und/oder Copilot CLI
 - [Codex CLI Installation](https://developers.openai.com/codex/cli)
 - [Copilot CLI Installation](https://github.com/features/copilot/cli)
+- [Optional] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Bot-Server starten
+### 🌐 Bot-Server starten
 ##### Beim ersten Start legt die App die Env-Datei an und sagt dir, welche Felder du ausfüllen musst.
 ##### Nach dem Bearbeiten der Env-Datei starte erneut:
 ```bash
@@ -137,12 +138,12 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### Optional: lokale Whisper-Sprach-zu-Text-Voraussetzungen vorbereiten
+## 🎙️ [Optional] Speech-to-Text-Funktion: lokale OpenAI-Whisper-Voraussetzungen vorbereiten
 
-Damit aktivierst du optional lokale Whisper-basierte Sprach-zu-Text-Unterstützung für Telegram-Sprachnachrichten.
+Damit aktivierst du optional lokale Whisper-basierte Sprach-zu-Text-Unterstützung für Telegram-Sprachnotizen. Audiodateien sind auf maximal `20 MB` begrenzt.
 
 ```bash
-# wenn du per pip installiert hast
+# wenn du per pip oder per Einzeiler install.sh installiert hast
 coding-agent-telegram-stt-install
 
 # wenn du aus einem geklonten Repository startest
@@ -201,7 +202,7 @@ Der Bot akzeptiert derzeit:
 
 - Textnachrichten
 - Fotos
-- Sprachnachrichten, wenn `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` gesetzt ist und die lokalen Whisper-Voraussetzungen installiert sind
+- Sprachnachrichten und Audiodateien, wenn `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` gesetzt ist und die lokalen Whisper-Voraussetzungen installiert sind
 - Codex und Copilot unterstützen aktuell nur Text und Bilder, kein Video.
 
 ## 🤖 Telegram-Befehle
@@ -355,6 +356,18 @@ Der Bot akzeptiert derzeit:
   <tr>
     <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>Tokens, Schlüssel, <code>.env</code>-Werte, Zertifikate und ähnliche geheime Ausgaben vor dem Senden an Telegram unkenntlich machen. Standard: <code>true</code> (dringend empfohlen).</td>
+  </tr>
+  <tr>
+    <td width="250"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Standard: <code>false</code>. Wenn <code>true</code>, werden Audionachrichten und Sprachdateien erkannt. Das System prüft die Voraussetzungen für benötigte Binärdateien oder Bibliotheken und fordert bei Bedarf zur Installation auf.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Modell für Whisper STT. Standard: <code>base</code><br />Verfügbare Modelle: <code>tiny</code> ca. <code>72 MB</code>, <code>base</code> ca. <code>139 MB</code>, <code>large-v3-turbo</code> ca. <code>1.5 GB</code><br />Modelle werden bei der ersten Sprachnachricht automatisch heruntergeladen. Empfehlung: <code>base</code> für den allgemeinen Einsatz. Für bessere Genauigkeit und Qualität kannst du <code>turbo</code> ausprobieren.</td>
+  </tr>
+  <tr>
+    <td width="250"><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Standard: <code>120</code>. Zeitlimit für den STT-Prozess. Normalerweise ist die Verarbeitung schnell genug. Wenn du jedoch <code>turbo</code> wählst, kann der erste Download je nach Internetgeschwindigkeit das Zeitlimit überschreiten.</td>
   </tr>
   <tr>
     <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>

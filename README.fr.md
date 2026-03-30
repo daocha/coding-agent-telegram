@@ -38,7 +38,7 @@
   - ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
   - ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
   - ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
-  - ✅ Prend en charge le texte et les images
+  - ✅ Accepte les messages ✏️ texte, 🌄 image et 🎙️ vocaux ainsi que les fichiers audio
 
    ## 🔁 Changement fluide entre appareils et sessions
 
@@ -99,6 +99,7 @@ Avant de démarrer le serveur, assurez-vous d’avoir :
 - Codex CLI et/ou Copilot CLI installés localement
 - [Installation Codex CLI](https://developers.openai.com/codex/cli)
 - [Installation Copilot CLI](https://github.com/features/copilot/cli)
+- [Optionnel] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -126,7 +127,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Démarrer le serveur du bot
+### 🌐 Démarrer le serveur du bot
 ##### Au premier lancement, l’application crée le fichier env et vous indique quels champs remplir.
 ##### Après avoir mis à jour le fichier env, relancez :
 ```bash
@@ -137,12 +138,12 @@ coding-agent-telegram
 ./startup.sh
 ```
 
-### Optionnel : préparer les prérequis locaux Whisper pour la reconnaissance vocale
+## 🎙️ [Optionnel] Fonction Speech-to-Text : préparer les prérequis locaux OpenAI-Whisper
 
-Cela active la transcription locale optionnelle des messages vocaux Telegram avec Whisper.
+Cela active la transcription locale optionnelle des notes vocales Telegram avec Whisper. Les fichiers audio sont limités à `20 MB` maximum.
 
 ```bash
-# si vous avez installé avec pip
+# si vous avez installé avec pip ou avec l’install.sh en une ligne
 coding-agent-telegram-stt-install
 
 # si vous utilisez un dépôt cloné
@@ -201,7 +202,7 @@ Le bot accepte actuellement :
 
 - les messages texte
 - les photos
-- les messages vocaux quand `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` et que les prérequis locaux de Whisper sont installés
+- les messages vocaux et les fichiers audio quand `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` et que les prérequis locaux de Whisper sont installés
 - Codex et Copilot prennent actuellement en charge uniquement le texte et les images, pas la vidéo
 
 ## 🤖 Commandes Telegram
