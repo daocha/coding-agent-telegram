@@ -339,7 +339,7 @@ class ProjectCommandMixin:
                 reply_markup=keyboard,
             )
         if (not is_git_repo or not switched_project) and hasattr(self, "_continue_pending_action"):
-            await self._continue_pending_action(update, context)
+            await self._continue_pending_action(update, context, drain_queue_after_completion=True)
 
     @require_allowed_chat(answer_callback=True)
     async def handle_trust_project_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -514,4 +514,4 @@ class ProjectCommandMixin:
             )
         )
         if hasattr(self, "_continue_pending_action"):
-            await self._continue_pending_action(update, context)
+            await self._continue_pending_action(update, context, drain_queue_after_completion=True)

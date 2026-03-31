@@ -167,7 +167,13 @@ class SessionLifecycleCommandMixin:
         )
         return True
 
-    async def _continue_pending_action(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    async def _continue_pending_action(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        drain_queue_after_completion: bool = False,
+    ) -> bool:
         chat_id = update.effective_chat.id
         pending_action = self._pending_action(chat_id)
         if not pending_action:
@@ -234,7 +240,7 @@ class SessionLifecycleCommandMixin:
             completed = True
             return False
         finally:
-            if completed:
+            if completed and drain_queue_after_completion:
                 await self._drain_chat_message_queue(chat_id, context)
 
     async def _ensure_active_session_ready_for_run(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -299,4 +305,4 @@ class SessionLifecycleCommandMixin:
                 "use_session_id_as_name": not bool(session_name),
             },
         )
-        await self._continue_pending_action(update, context)
+        await self._continue_pending_action(update, context, drain_queue_after_completion=True)

@@ -226,7 +226,7 @@ class SessionBranchResolutionMixin:
             pending_action.pop("branch_resolution", None)
             self._store_pending_action(chat_id, pending_action)
             await query.edit_message_text(self._t(update, "branch_resolution.using_current_branch", branch_name=current_branch))
-            await self._continue_pending_action(update, context)
+            await self._continue_pending_action(update, context, drain_queue_after_completion=True)
             return
 
         allow_local = self.git.local_branch_exists(project_path, stored_branch)

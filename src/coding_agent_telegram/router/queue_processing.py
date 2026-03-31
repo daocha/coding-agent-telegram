@@ -288,7 +288,11 @@ class QueueProcessingMixin:
                 "user_message": user_message,
             },
         )
-        continued = await self._continue_pending_action(queued_update, context)
+        continued = await self._continue_pending_action(
+            queued_update,
+            context,
+            drain_queue_after_completion=False,
+        )
         if not continued:
             self._queue_lock_path(queue_file).unlink(missing_ok=True)
             self._chat_processing_queue_files.pop(chat_id, None)
