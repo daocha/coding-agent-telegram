@@ -28,17 +28,19 @@ class ProjectCommandMixin:
     ) -> InlineKeyboardMarkup:
         buttons: list[InlineKeyboardButton] = []
         if allow_local:
+            token = self._register_branch_source_token("local", source_branch, new_branch)
             buttons.append(
                 InlineKeyboardButton(
                     f"local/{source_branch}",
-                    callback_data=f"branchsource:local:{source_branch}:{new_branch}",
+                    callback_data=f"branchsource:{token}",
                 )
             )
         if allow_origin:
+            token = self._register_branch_source_token("origin", source_branch, new_branch)
             buttons.append(
                 InlineKeyboardButton(
                     f"origin/{source_branch}",
-                    callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
+                    callback_data=f"branchsource:{token}",
                 )
         )
         return InlineKeyboardMarkup([buttons])
@@ -59,20 +61,22 @@ class ProjectCommandMixin:
             if self.git.local_branch_exists(project_path, source_branch):
                 key = ("local", source_branch)
                 if key not in seen:
+                    token = self._register_branch_source_token("local", source_branch, new_branch)
                     row.append(
                         InlineKeyboardButton(
                             f"local/{source_branch}",
-                            callback_data=f"branchsource:local:{source_branch}:{new_branch}",
+                            callback_data=f"branchsource:{token}",
                         )
                     )
                     seen.add(key)
             if self.git.remote_branch_exists(project_path, source_branch):
                 key = ("origin", source_branch)
                 if key not in seen:
+                    token = self._register_branch_source_token("origin", source_branch, new_branch)
                     row.append(
                         InlineKeyboardButton(
                             f"origin/{source_branch}",
-                            callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
+                            callback_data=f"branchsource:{token}",
                         )
                     )
                     seen.add(key)
@@ -445,12 +449,12 @@ class ProjectCommandMixin:
             return
 
         await query.answer()
-        parts = query.data.split(":", 3)
-        if len(parts) != 4:
+        token = query.data.partition(":")[2]
+        entry = self._lookup_branch_source_token(token)
+        if entry is None:
+            await query.edit_message_text(self._t(update, "common.button_expired"))
             return
-        _, source_kind, source_branch, new_branch = parts
-        if source_kind not in {"local", "origin"}:
-            return
+        source_kind, source_branch, new_branch = entry
 
         chat_id = update.effective_chat.id
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)

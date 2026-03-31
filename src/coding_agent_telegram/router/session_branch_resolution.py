@@ -42,20 +42,22 @@ class SessionBranchResolutionMixin:
             if self.git.local_branch_exists(project_path, source_branch):
                 key = ("local", source_branch)
                 if key not in seen:
+                    token = self._register_branch_source_token("local", source_branch, new_branch)
                     row.append(
                         InlineKeyboardButton(
                             f"local/{source_branch}",
-                            callback_data=f"branchsource:local:{source_branch}:{new_branch}",
+                            callback_data=f"branchsource:{token}",
                         )
                     )
                     seen.add(key)
             if self.git.remote_branch_exists(project_path, source_branch):
                 key = ("origin", source_branch)
                 if key not in seen:
+                    token = self._register_branch_source_token("origin", source_branch, new_branch)
                     row.append(
                         InlineKeyboardButton(
                             f"origin/{source_branch}",
-                            callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
+                            callback_data=f"branchsource:{token}",
                         )
                     )
                     seen.add(key)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from collections import deque
@@ -47,6 +48,15 @@ class QueueProcessingMixin:
         session_id = self._sanitize_queue_session_id(str(chat_state.get("active_session_id") or "session"))
         return queue_dir / f"{session_id}-queue-{next_index}.txt"
 
+    def _encode_queue_body(self, text: str) -> str:
+        return "[Encoding:base64]\n" + base64.b64encode(text.encode("utf-8")).decode("ascii")
+
+    def _decode_queue_body(self, body: str) -> str:
+        prefix = "[Encoding:base64]\n"
+        if body.startswith(prefix):
+            return base64.b64decode(body[len(prefix):].encode("ascii")).decode("utf-8")
+        return body
+
     def _read_queue_questions(self, queue_file: Path) -> list[QueuedQuestion]:
         if not queue_file.exists():
             return []
@@ -57,7 +67,7 @@ class QueueProcessingMixin:
         )
         questions: list[QueuedQuestion] = []
         for match in pattern.finditer(raw):
-            text = match.group(3).strip()
+            text = self._decode_queue_body(match.group(3).strip())
             if not text:
                 continue
             questions.append(
@@ -84,7 +94,7 @@ class QueueProcessingMixin:
             fh.write(f"[Question {next_number}]\n")
             if reply_to_message_id is not None:
                 fh.write(f"[ReplyToMessageId {reply_to_message_id}]\n")
-            fh.write(f"{user_message.strip()}\n[End Question {next_number}]\n")
+            fh.write(f"{self._encode_queue_body(user_message.strip())}\n[End Question {next_number}]\n")
         logger.debug(
             "Appended queued question Q%s to %s with reply_to_message_id=%s.",
             next_number,
@@ -101,7 +111,7 @@ class QueueProcessingMixin:
                 fh.write(f"[Question {index}]\n")
                 if question.reply_to_message_id is not None:
                     fh.write(f"[ReplyToMessageId {question.reply_to_message_id}]\n")
-                fh.write(f"{question.text.strip()}\n[End Question {index}]\n")
+                fh.write(f"{self._encode_queue_body(question.text.strip())}\n[End Question {index}]\n")
         logger.debug("Rewrote %s queued question(s) to %s.", len(questions), queue_file)
 
     def _enqueue_chat_message(

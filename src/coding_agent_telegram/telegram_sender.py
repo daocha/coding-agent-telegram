@@ -190,7 +190,7 @@ def markdownish_to_html(text: str) -> str:
 
 def _format_plain_markdownish(text: str) -> str:
     escaped = html.escape(text)
-    return BOLD_RE.sub(lambda match: f"<b>{html.escape(match.group(1))}</b>", escaped)
+    return BOLD_RE.sub(lambda match: f"<b>{match.group(1)}</b>", escaped)
 
 
 def _strip_html_tags(text: str) -> str:

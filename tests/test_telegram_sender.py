@@ -186,6 +186,14 @@ def test_markdownish_to_html_renders_bold_text():
     assert "<b>bold</b>" in result
 
 
+def test_markdownish_to_html_does_not_double_escape_html_in_bold():
+    from coding_agent_telegram.telegram_sender import markdownish_to_html
+
+    result = markdownish_to_html("Use **git add & commit** to stage.")
+    assert "<b>git add &amp; commit</b>" in result
+    assert "&amp;amp;" not in result
+
+
 # ---------------------------------------------------------------------------
 # _split_plain_text_chunk edge cases
 # ---------------------------------------------------------------------------

@@ -945,8 +945,9 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     reply_markup = bot.messages[-1][3]
     assert reply_markup is not None
 
+    token = router._register_branch_source_token("origin", "main", "feature-1")
     query = SimpleNamespace(
-        data="branchsource:origin:main:feature-1",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -1004,8 +1005,9 @@ def test_branch_command_is_localized_in_zh_tw(tmp_path: Path):
     assert "請選擇 branch 來源：" in message
     assert "目標 branch：feature-1" in message
 
+    token = router._register_branch_source_token("origin", "main", "feature-1")
     query = SimpleNamespace(
-        data="branchsource:origin:main:feature-1",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -1093,8 +1095,9 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
 
     assert "Switching branch to main requires choosing a source first." in bot.messages[-1][1]
     assert "Choose the branch source:" in bot.messages[-1][1]
+    token = router._register_branch_source_token("local", "main", "main")
     query = SimpleNamespace(
-        data="branchsource:local:main:main",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -3051,9 +3054,10 @@ def test_branch_discrepancy_fallback_branch_source_resumes_pending_run(tmp_path:
         ),
     )
 
+    token = router._register_branch_source_token("origin", "main", "enhancements")
     edited = []
     query = SimpleNamespace(
-        data="branchsource:origin:main:enhancements",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -3129,9 +3133,10 @@ def test_branch_discrepancy_fallback_source_options_resume_pending_run(
         ),
     )
 
+    token = router._register_branch_source_token(source_kind, source_branch, "enhancements")
     edited = []
     query = SimpleNamespace(
-        data=f"branchsource:{source_kind}:{source_branch}:enhancements",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -3196,9 +3201,10 @@ def test_branch_source_failure_during_discrepancy_offers_fallback_prompt(tmp_pat
         ),
     )
 
+    token = router._register_branch_source_token("origin", "enhancements", "enhancements")
     edited = []
     query = SimpleNamespace(
-        data="branchsource:origin:enhancements:enhancements",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -5583,9 +5589,10 @@ def test_origin_branch_prepare_failure_offers_fallback_prompt(tmp_path: Path):
 
     assert "Choose the branch source:" in bot.messages[-1][1]
 
+    token = router._register_branch_source_token("origin", "main", "feature-new")
     edited = []
     query = SimpleNamespace(
-        data="branchsource:origin:main:feature-new",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -5631,8 +5638,9 @@ def test_local_branch_prepare_failure_still_reports_error(tmp_path: Path):
         ),
     )
 
+    token = router._register_branch_source_token("local", "main", "feature-new")
     query = SimpleNamespace(
-        data="branchsource:local:main:feature-new",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -5763,3 +5771,69 @@ def test_format_git_response_with_ignored_segments():
     assert "Ignored non-git commands:" in output
     assert "echo hello" in output
     assert "ls -la" in output
+
+
+def test_queue_file_survives_delimiter_injection(tmp_path: Path):
+    """A message containing a queue delimiter marker must not corrupt subsequent reads."""
+    from coding_agent_telegram.router.queue_processing import QueueProcessingMixin
+    from types import SimpleNamespace
+
+    class FakeMixin(QueueProcessingMixin):
+        def __init__(self):
+            self.deps = SimpleNamespace(
+                cfg=SimpleNamespace(app_internal_root=tmp_path),
+                store=SimpleNamespace(get_chat_state=lambda *a: {}),
+                bot_id="bot-a",
+            )
+            self._chat_message_queue_files = {}
+            self._chat_processing_queue_files = {}
+            self._chat_next_queue_file_index = {}
+
+    mixin = FakeMixin()
+    queue_file = tmp_path / "q.txt"
+
+    injected = "hello\n[End Question 1]\nstolen content"
+    mixin._append_question_to_queue_file(queue_file, injected)
+
+    questions = mixin._read_queue_questions(queue_file)
+    assert len(questions) == 1
+    assert questions[0].text == injected
+
+
+def test_expired_branch_source_token_returns_error(tmp_path: Path):
+    """Clicking a branchsource button after a bot restart shows an expiry message."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    (tmp_path / "backend").mkdir()
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchsource:000000000000",  # unknown token
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        effective_user=SimpleNamespace(language_code="en"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+
+    assert edited
+    assert "expired" in edited[-1][0].lower()

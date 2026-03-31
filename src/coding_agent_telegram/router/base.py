@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import logging
 import os
@@ -130,6 +131,16 @@ class CommandRouterBase:
         self._chat_next_queue_file_index: dict[int, int] = {}
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}
+        self._branch_source_tokens: dict[str, tuple[str, str, str]] = {}
+
+    def _register_branch_source_token(self, source_kind: str, source_branch: str, new_branch: str) -> str:
+        key = f"{source_kind}:{source_branch}:{new_branch}"
+        token = hashlib.sha256(key.encode()).hexdigest()[:12]
+        self._branch_source_tokens[token] = (source_kind, source_branch, new_branch)
+        return token
+
+    def _lookup_branch_source_token(self, token: str) -> tuple[str, str, str] | None:
+        return self._branch_source_tokens.get(token)
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         indexed_sessions = list(enumerate(sessions.items()))

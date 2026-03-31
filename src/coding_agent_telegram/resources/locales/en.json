@@ -11,6 +11,7 @@
   "bot.error.command_failed": "⚠️ Command failed. Check the server log for details.",
   "bot.error.session_store": "⚠️ {error}",
   "common.agent_already_running": "⏳ An agent is already running on project '{project_folder}'. Please wait for it to finish.",
+  "common.button_expired": "⚠️ This button has expired. Please retry the command.",
   "common.current_project_not_git": "⚠️ Current project is not a git repository.",
   "common.no_active_session": "No active session.\nPlease run /project and /new first.",
   "common.no_project_selected": "No project selected.\nPlease run /project <project_folder> first.",
