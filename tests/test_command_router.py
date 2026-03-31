@@ -1637,6 +1637,118 @@ def test_provider_callback_continues_pending_new_session(tmp_path: Path):
     assert state["sessions"][state["active_session_id"]]["provider"] == "copilot"
 
 
+def test_text_message_is_queued_while_new_session_prerequisites_are_pending(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_new(make_update(text="/new my-session"), SimpleNamespace(args=["my-session"], bot=bot))
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+
+        await router.handle_message(make_update(text="follow-up question", message_id=202), context)
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+        assert any("Question queued as Q1." in entry["text"] for entry in bot.sent_messages)
+        assert runner.resume_calls == []
+
+        query = SimpleNamespace(data="provider:set:codex", answer=None, edit_message_text=None)
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=query,
+            message=SimpleNamespace(text=None, photo=None, caption=None, message_id=None),
+        )
+
+        async def fake_answer():
+            return None
+
+        async def fake_edit(_text, reply_markup=None):
+            return None
+
+        query.answer = fake_answer
+        query.edit_message_text = fake_edit
+
+        await router.handle_provider_callback(callback_update, context)
+
+        assert len(runner.create_calls) == 1
+        assert len(runner.resume_calls) == 1
+        assert runner.resume_calls[0]["user_message"] == "follow-up question"
+
+    asyncio.run(exercise())
+
+
+def test_voice_message_is_queued_while_new_session_prerequisites_are_pending(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="voice follow-up")
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_new(make_update(text="/new my-session"), SimpleNamespace(args=["my-session"], bot=bot))
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+
+        voice_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            message=SimpleNamespace(
+                text=None,
+                photo=None,
+                caption=None,
+                message_id=303,
+                voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+            ),
+        )
+        await router.handle_voice(voice_update, context)
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+        assert any("Queued as Q1." in entry["text"] for entry in bot.sent_messages)
+        assert runner.resume_calls == []
+
+        query = SimpleNamespace(data="provider:set:codex", answer=None, edit_message_text=None)
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=query,
+            message=SimpleNamespace(text=None, photo=None, caption=None, message_id=None),
+        )
+
+        async def fake_answer():
+            return None
+
+        async def fake_edit(_text, reply_markup=None):
+            return None
+
+        query.answer = fake_answer
+        query.edit_message_text = fake_edit
+
+        await router.handle_provider_callback(callback_update, context)
+
+        assert len(runner.create_calls) == 1
+        assert len(runner.resume_calls) == 1
+        assert runner.resume_calls[0]["user_message"] == "voice follow-up"
+
+    asyncio.run(exercise())
+
+
 def test_provider_switch_auto_creates_session_named_by_session_id(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()

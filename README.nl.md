@@ -343,7 +343,7 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Maximale bestandsgrootte die de bot als tekst leest voor de before/after-snapshot voor per-run diffs. Standaard: <code>200000</code>.</td>
+    <td>Maximale bestandsgrootte die de bot als tekst leest voor de voor/na-momentopname voor per-run diffs. Standaard: <code>200000</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
@@ -479,23 +479,23 @@ Wordt de huidige run afgebroken terwijl er nog vragen wachten, dan gaat de bot n
 
 ## ⚠️ Diff (bestandswijzigingen)
 
-_Tijdens elke agent-run maakt de bot ook een lichte before/after-snapshot van het project, zodat gewijzigde bestanden kunnen worden samengevat en diffs naar Telegram kunnen worden gestuurd. Deze snapshot wordt door de bot-app zelf gemaakt, niet door Codex of Copilot._
+_Tijdens elke agent-run maakt de bot ook een lichte voor/na-momentopname van het project, zodat gewijzigde bestanden kunnen worden samengevat en diffs naar Telegram kunnen worden gestuurd. Deze momentopname wordt door de bot-app zelf gemaakt, niet door Codex of Copilot._
 
 **Snapshot-opmerkingen:**
 
 - de app loopt de projectmap door vóór en na de run
-- voor normale tekstbestanden heeft de per-run snapshot-diff voorrang op een git-head-diff
-- gebruikelijke dependency-, cache- en runtime-mappen worden ook overgeslagen
+- voor normale tekstbestanden heeft de per-run momentopnameverschil voorrang op een git-head-diff
+- gebruikelijke afhankelijkheids-, cache- en runtime-mappen worden ook overgeslagen
 - binaire bestanden en bestanden groter dan `SNAPSHOT_TEXT_FILE_MAX_BYTES` worden niet als tekst geladen
 - bij erg grote projecten kan deze extra scan merkbare I/O- en geheugenbelasting toevoegen
-- als de snapshot een bestand niet als tekst kan weergeven, valt de app waar mogelijk terug op `git diff`
+- als de momentopname een bestand niet als tekst kan weergeven, valt de app waar mogelijk terug op `git diff`
 - voor grote of niet-tekstbestanden kan de diff alsnog worden weggelaten en vervangen door een kort bericht
 
-De snapshot-uitsluitingsregels staan in package resources:
+De momentopname-uitsluitingsregels staan in pakketresources:
 
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
+- `src/coding_agent_telegram/resources/momentopname_excluded_dir_names.txt`
+- `src/coding_agent_telegram/resources/momentopname_excluded_dir_globs.txt`
+- `src/coding_agent_telegram/resources/momentopname_excluded_file_globs.txt`
 
 Je kunt deze standaardwaarden in het env-bestand overschrijven zonder het geïnstalleerde package te wijzigen:
 
@@ -575,7 +575,7 @@ Logs worden **zowel naar stdout als naar een roterend logbestand** geschreven on
   canonieke omgevingssjabloon gebruikt door zowel repo-start als package-installaties
 
 - `pyproject.toml`
-  packaging- en dependencyconfiguratie
+  verpakkings- en dependencyconfiguratie
 
 ## 📦 Uitgaveversiebeheer
 

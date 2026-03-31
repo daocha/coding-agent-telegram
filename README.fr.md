@@ -343,7 +343,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Taille maximale de fichier que le bot lira en texte pour construire le snapshot avant/après des diffs. Défaut : <code>200000</code>.</td>
+    <td>Taille maximale de fichier que le bot lira en texte pour construire le instantané avant/après des diffs. Défaut : <code>200000</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
@@ -363,7 +363,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Ajouter des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package. Exemple : <code>.*,personal/*,sensitive*.txt</code> Remarque : <code>.*</code> inclut les chemins cachés, y compris les fichiers dans les dossiers cachés.</td>
+    <td>Ajouter des exclusions de diff supplémentaires au-dessus des valeurs par défaut du paquet. Exemple : <code>.*,personal/*,sensitive*.txt</code> Remarque : <code>.*</code> inclut les chemins cachés, y compris les fichiers dans les dossiers cachés.</td>
   </tr>
 </table>
 
@@ -479,32 +479,32 @@ Si l'exécution en cours est annulée et que des questions attendent encore, le 
 
 ## ⚠️ Diff (modifications de fichiers)
 
-_Pendant chaque exécution d'agent, le bot prend aussi un léger snapshot avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce snapshot est produit par le bot lui-même, pas par Codex ou Copilot._
+_Pendant chaque exécution d'agent, le bot prend aussi un léger instantané avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce instantané est produit par le bot lui-même, pas par Codex ou Copilot._
 
-**À savoir sur le snapshot :**
+**À savoir sur le instantané :**
 
 - l'app parcourt le dossier du projet avant et après l'exécution
-- pour les fichiers texte normaux, l'app préfère le diff du snapshot du run plutôt qu'un diff contre le head Git
+- pour les fichiers texte normaux, l'app préfère le diff du instantané du run plutôt qu'un diff contre le head Git
 - les répertoires courants de dépendances, cache et runtime sont aussi ignorés
 - les fichiers binaires et les fichiers plus gros que `SNAPSHOT_TEXT_FILE_MAX_BYTES` ne sont pas lus comme texte
 - sur les très gros projets, ce scan supplémentaire peut ajouter un surcoût notable en I/O et en mémoire
-- si un snapshot ne peut pas représenter un fichier comme texte, l'app retombe sur `git diff` lorsque c'est possible
+- si un instantané ne peut pas représenter un fichier comme texte, l'app retombe sur `git diff` lorsque c'est possible
 - pour les gros fichiers ou les fichiers non textuels, le diff peut quand même être omis et remplacé par un court message
 
-Les règles d'exclusion du snapshot se trouvent dans les ressources du package :
+Les règles d'exclusion du instantané se trouvent dans les ressources du paquet :
 
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
+- `src/coding_agent_telegram/resources/instantané_excluded_dir_names.txt`
+- `src/coding_agent_telegram/resources/instantané_excluded_dir_globs.txt`
+- `src/coding_agent_telegram/resources/instantané_excluded_file_globs.txt`
 
-Vous pouvez surcharger ces valeurs dans le fichier env sans modifier le package installé :
+Vous pouvez surcharger ces valeurs dans le fichier env sans modifier le paquet installé :
 
 - `SNAPSHOT_INCLUDE_PATH_GLOBS`
   Force l'inclusion des chemins correspondants dans les diffs.
   Exemple : `.github/*,.profile.test,.profile.prod`
 
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
-  Ajoute des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package.
+  Ajoute des exclusions de diff supplémentaires au-dessus des valeurs par défaut du paquet.
   Exemple : `.*,personal/*,sensitive*.txt`
   Remarque : `.*` couvre les chemins cachés, y compris les fichiers dans des dossiers cachés.
 
@@ -572,14 +572,14 @@ Les logs sont écrits **à la fois sur stdout et dans un fichier rotatif** sous 
   point d'entrée local pour le bootstrap et le démarrage
 
 - `src/coding_agent_telegram/resources/.env.example`
-  modèle d'environnement canonique utilisé à la fois par le démarrage depuis le dépôt et par les installations du package
+  modèle d'environnement canonique utilisé à la fois par le démarrage depuis le dépôt et par les installations du paquet
 
 - `pyproject.toml`
   configuration du packaging et des dépendances
 
 ## 📦 Versionnement des releases
 
-Les versions du package sont dérivées des tags Git.
+Les versions du paquet sont dérivées des tags Git.
 
 - TestPyPI/test : `v2026.3.26.dev1`
 - préversion PyPI : `v2026.3.26rc1`
