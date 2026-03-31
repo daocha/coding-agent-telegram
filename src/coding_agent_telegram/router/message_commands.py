@@ -28,9 +28,7 @@ class MessageCommandMixin:
         suppress_working_notice: bool = False,
     ) -> None:
         chat_id = update.effective_chat.id
-        pending_action = self._pending_action(chat_id)
-        has_unresolved_pending_action = isinstance(pending_action, dict)
-        if self._is_project_busy(chat_id) or self._has_pending_queue_decision(chat_id) or has_unresolved_pending_action:
+        if self._should_queue_incoming_message(chat_id):
             _queue_file, question_number = self._enqueue_chat_message(
                 chat_id,
                 user_message,
@@ -215,9 +213,7 @@ class MessageCommandMixin:
             len(result.text),
             getattr(update.message, "message_id", None),
         )
-        pending_action = self._pending_action(chat_id)
-        has_unresolved_pending_action = isinstance(pending_action, dict)
-        if self._is_project_busy(chat_id) or self._has_pending_queue_decision(chat_id) or has_unresolved_pending_action:
+        if self._should_queue_incoming_message(chat_id):
             _queue_file, question_number = self._enqueue_chat_message(
                 chat_id,
                 result.text,
