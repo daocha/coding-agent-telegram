@@ -36,7 +36,7 @@
   - ✅ Nhẹ: không cần framework nặng, minh bạch hoàn toàn
   - ✅ Nhiều bot: nhiều cuộc chat, nhiều phiên
   - ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
-  - ✅ Dễ xem câu trả lời và các file đã thay đổi trong code block
+  - ✅ Dễ xem câu trả lời và các tệp đã thay đổi trong code block
   - ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
   - ✅ Chấp nhận tin nhắn ✏️ văn bản, 🌄 hình ảnh và 🎙️ thoại
 
@@ -80,7 +80,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 
 - Danh sách trắng cho chat riêng qua `ALLOWED_CHAT_IDS`
 - Chỉ cho phép một agent hoạt động trên mỗi project để giảm xung đột ghi
-- Ẩn diff của các file nhạy cảm
+- Ẩn diff của các tệp nhạy cảm
 - API keys, tokens, giá trị `.env`, certificates, SSH keys và các đầu ra mang tính bí mật sẽ được che trước khi gửi lại Telegram
 - Dữ liệu runtime của app nằm dưới `~/.coding-agent-telegram`
 - Các thư mục có sẵn có thể yêu cầu xác nhận trust trước khi chạy Git operation có thay đổi
@@ -128,8 +128,8 @@ cd coding-agent-telegram
 ```
 
 ### 🌐 Khởi động bot server
-##### Ở lần chạy đầu, app sẽ tạo file env và cho bạn biết cần điền trường nào.
-##### Sau khi cập nhật file env, hãy chạy lại:
+##### Ở lần chạy đầu, app sẽ tạo tệp env và cho bạn biết cần điền trường nào.
+##### Sau khi cập nhật tệp env, hãy chạy lại:
 ```bash
 # nếu bạn làm theo Tùy chọn A hoặc Tùy chọn B, hãy chạy
 coding-agent-telegram
@@ -258,26 +258,26 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
-    <td>Hủy agent run hiện tại của project hiện tại. Nếu còn queued questions chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
+    <td>Hủy lần chạy tác nhân hiện tại của project hiện tại. Nếu còn các câu hỏi trong hàng đợi chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
   </tr>
 </table>
 
 <h2>⚙️ Biến môi trường</h2>
 
-<h3>Đường dẫn file env chính:</h3>
+<h3>Đường dẫn tệp env chính:</h3>
 
 <table>
   <tr>
     <td><code>CODING_AGENT_TELEGRAM_ENV_FILE</code></td>
-    <td>Dùng khi bạn muốn app trỏ tới một file env cụ thể.</td>
+    <td>Dùng khi bạn muốn app trỏ tới một tệp env cụ thể.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/.env_coding_agent_telegram</code></td>
-    <td>Vị trí file env mặc định.</td>
+    <td>Vị trí tệp env mặc định.</td>
   </tr>
   <tr>
     <td><code>./.env_coding_agent_telegram</code></td>
-    <td>Chỉ dùng khi file local này đã tồn tại.</td>
+    <td>Chỉ dùng khi tệp local này đã tồn tại.</td>
   </tr>
 </table>
 
@@ -339,11 +339,11 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
-    <td>Timeout cứng cho một lần agent run. Mặc định: <code>0</code> (tắt).</td>
+    <td>Timeout cứng cho một lần lần chạy tác nhân. Mặc định: <code>0</code> (tắt).</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Kích thước file tối đa mà bot sẽ đọc dưới dạng văn bản khi tạo before/after snapshot cho diff của từng run. Mặc định: <code>200000</code>.</td>
+    <td>Kích thước tệp tối đa mà bot sẽ đọc dưới dạng văn bản khi tạo ảnh chụp nhanh trước/sau cho diff của từng run. Mặc định: <code>200000</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
@@ -351,7 +351,7 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
-    <td>Ẩn diff của các file nhạy cảm. Mặc định: <code>true</code>.</td>
+    <td>Ẩn diff của các tệp nhạy cảm. Mặc định: <code>true</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
@@ -363,7 +363,7 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Thêm các rule loại trừ diff ngoài bộ mặc định của package. Ví dụ: <code>.*,personal/*,sensitive*.txt</code> Lưu ý: <code>.*</code> khớp cả path ẩn, gồm cả file trong thư mục ẩn.</td>
+    <td>Thêm các rule loại trừ diff ngoài bộ mặc định của package. Ví dụ: <code>.*,personal/*,sensitive*.txt</code> Lưu ý: <code>.*</code> khớp cả path ẩn, gồm cả tệp trong thư mục ẩn.</td>
   </tr>
 </table>
 
@@ -452,9 +452,9 @@ phiên hoạt động cũng gắn với:
 
 ### 🔓 Khóa đồng thời workspace
 
-Chỉ có thể có một agent run hoạt động trên mỗi **thư mục dự án** tại một thời điểm, bất kể chat hay Telegram bot nào khởi chạy.
+Chỉ có thể có một lần chạy tác nhân hoạt động trên mỗi **thư mục dự án** tại một thời điểm, bất kể chat hay Telegram bot nào khởi chạy.
 
-- **dự án đang bận**: workspace đó đã có một agent run đang chạy
+- **dự án đang bận**: workspace đó đã có một lần chạy tác nhân đang chạy
 - **tác nhân đang bận**: chính run đó vẫn đang xử lý yêu cầu hiện tại
 
 Bot cố ý áp dụng giới hạn này để hai agent không ghi vào cùng một workspace cùng lúc. Điều đó giúp tránh sửa đổi xung đột và giảm nguy cơ hỏng dữ liệu.
@@ -467,27 +467,27 @@ Lock được giữ trong bộ nhớ, không phải trên đĩa, nên sẽ tự 
 
 ### 💬 Câu hỏi trong hàng đợi
 
-Nếu project hiện tại đã có agent run đang chạy, các tin nhắn văn bản gửi sau sẽ không bị từ chối mà được đưa vào queue.
+Nếu project hiện tại đã có lần chạy tác nhân đang chạy, các tin nhắn văn bản gửi sau sẽ không bị từ chối mà được đưa vào queue.
 
-- câu hỏi mới được nối vào file queued-questions trên đĩa
+- câu hỏi mới được nối vào tệp queued-questions trên đĩa
 - agent hiện tại tiếp tục làm yêu cầu trước đó
 - khi run đó kết thúc bình thường, bot tự động bắt đầu xử lý các câu hỏi trong hàng đợi
 
-Nếu run hiện tại bị abort và vẫn còn queued questions, bot sẽ không tự tiếp tục. Bot sẽ hỏi có muốn tiếp tục xử lý phần còn lại theo dạng gộp hay từng câu một hay không.
+Nếu run hiện tại bị abort và vẫn còn các câu hỏi trong hàng đợi, bot sẽ không tự tiếp tục. Bot sẽ hỏi có muốn tiếp tục xử lý phần còn lại theo dạng gộp hay từng câu một hay không.
 
-## ⚠️ Diff (thay đổi file)
+## ⚠️ Diff (thay đổi tệp)
 
-_Trong mỗi agent run, bot cũng tạo một snapshot before/after nhẹ của project để có thể tóm tắt các file thay đổi và gửi diff về Telegram. Bản chụp nhanh này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
+_Trong mỗi lần chạy tác nhân, bot cũng tạo một ảnh chụp nhanh before/after nhẹ của project để có thể tóm tắt các tệp thay đổi và gửi diff về Telegram. Bản chụp nhanh này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
 
-**Ghi chú về snapshot:**
+**Ghi chú về ảnh chụp nhanh:**
 
-- app quét project directory trước và sau mỗi run
-- với file văn bản thông thường, app ưu tiên snapshot diff theo từng run hơn là diff so với git head
-- các thư mục dependency, cache và runtime phổ biến cũng bị bỏ qua
-- file nhị phân và file lớn hơn `SNAPSHOT_TEXT_FILE_MAX_BYTES` sẽ không được đọc như văn bản
+- app quét thư mục dự án trước và sau mỗi run
+- với tệp văn bản thông thường, app ưu tiên diff ảnh chụp nhanh theo từng run hơn là diff so với git head
+- các thư mục phụ thuộc, bộ đệm và runtime phổ biến cũng bị bỏ qua
+- tệp nhị phân và tệp lớn hơn `SNAPSHOT_TEXT_FILE_MAX_BYTES` sẽ không được đọc như văn bản
 - với project rất lớn, lần quét bổ sung này có thể làm tăng đáng kể I/O và bộ nhớ
-- nếu snapshot không thể biểu diễn file dưới dạng văn bản, app sẽ fallback sang `git diff` khi có thể
-- với file lớn hoặc không phải văn bản, diff vẫn có thể bị bỏ qua và thay bằng thông báo ngắn
+- nếu ảnh chụp nhanh không thể biểu diễn tệp dưới dạng văn bản, app sẽ fallback sang `git diff` khi có thể
+- với tệp lớn hoặc không phải văn bản, diff vẫn có thể bị bỏ qua và thay bằng thông báo ngắn
 
 Các rule loại trừ snapshot nằm trong package resources:
 
@@ -504,7 +504,7 @@ Bạn có thể override các giá trị mặc định này trong file env mà k
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
   Thêm các diff exclusion ngoài bộ mặc định của package.
   Ví dụ: `.*,personal/*,sensitive*.txt`
-  Lưu ý: `.*` khớp cả hidden path, kể cả file trong hidden directory.
+  Lưu ý: `.*` khớp cả đường dẫn ẩn, kể cả tệp trong thư mục ẩn.
 
 Nếu include và exclude cùng khớp, include sẽ được ưu tiên.
 
@@ -573,7 +573,7 @@ Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
   mẫu environment chính được dùng cả khi chạy từ repo và khi cài dưới dạng package
 
 - `pyproject.toml`
-  cấu hình packaging và dependencies
+  cấu hình đóng gói và dependencies
 
 ## 📦 Quy ước phiên bản release
 
