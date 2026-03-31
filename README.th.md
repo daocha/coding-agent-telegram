@@ -109,18 +109,18 @@ Openclaw มีความสามารถครบมาก และมี 
 
 ## 🚀 เริ่มต้นอย่างรวดเร็ว
 
-### Option A: สคริปต์ bootstrap แบบบรรทัดเดียว
+### วิธีที่ A: สคริปต์ bootstrap แบบบรรทัดเดียว
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: ติดตั้งจาก PyPI ด้วย `pip`
+### วิธีที่ B: ติดตั้งจาก PyPI ด้วย `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: รันจาก repository ที่ clone มา
+### วิธีที่ C: รันจาก repository ที่ clone มา
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### ครั้งแรกแอปจะสร้างไฟล์ env และบอกว่าต้องกรอกค่าใดบ้าง
 ##### หลังแก้ไฟล์ env แล้ว ให้รันอีกครั้ง:
 ```bash
-# หากคุณทำตามตัวเลือก A หรือ Option B ให้รัน
+# หากคุณทำตามวิธีที่ A หรือ วิธีที่ B ให้รัน
 coding-agent-telegram
 
-# หากคุณทำตามตัวเลือก C ให้รันสิ่งนี้อีกครั้ง
+# หากคุณทำตามวิธีที่ C ให้รันสิ่งนี้อีกครั้ง
 ./startup.sh
 ```
 

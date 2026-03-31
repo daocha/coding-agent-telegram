@@ -114,13 +114,13 @@ Openclaw 提供非常完整的能力，也內建了名為 Pi-Agent 的 agent loo
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B：使用 `pip` 從 PyPI 安裝
+### 方案 B：使用 `pip` 從 PyPI 安裝
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C：從 clone 下來的 repository 執行
+### 方案 C：從 clone 下來的 repository 執行
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram

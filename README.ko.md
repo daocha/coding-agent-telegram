@@ -109,18 +109,18 @@ Openclaw 는 매우 다양한 기능을 제공하고 Pi-Agent 라는 통합 agen
 
 ## 🚀 빠른 시작
 
-### Option A: 한 줄 부트스트랩 스크립트
+### 방법 A: 한 줄 부트스트랩 스크립트
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: `pip`으로 PyPI 설치
+### 방법 B: `pip`으로 PyPI 설치
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: 저장소를 clone해서 실행
+### 방법 C: 저장소를 clone해서 실행
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### 첫 실행 시 앱이 env 파일을 만들고 어떤 항목을 채워야 하는지 알려줍니다.
 ##### env 파일을 수정한 뒤 다시 실행하세요:
 ```bash
-# Option A 또는 Option B를 따르는 경우 다음을 실행
+# 방법 A 또는 방법 B를 따르는 경우 다음을 실행
 coding-agent-telegram
 
-# Option C를 따르는 경우 이것을 다시 실행
+# 방법 C를 따르는 경우 이것을 다시 실행
 ./startup.sh
 ```
 

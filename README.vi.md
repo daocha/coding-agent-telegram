@@ -109,18 +109,18 @@ Openclaw cung cấp bộ tính năng rất đầy đủ và đã có sẵn agent
 
 ## 🚀 Bắt đầu nhanh
 
-### Option A: Script bootstrap một dòng
+### Cách A: Script bootstrap một dòng
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Cài từ PyPI bằng `pip`
+### Cách B: Cài từ PyPI bằng `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Chạy từ repository đã clone
+### Cách C: Chạy từ repository đã clone
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram

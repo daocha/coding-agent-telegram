@@ -109,18 +109,18 @@ Openclaw bietet dir sehr umfassende Funktionen und hat mit Pi-Agent bereits eine
 
 ## 🚀 Schnellstart
 
-### Option A: Einzeiliges Bootstrap-Skript
+### Variante A: Einzeiliges Bootstrap-Skript
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Installation über PyPI mit `pip`
+### Variante B: Installation über PyPI mit `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Aus einem geklonten Repository starten
+### Variante C: Aus einem geklonten Repository starten
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### Beim ersten Start legt die App die Env-Datei an und sagt dir, welche Felder du ausfüllen musst.
 ##### Nach dem Bearbeiten der Env-Datei starte erneut:
 ```bash
-# wenn du Option A oder Option B verwendest, dann ausführen
+# wenn du Variante A oder Variante B verwendest, dann ausführen
 coding-agent-telegram
 
-# wenn du Option C verwendest, dann dies erneut ausführen
+# wenn du Variante C verwendest, dann dies erneut ausführen
 ./startup.sh
 ```
 

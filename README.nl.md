@@ -109,18 +109,18 @@ Openclaw biedt zeer uitgebreide mogelijkheden en heeft al een geïntegreerde age
 
 ## 🚀 Snel starten
 
-### Option A: Bootstrapscript in één regel
+### Optie A: Bootstrapscript in één regel
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Installeren vanaf PyPI met `pip`
+### Optie B: Installeren vanaf PyPI met `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Uitvoeren vanuit een gekloonde repository
+### Optie C: Uitvoeren vanuit een gekloonde repository
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
