@@ -38,7 +38,7 @@
   - ✅ Gebruik Telegram om Codex / Copilot CLI te bedienen
   - ✅ Antwoorden en gewijzigde bestanden eenvoudig beoordelen in codeblokken
   - ✅ Vervolgvragen kunnen in de wachtrij terwijl de agent werkt
-  - ✅ Ondersteunt tekst- en afbeeldingsinvoer
+  - ✅ Accepteert ✏️ tekst-, 🌄 afbeelding- en 🎙️ spraakberichten
 
    ## 🔁 Naadloos wisselen tussen apparaten en sessies
 
@@ -49,7 +49,7 @@
 
    ## 🛠️ Typische lokale flow
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # of voer ./startup.sh uit
    ```
 
    ##### In Telegram:
@@ -99,6 +99,7 @@ Voordat je de server start, zorg dat je hebt:
 - Codex CLI en/of Copilot CLI lokaal geïnstalleerd
 - [Codex CLI installatie](https://developers.openai.com/codex/cli)
 - [Copilot CLI installatie](https://github.com/features/copilot/cli)
+- [Optioneel] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -108,34 +109,60 @@ Openclaw biedt zeer uitgebreide mogelijkheden en heeft al een geïntegreerde age
 
 ## 🚀 Snel starten
 
-### Option A: Bootstrapscript in één regel
+### Optie A: Bootstrapscript in één regel
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Installeren vanaf PyPI met `pip`
+### Optie B: Installeren vanaf PyPI met `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Uitvoeren vanuit een gekloonde repository
+### Optie C: Uitvoeren vanuit een gekloonde repository
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Botserver starten
+### 🌐 Botserver starten
 ##### Bij de eerste start maakt de app het env-bestand aan en vertelt welke velden je moet invullen.
 ##### Start na het bijwerken van het env-bestand opnieuw:
 ```bash
-# if you follow Option A or Option B, then run
+# als je optie A of optie B volgt, voer dan uit
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# als je optie C volgt, voer dit dan opnieuw uit
 ./startup.sh
 ```
+
+## 🎙️ [Optioneel] Spraak-naar-tekstfunctie: lokale OpenAI-Whisper-vereisten voorbereiden
+
+Hiermee schakel je optionele lokale Whisper-gebaseerde spraak-naar-tekst in voor Telegram-spraaknotities. Audiobestanden zijn beperkt tot maximaal `20 MB`.
+
+```bash
+# als je via pip hebt geïnstalleerd
+coding-agent-telegram-stt-install
+
+# als je vanuit een gekloonde repository werkt
+./install-stt.sh
+```
+
+Aanbevolen env-instellingen:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Opmerkingen:
+
+- Whisper downloadt het gekozen model automatisch bij het eerste gebruik naar `~/.cache/whisper`.
+- Als je `OPENAI_WHISPER_MODEL=turbo` kiest, is de kans groter dat de eerste spraaktranscriptie de time-out raakt terwijl `large-v3-turbo.pt` nog wordt gedownload.
+- Nadat een spraakbericht is getranscribeerd, stuurt de bot eerst het herkende transcript terug naar Telegram en daarna pas naar de agent. Dat helpt om herkenningsfouten te controleren.
 
 ## 🔑 Telegram-instelling
 
@@ -171,59 +198,66 @@ Opmerkingen:
 
 ## 📨 Ondersteunde berichttypen
 
-## 🤖 Telegram-commando’s
+De bot accepteert momenteel:
+
+- tekstberichten
+- foto’s
+- spraakberichten en audiobestanden wanneer `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` is ingesteld en de lokale Whisper-vereisten zijn geïnstalleerd
+- Codex en Copilot ondersteunen momenteel alleen tekst en afbeeldingen, geen video
+
+## 🤖 Telegram-commando's
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
-    <td>Kies de provider voor nieuwe sessies. De keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
+    <td width="332"><code>/provider</code></td>
+    <td>Kies de aanbieder voor nieuwe sessies. Die keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Stel de huidige projectmap in. Bestaat de map niet, dan maakt de app die aan en markeert hem trusted. Bestaat hij al maar is hij nog untrusted, dan vraagt de app expliciet om trust.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>Bereid een branch voor of wissel ernaar voor het huidige project. Als de branch al bestaat, behandelt de bot die als source candidate. Anders gebruikt hij de standaard-branch van de repository als source candidate.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Bereid een branch voor of wissel ernaar met `<origin_branch>` als source candidate. Voor beide vormen biedt de bot daarna alleen de source choices aan die echt bestaan: `local/<branch>` en `origin/<branch>`. Als er maar één bestaat, zie je alleen die. Als geen van beide bestaat, meldt de bot dat de branch-source ontbreekt.</td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>Bereid een branch voor of wissel ernaar met <code>&lt;origin_branch&gt;</code> als source candidate. Voor beide vormen biedt de bot daarna alleen de source choices aan die echt bestaan: <code>local/&lt;branch&gt;</code> en <code>origin/&lt;branch&gt;</code>. Als er maar één bestaat, zie je alleen die. Als geen van beide bestaat, meldt de bot dat de branch-source ontbreekt.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>Toon de actieve sessie voor de huidige bot en chat.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte session ID. Als provider, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
+    <td width="332"><code>/new [session_name]</code></td>
+    <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte sessie-ID. Als aanbieder, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>Toon de nieuwste sessies, nieuwste eerst. De lijst bevat zowel bot-managed sessies als lokale Codex/Copilot CLI-sessies voor het huidige project.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>Toon een andere pagina met opgeslagen sessies.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>Schakel naar een specifieke sessie via ID. Kies je een lokale CLI-sessie, dan importeert de bot die en gaat daar verder.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
-    <td>Maak vanuit de actieve session een nieuwe compacte session en schakel daarheen over.</td>
+    <td width="332"><code>/compact</code></td>
+    <td>Maak vanuit de actieve sessie een nieuwe compacte sessie en schakel daarheen over.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Voer gevalideerde `git commit`-gerelateerde commando’s uit binnen het project van de actieve sessie. Alleen beschikbaar als `ENABLE_COMMIT_COMMAND=true`. Muterende Git-commando’s vereisen een trusted project.</td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
+    <td>Voer gevalideerde <code>git commit</code>-gerelateerde commando’s uit binnen het project van de actieve sessie. Alleen beschikbaar als <code>ENABLE_COMMIT_COMMAND=true</code>. Muterende Git-commando’s vereisen een trusted project.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
-    <td>Push `origin <branch>` voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
+    <td width="332"><code>/push</code></td>
+    <td>Push <code>origin &lt;branch&gt;</code> voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>Breek de huidige agent-run voor het huidige project af. Als er vragen in de wachtrij staan, vraagt de bot of die verder verwerkt moeten worden.</td>
   </tr>
 </table>
@@ -251,15 +285,15 @@ Opmerkingen:
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>Bovenliggende map die je projectmappen bevat.</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>Door komma's gescheiden Telegram bot tokens.</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>Door komma's gescheiden Telegram chat-ID's van privéchats die de bot mogen gebruiken.</td>
   </tr>
 </table>
@@ -268,68 +302,88 @@ Opmerkingen:
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>UI-locale voor gedeelde botmeldingen en commandobeschrijvingen. Ondersteunde waarden: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Commando om Codex CLI te starten. Standaard: <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Commando om Copilot CLI te starten. Standaard: <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>Optionele Codex-modeloverride. Laat leeg om het standaardmodel van Codex CLI te gebruiken. Voorbeeld: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI-modellen</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Optionele Copilot-modeloverride. Laat leeg om het standaardmodel van Copilot CLI te gebruiken. Voorbeelden: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">Ondersteunde GitHub Copilot-modellen</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Goedkeuringsmodus die aan Codex wordt doorgegeven. Standaard: <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Sandboxmodus die aan Codex wordt doorgegeven. Standaard: <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Als dit is ingeschakeld, worden trusted-repo-checks van Codex altijd overgeslagen.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Schakelt het Telegram-commando <code>/commit</code> in. Standaard: <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Harde timeout voor één agent-run. Standaard: <code>0</code> (uitgeschakeld).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Maximale bestandsgrootte die de bot als tekst leest voor de before/after-snapshot voor per-run diffs. Standaard: <code>200000</code>.</td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td>Maximale bestandsgrootte die de bot als tekst leest voor de voor/na-momentopname voor per-run diffs. Standaard: <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>Maximale berichtgrootte voordat de app antwoorden splitst. Standaard: <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>Verberg diffs voor gevoelige bestanden. Standaard: <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>Maskeer tokens, sleutels, <code>.env</code>-waarden, certificaten en vergelijkbare geheime uitvoer voordat die naar Telegram wordt gestuurd. Standaard: <code>true</code> (sterk aanbevolen).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>Forceer dat overeenkomende paden in diffs worden opgenomen. Voorbeeld: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
     <td>Voeg extra diff-exclusies toe boven op de pakketstandaard. Voorbeeld: <code>.*,personal/*,sensitive*.txt</code> Opmerking: <code>.*</code> matcht verborgen paden, inclusief bestanden in verborgen mappen.</td>
+  </tr>
+</table>
+
+
+
+
+<h3>Spraak naar tekst</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Standaard: <code>false</code>. Als dit op <code>true</code> staat, worden spraakberichten en audiobestanden herkend. Het systeem controleert de vereiste binaries of bibliotheken en vraagt de gebruiker om ze te installeren als ze ontbreken.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Model voor Whisper STT. Standaard: <code>base</code><br />Beschikbare modellen: <code>tiny</code> ongeveer <code>72 MB</code>, <code>base</code> ongeveer <code>139 MB</code>, <code>large-v3-turbo</code> ongeveer <code>1.5 GB</code><br />Modellen worden automatisch gedownload bij je eerste spraakbericht. Aanbevolen: <code>base</code> voor algemeen gebruik. Als je betere nauwkeurigheid en kwaliteit wilt, kun je <code>turbo</code> proberen.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Standaard: <code>120</code>. Time-out voor het STT-proces. Meestal is de verwerking snel genoeg. Maar als je <code>turbo</code> kiest, kan het eerste spraakbericht door het downloaden van het model de time-out overschrijden, afhankelijk van je internetsnelheid.</td>
   </tr>
 </table>
 
@@ -338,15 +392,15 @@ Opmerkingen:
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Hauptdatei für den Session-Status.</td>
+    <td>Hoofdbestand voor de sessiestatus.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Back-upbestand voor de status.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log-Verzeichnis.</td>
+    <td>Logmap.</td>
   </tr>
 </table>
 
@@ -384,7 +438,7 @@ Voorbeeld:
 De actieve sessie is ook gekoppeld aan:
 
 - projectmap
-- provider
+- aanbieder
 - branch-naam wanneer beschikbaar
 
 <details>
@@ -393,17 +447,17 @@ De actieve sessie is ook gekoppeld aan:
 - sessienaam
 - projectmap
 - branch-naam
-- provider
+- aanbieder
 - tijdstempels
 - actieve sessiekeuze voor die bot/chat-scope
 </details>
 
-### 🔓 Workspace concurrency lock
+### 🔓 Workspace-vergrendeling voor gelijktijdigheid
 
 Er kan maar één agent-run tegelijk actief zijn per **projectmap**, ongeacht welke chat of welke Telegram-bot die heeft gestart.
 
-- **project is busy**: er draait al een agent-run in die workspace
-- **agent is busy**: die ene run verwerkt de huidige aanvraag nog
+- **project is bezig**: er draait al een agent-run in die workspace
+- **agent is bezig**: die ene run verwerkt de huidige aanvraag nog
 
 De bot dwingt dit af zodat twee agents niet tegelijk naar dezelfde workspace schrijven. Dat verkleint de kans op conflicterende wijzigingen en datacorruptie.
 
@@ -425,23 +479,23 @@ Wordt de huidige run afgebroken terwijl er nog vragen wachten, dan gaat de bot n
 
 ## ⚠️ Diff (bestandswijzigingen)
 
-_Tijdens elke agent-run maakt de bot ook een lichte before/after-snapshot van het project, zodat gewijzigde bestanden kunnen worden samengevat en diffs naar Telegram kunnen worden gestuurd. Deze snapshot wordt door de bot-app zelf gemaakt, niet door Codex of Copilot._
+_Tijdens elke agent-run maakt de bot ook een lichte voor/na-momentopname van het project, zodat gewijzigde bestanden kunnen worden samengevat en diffs naar Telegram kunnen worden gestuurd. Deze momentopname wordt door de bot-app zelf gemaakt, niet door Codex of Copilot._
 
 **Snapshot-opmerkingen:**
 
 - de app loopt de projectmap door vóór en na de run
-- voor normale tekstbestanden heeft de per-run snapshot-diff voorrang op een git-head-diff
-- gebruikelijke dependency-, cache- en runtime-mappen worden ook overgeslagen
+- voor normale tekstbestanden heeft de per-run momentopnameverschil voorrang op een git-head-diff
+- gebruikelijke afhankelijkheids-, cache- en runtime-mappen worden ook overgeslagen
 - binaire bestanden en bestanden groter dan `SNAPSHOT_TEXT_FILE_MAX_BYTES` worden niet als tekst geladen
 - bij erg grote projecten kan deze extra scan merkbare I/O- en geheugenbelasting toevoegen
-- als de snapshot een bestand niet als tekst kan weergeven, valt de app waar mogelijk terug op `git diff`
+- als de momentopname een bestand niet als tekst kan weergeven, valt de app waar mogelijk terug op `git diff`
 - voor grote of niet-tekstbestanden kan de diff alsnog worden weggelaten en vervangen door een kort bericht
 
-De snapshot-uitsluitingsregels staan in package resources:
+De momentopname-uitsluitingsregels staan in pakketresources:
 
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
+- `src/coding_agent_telegram/resources/momentopname_excluded_dir_names.txt`
+- `src/coding_agent_telegram/resources/momentopname_excluded_dir_globs.txt`
+- `src/coding_agent_telegram/resources/momentopname_excluded_file_globs.txt`
 
 Je kunt deze standaardwaarden in het env-bestand overschrijven zonder het geïnstalleerde package te wijzigen:
 
@@ -466,8 +520,8 @@ De bot behandelt project en branch als één geheel.
 
 Wanneer je een branch maakt of wisselt, begeleidt de bot je expliciet bij de bron:
 
-- `local/<branch>` betekent de lokale branch als bron gebruiken
-- `origin/<branch>` betekent eerst vanaf de remote branch verversen en daarna wisselen
+- <code>local/&lt;branch&gt;</code> betekent de lokale branch als bron gebruiken
+- <code>origin/&lt;branch&gt;</code> betekent eerst vanaf de remote branch verversen en daarna wisselen
 
 Als de bot ziet dat de in de sessie opgeslagen branch niet overeenkomt met de huidige repository-branch, gaat hij niet blind verder. Hij vraagt welke branch gebruikt moet worden:
 
@@ -485,7 +539,7 @@ Als je voorkeursbron-branch ontbreekt, biedt de bot fallback-bronnen aan op basi
 - `/commit` kan volledig worden uitgeschakeld met `ENABLE_COMMIT_COMMAND`
 - muterende `/commit`-bewerkingen zijn alleen toegestaan voor trusted projecten
 
-## 🪵 Logs
+## 🪵 Logboeken
 
 Logs worden **zowel naar stdout als naar een roterend logbestand** geschreven onder:
 
@@ -521,11 +575,11 @@ Logs worden **zowel naar stdout als naar een roterend logbestand** geschreven on
   canonieke omgevingssjabloon gebruikt door zowel repo-start als package-installaties
 
 - `pyproject.toml`
-  packaging- en dependencyconfiguratie
+  verpakkings- en dependencyconfiguratie
 
-## 📦 Release-versiebeheer
+## 📦 Uitgaveversiebeheer
 
-Packageversies worden afgeleid van Git-tags.
+Pakketversies worden afgeleid van Git-tags.
 
 - TestPyPI/testen: `v2026.3.26.dev1`
 - PyPI-prerelease: `v2026.3.26rc1`

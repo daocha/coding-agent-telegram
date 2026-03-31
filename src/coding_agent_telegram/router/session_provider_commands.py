@@ -125,4 +125,4 @@ class SessionProviderCommandMixin:
                     "use_session_id_as_name": True,
                 },
             )
-        await self._continue_pending_action(update, context)
+        await self._continue_pending_action(update, context, drain_queue_after_completion=True)

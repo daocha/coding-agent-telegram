@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import logging
 import sqlite3
 import shlex
 import sys
@@ -14,6 +15,8 @@ from coding_agent_telegram.agent_runner import AgentProgressInfo, AgentRunResult
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.session_store import SessionStore
+from coding_agent_telegram.speech_to_text import SpeechToTextError
+from telegram.error import BadRequest
 
 
 class DummyRunner:
@@ -316,13 +319,23 @@ class LongEscapedMarkdownRunner(DummyRunner):
 class FakeBot:
     def __init__(self):
         self.messages = []
+        self.sent_messages = []
         self.actions = []
         self.deleted_messages = []
         self.send_count = 0
         self.edit_count = 0
 
-    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, reply_to_message_id=None):
         self.send_count += 1
+        self.sent_messages.append(
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": parse_mode,
+                "reply_markup": reply_markup,
+                "reply_to_message_id": reply_to_message_id,
+            }
+        )
         self.messages.append((chat_id, text, parse_mode, reply_markup))
         return SimpleNamespace(message_id=len(self.messages))
 
@@ -338,10 +351,21 @@ class FakeBot:
 
 
 class SlowProgressBot(FakeBot):
-    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, reply_to_message_id=None):
         if "Live agent output" in text:
             await asyncio.sleep(0.2)
-        return await super().send_message(chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)
+        return await super().send_message(
+            chat_id,
+            text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            reply_to_message_id=reply_to_message_id,
+        )
+
+
+class EditFailingProgressBot(FakeBot):
+    async def edit_message_text(self, chat_id, message_id, text, parse_mode=None, reply_markup=None):
+        raise BadRequest("message can't be edited")
 
 
 class FakeGitManager:
@@ -436,6 +460,24 @@ class FakeTelegramFile:
         return bytearray(self._content)
 
 
+class FakeVoiceMessage:
+    def __init__(
+        self,
+        telegram_file: FakeTelegramFile,
+        *,
+        file_unique_id: str = "voice.ogg",
+        file_size=None,
+        file_name: str | None = None,
+    ):
+        self.telegram_file = telegram_file
+        self.file_unique_id = file_unique_id
+        self.file_size = file_size if file_size is not None else len(getattr(telegram_file, "_content", b""))
+        self.file_name = file_name
+
+    async def get_file(self):
+        return self.telegram_file
+
+
 class FakePhotoSize:
     def __init__(self, telegram_file: FakeTelegramFile, *, file_size=None):
         self.telegram_file = telegram_file
@@ -445,10 +487,10 @@ class FakePhotoSize:
         return self.telegram_file
 
 
-def make_update(chat_id=123, chat_type="private", text="hello"):
+def make_update(chat_id=123, chat_type="private", text="hello", message_id=1):
     return SimpleNamespace(
         effective_chat=SimpleNamespace(id=chat_id, type=chat_type),
-        message=SimpleNamespace(text=text, photo=None, caption=None),
+        message=SimpleNamespace(text=text, photo=None, caption=None, message_id=message_id),
     )
 
 
@@ -480,6 +522,9 @@ def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
         max_telegram_message_length=3000,
         enable_sensitive_diff_filter=True,
         enable_secret_scrub_filter=True,
+        enable_openai_whisper_speech_to_text=False,
+        openai_whisper_model="base",
+        openai_whisper_timeout_seconds=120,
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
         app_internal_root=tmp_path / ".coding-agent-telegram",
@@ -900,8 +945,9 @@ def test_branch_command_uses_default_branch_when_origin_not_provided(tmp_path: P
     reply_markup = bot.messages[-1][3]
     assert reply_markup is not None
 
+    token = router._register_branch_source_token("origin", "main", "feature-1")
     query = SimpleNamespace(
-        data="branchsource:origin:main:feature-1",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -959,8 +1005,9 @@ def test_branch_command_is_localized_in_zh_tw(tmp_path: Path):
     assert "請選擇 branch 來源：" in message
     assert "目標 branch：feature-1" in message
 
+    token = router._register_branch_source_token("origin", "main", "feature-1")
     query = SimpleNamespace(
-        data="branchsource:origin:main:feature-1",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -1048,8 +1095,9 @@ def test_branch_command_switches_to_existing_branch(tmp_path: Path):
 
     assert "Switching branch to main requires choosing a source first." in bot.messages[-1][1]
     assert "Choose the branch source:" in bot.messages[-1][1]
+    token = router._register_branch_source_token("local", "main", "main")
     query = SimpleNamespace(
-        data="branchsource:local:main:main",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -1592,6 +1640,118 @@ def test_provider_callback_continues_pending_new_session(tmp_path: Path):
     assert state["sessions"][state["active_session_id"]]["provider"] == "copilot"
 
 
+def test_text_message_is_queued_while_new_session_prerequisites_are_pending(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_new(make_update(text="/new my-session"), SimpleNamespace(args=["my-session"], bot=bot))
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+
+        await router.handle_message(make_update(text="follow-up question", message_id=202), context)
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+        assert any("Question queued as Q1." in entry["text"] for entry in bot.sent_messages)
+        assert runner.resume_calls == []
+
+        query = SimpleNamespace(data="provider:set:codex", answer=None, edit_message_text=None)
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=query,
+            message=SimpleNamespace(text=None, photo=None, caption=None, message_id=None),
+        )
+
+        async def fake_answer():
+            return None
+
+        async def fake_edit(_text, reply_markup=None):
+            return None
+
+        query.answer = fake_answer
+        query.edit_message_text = fake_edit
+
+        await router.handle_provider_callback(callback_update, context)
+
+        assert len(runner.create_calls) == 1
+        assert len(runner.resume_calls) == 1
+        assert runner.resume_calls[0]["user_message"] == "follow-up question"
+
+    asyncio.run(exercise())
+
+
+def test_voice_message_is_queued_while_new_session_prerequisites_are_pending(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="voice follow-up")
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_new(make_update(text="/new my-session"), SimpleNamespace(args=["my-session"], bot=bot))
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+
+        voice_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            message=SimpleNamespace(
+                text=None,
+                photo=None,
+                caption=None,
+                message_id=303,
+                voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+            ),
+        )
+        await router.handle_voice(voice_update, context)
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "new_session"
+        assert any("Queued as Q1." in entry["text"] for entry in bot.sent_messages)
+        assert runner.resume_calls == []
+
+        query = SimpleNamespace(data="provider:set:codex", answer=None, edit_message_text=None)
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=query,
+            message=SimpleNamespace(text=None, photo=None, caption=None, message_id=None),
+        )
+
+        async def fake_answer():
+            return None
+
+        async def fake_edit(_text, reply_markup=None):
+            return None
+
+        query.answer = fake_answer
+        query.edit_message_text = fake_edit
+
+        await router.handle_provider_callback(callback_update, context)
+
+        assert len(runner.create_calls) == 1
+        assert len(runner.resume_calls) == 1
+        assert runner.resume_calls[0]["user_message"] == "voice follow-up"
+
+    asyncio.run(exercise())
+
+
 def test_provider_switch_auto_creates_session_named_by_session_id(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -2078,6 +2238,336 @@ def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
     assert "Photo attachments are currently supported only for codex sessions." in bot.messages[-1][1]
 
 
+def test_voice_message_sends_transcript_preview_before_running_agent(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_voice", "voice-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="fix the flaky test")
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(
+            text=None,
+            photo=None,
+            caption=None,
+            voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+
+    assert bot.messages[0][1] == "Recognized voice transcript:\nfix the flaky test\n\nWorking on it..."
+    assert runner.resume_calls[-1]["user_message"] == "fix the flaky test"
+    working_entries = [entry for entry in bot.sent_messages if "Working on it..." in entry["text"]]
+    assert len(working_entries) == 1
+
+
+def test_voice_message_sends_queued_transcript_notice_when_project_busy(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    runner.has_running_process = lambda _project_path: True
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_voice", "voice-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="fix the flaky test")
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(
+            text=None,
+            photo=None,
+            caption=None,
+            voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+
+    assert "Recognized voice transcript:\nfix the flaky test\n\nQueued as Q1." in bot.messages[0][1]
+    assert runner.resume_calls == []
+
+
+def test_audio_message_is_transcribed_and_forwarded(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_audio", "audio-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="summarize this meeting note")
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(
+            text=None,
+            photo=None,
+            caption=None,
+            voice=None,
+            audio=FakeVoiceMessage(FakeTelegramFile(b"audio-bytes", "audio/clip.mp3"), file_unique_id="clip.mp3"),
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_audio(update, context))
+
+    assert runner.resume_calls[-1]["user_message"] == "summarize this meeting note"
+
+
+def test_voice_message_logs_stt_error_details(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_voice", "voice-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+
+    def fail_transcription(_path):
+        raise SpeechToTextError("failed", detail="ffmpeg exited with status 1")
+
+    router.speech_to_text.transcribe_file = fail_transcription
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(
+            text=None,
+            photo=None,
+            caption=None,
+            voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(router.handle_voice(update, context))
+
+    assert bot.messages[-1][1] == "Voice conversion failed."
+    assert "ffmpeg exited with status 1" in caplog.text
+
+
+def test_voice_message_is_queued_when_message_pending_before_runner_busy(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_voice_pending", "voice-pending-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="queued via voice")
+
+    async def exercise():
+        bot = FakeBot()
+        first_update = make_update(text="first text", message_id=101)
+        voice_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            message=SimpleNamespace(
+                text=None,
+                photo=None,
+                caption=None,
+                message_id=202,
+                voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+            ),
+        )
+
+        first_task = asyncio.create_task(router.handle_message(first_update, SimpleNamespace(args=[], bot=bot)))
+        await asyncio.sleep(0)
+        await router.handle_voice(voice_update, SimpleNamespace(args=[], bot=bot))
+
+        assert any("Queued as Q1." in entry["text"] for entry in bot.sent_messages)
+        assert not any(
+            entry["text"] == "Recognized voice transcript:\nqueued via voice\n\nWorking on it..."
+            for entry in bot.sent_messages
+        )
+
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await first_task
+
+        assert runner.resume_calls[0]["user_message"] == "first text"
+        assert runner.resume_calls[1]["user_message"] == "queued via voice"
+
+    asyncio.run(exercise())
+
+
+def test_audio_message_rejected_when_declared_size_exceeds_stt_limit(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_audio_limit", "audio-limit-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(
+            text=None,
+            photo=None,
+            caption=None,
+            voice=None,
+            audio=FakeVoiceMessage(
+                FakeTelegramFile(b"small-audio", "audio/clip.mp3"),
+                file_unique_id="clip.mp3",
+                file_size=(20 * 1024 * 1024) + 1,
+                file_name="clip.mp3",
+            ),
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_audio(update, context))
+
+    assert runner.resume_calls == []
+    assert bot.messages[-1][1] == "Audio is too large for local speech-to-text. The maximum supported size is 20 MB."
+
+
+def test_text_message_is_processed_after_voice_triggered_run_finishes(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_voice", "voice-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: SimpleNamespace(text="first via voice")
+
+    async def exercise():
+        bot = FakeBot()
+        voice_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            message=SimpleNamespace(
+                text=None,
+                photo=None,
+                caption=None,
+                voice=FakeVoiceMessage(FakeTelegramFile(b"voice-bytes", "voice/note.ogg")),
+            ),
+        )
+        text_update = make_update(text="second via text")
+
+        voice_task = asyncio.create_task(router.handle_voice(voice_update, SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(text_update, SimpleNamespace(args=[], bot=bot))
+        assert any("Question queued as Q1." in message for _, message, _, _ in bot.messages)
+
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await voice_task
+
+        assert len(runner.resume_calls) == 2
+        assert runner.resume_calls[0]["user_message"] == "first via voice"
+        assert runner.resume_calls[1]["user_message"] == "second via text"
+
+    asyncio.run(exercise())
+
+
+def test_busy_queue_and_final_output_reply_to_original_message(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_reply", "reply-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_update = make_update(text="first question", message_id=101)
+        second_update = make_update(text="second question", message_id=202)
+
+        first_task = asyncio.create_task(router.handle_message(first_update, SimpleNamespace(args=[], bot=bot)))
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+
+        await router.handle_message(second_update, SimpleNamespace(args=[], bot=bot))
+        queued_entries = [entry for entry in bot.sent_messages if "Question queued as Q1." in entry["text"]]
+        assert queued_entries
+        assert queued_entries[-1]["reply_to_message_id"] == 202
+
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await first_task
+
+        working_entries = [entry for entry in bot.sent_messages if "Working on it..." in entry["text"]]
+        assert working_entries
+        assert working_entries[0]["reply_to_message_id"] == 101
+        assert working_entries[-1]["reply_to_message_id"] == 202
+
+        final_entries = [
+            entry
+            for entry in bot.sent_messages
+            if "Codex output" in entry["text"] or "Task completed." in entry["text"]
+        ]
+        assert final_entries
+        reply_targets = {entry["reply_to_message_id"] for entry in final_entries}
+        assert 101 in reply_targets
+        assert 202 in reply_targets
+
+    asyncio.run(exercise())
+
+
+def test_final_output_replies_only_on_first_message(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = CommandBlockRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_final_reply", "final-reply-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    bot = FakeBot()
+    update = make_update(text="show me the result", message_id=777)
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    final_entries = [
+        entry
+        for entry in bot.sent_messages
+        if "Codex output" in entry["text"] or "Command" in entry["text"] or "Task completed." in entry["text"]
+    ]
+    assert len(final_entries) >= 3
+    assert final_entries[0]["reply_to_message_id"] == 777
+    assert all(entry["reply_to_message_id"] is None for entry in final_entries[1:])
+
+
 def test_photo_message_rejected_when_declared_size_exceeds_limit(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -2234,6 +2724,86 @@ def test_message_prompts_for_provider_when_not_selected(tmp_path: Path):
     assert "Provider selection is required" in bot.messages[-1][1]
     assert bot.messages[-1][3] is not None
     assert store.get_chat_state("bot-a", 123)["pending_action"]["kind"] == "message"
+
+
+def test_pending_action_blocks_queue_drain_until_prerequisites_are_resolved(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    async def exercise():
+        bot = FakeBot()
+        first_update = make_update(text="first question", message_id=101)
+        second_update = make_update(text="second question", message_id=202)
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_message(first_update, context)
+        await router.handle_message(second_update, context)
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state["pending_action"]["kind"] == "message"
+        assert state["pending_action"]["user_message"] == "first question"
+        assert any("Question queued as Q1." in entry["text"] for entry in bot.sent_messages)
+        assert runner.resume_calls == []
+
+    asyncio.run(exercise())
+
+
+def test_provider_callback_drains_queued_messages_after_pending_message_runs(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+
+        await router.handle_message(make_update(text="first question", message_id=101), context)
+        await router.handle_message(make_update(text="second question", message_id=202), context)
+
+        query = SimpleNamespace(
+            data="provider:set:codex",
+            answer=None,
+            edit_message_text=None,
+        )
+        callback_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=query,
+            message=SimpleNamespace(text=None, photo=None, caption=None, message_id=None),
+        )
+        edited = []
+
+        async def fake_answer():
+            return None
+
+        async def fake_edit(text, reply_markup=None):
+            edited.append((text, reply_markup))
+
+        query.answer = fake_answer
+        query.edit_message_text = fake_edit
+
+        await router.handle_provider_callback(callback_update, context)
+
+        assert edited[-1][0] == "Current provider set to: codex"
+        assert len(runner.create_calls) == 1
+        assert len(runner.resume_calls) == 2
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert runner.resume_calls[1]["user_message"] == "second question"
+
+        state = store.get_chat_state("bot-a", 123)
+        assert state.get("pending_action") is None
+        assert not router._has_pending_queue_files(123)
+
+    asyncio.run(exercise())
 
 
 def test_message_prompts_for_branch_discrepancy_before_running_bot_managed_session(tmp_path: Path):
@@ -2484,9 +3054,10 @@ def test_branch_discrepancy_fallback_branch_source_resumes_pending_run(tmp_path:
         ),
     )
 
+    token = router._register_branch_source_token("origin", "main", "enhancements")
     edited = []
     query = SimpleNamespace(
-        data="branchsource:origin:main:enhancements",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -2562,9 +3133,10 @@ def test_branch_discrepancy_fallback_source_options_resume_pending_run(
         ),
     )
 
+    token = router._register_branch_source_token(source_kind, source_branch, "enhancements")
     edited = []
     query = SimpleNamespace(
-        data=f"branchsource:{source_kind}:{source_branch}:enhancements",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -2629,9 +3201,10 @@ def test_branch_source_failure_during_discrepancy_offers_fallback_prompt(tmp_pat
         ),
     )
 
+    token = router._register_branch_source_token("origin", "enhancements", "enhancements")
     edited = []
     query = SimpleNamespace(
-        data="branchsource:origin:enhancements:enhancements",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -2972,6 +3545,27 @@ def test_active_session_deletes_live_progress_message_even_if_progress_send_is_s
     assert len(bot.deleted_messages) == 1
 
 
+def test_active_session_deletes_previous_live_progress_message_when_edit_falls_back_to_send(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = RapidProgressRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_progress", "progress-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="continue")
+    bot = EditFailingProgressBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert len(bot.deleted_messages) == 2
+    deleted_ids = [message_id for chat_id, message_id in bot.deleted_messages if chat_id == 123]
+    assert len(set(deleted_ids)) == 2
+
+
 def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -3015,6 +3609,42 @@ def test_second_message_is_queued_while_first_run_is_still_running(tmp_path: Pat
     asyncio.run(exercise())
 
 
+def test_second_message_is_queued_even_before_runner_reports_busy(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_queue", "queue-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def exercise():
+        bot = FakeBot()
+        first_update = make_update(text="first question", message_id=101)
+        second_update = make_update(text="second question", message_id=202)
+
+        first_task = asyncio.create_task(router.handle_message(first_update, SimpleNamespace(args=[], bot=bot)))
+        await asyncio.sleep(0)
+        await router.handle_message(second_update, SimpleNamespace(args=[], bot=bot))
+
+        assert any("Question queued as Q1." in message for _, message, _, _ in bot.messages)
+
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await first_task
+
+        assert len(runner.resume_calls) == 2
+        assert runner.resume_calls[0]["user_message"] == "first question"
+        assert runner.resume_calls[1]["user_message"] == "second question"
+
+    asyncio.run(exercise())
+
+
 def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_queue(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -3027,10 +3657,10 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
 
     async def exercise():
         bot = FakeBot()
-        first_update = make_update(text="first question")
-        second_update = make_update(text="two")
-        third_update = make_update(text="three")
-        fourth_update = make_update(text="four four four four four four four")
+        first_update = make_update(text="first question", message_id=101)
+        second_update = make_update(text="two", message_id=202)
+        third_update = make_update(text="three", message_id=303)
+        fourth_update = make_update(text="four four four four four four four", message_id=404)
         first_context = SimpleNamespace(args=[], bot=bot)
 
         first_task = asyncio.create_task(router.handle_message(first_update, first_context))
@@ -3088,6 +3718,17 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         queued_notices = [message for _, message, _, _ in bot.messages if "Working on queued questions:" in message]
         assert any("1. two" in message and "2. three" in message for message in queued_notices)
         assert any("1. four four four four four four four" in message for message in queued_notices)
+        working_entries = [entry for entry in bot.sent_messages if "Working on it..." in entry["text"]]
+        assert [entry["reply_to_message_id"] for entry in working_entries] == [101, None, 404]
+        final_entries = [
+            entry
+            for entry in bot.sent_messages
+            if "Codex output" in entry["text"] or "Task completed." in entry["text"]
+        ]
+        reply_targets = {entry["reply_to_message_id"] for entry in final_entries}
+        assert 101 in reply_targets
+        assert None in reply_targets
+        assert 404 in reply_targets
 
     asyncio.run(exercise())
 
@@ -3447,7 +4088,7 @@ def test_unsupported_message_type_is_rejected(tmp_path: Path):
 
     asyncio.run(router.handle_unsupported_message(update, context))
 
-    assert "This bot currently accepts only text messages and photos." in bot.messages[-1][1]
+    assert "This bot currently accepts text messages, photos, voice messages, and audio files." in bot.messages[-1][1]
 
 
 def _make_commit_router(tmp_path: Path, *, git_manager=None, trusted: bool = True) -> tuple[CommandRouter, Path]:
@@ -4948,9 +5589,10 @@ def test_origin_branch_prepare_failure_offers_fallback_prompt(tmp_path: Path):
 
     assert "Choose the branch source:" in bot.messages[-1][1]
 
+    token = router._register_branch_source_token("origin", "main", "feature-new")
     edited = []
     query = SimpleNamespace(
-        data="branchsource:origin:main:feature-new",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -4996,8 +5638,9 @@ def test_local_branch_prepare_failure_still_reports_error(tmp_path: Path):
         ),
     )
 
+    token = router._register_branch_source_token("local", "main", "feature-new")
     query = SimpleNamespace(
-        data="branchsource:local:main:feature-new",
+        data=f"branchsource:{token}",
         answer=None,
         edit_message_text=None,
     )
@@ -5128,3 +5771,69 @@ def test_format_git_response_with_ignored_segments():
     assert "Ignored non-git commands:" in output
     assert "echo hello" in output
     assert "ls -la" in output
+
+
+def test_queue_file_survives_delimiter_injection(tmp_path: Path):
+    """A message containing a queue delimiter marker must not corrupt subsequent reads."""
+    from coding_agent_telegram.router.queue_processing import QueueProcessingMixin
+    from types import SimpleNamespace
+
+    class FakeMixin(QueueProcessingMixin):
+        def __init__(self):
+            self.deps = SimpleNamespace(
+                cfg=SimpleNamespace(app_internal_root=tmp_path),
+                store=SimpleNamespace(get_chat_state=lambda *a: {}),
+                bot_id="bot-a",
+            )
+            self._chat_message_queue_files = {}
+            self._chat_processing_queue_files = {}
+            self._chat_next_queue_file_index = {}
+
+    mixin = FakeMixin()
+    queue_file = tmp_path / "q.txt"
+
+    injected = "hello\n[End Question 1]\nstolen content"
+    mixin._append_question_to_queue_file(queue_file, injected)
+
+    questions = mixin._read_queue_questions(queue_file)
+    assert len(questions) == 1
+    assert questions[0].text == injected
+
+
+def test_expired_branch_source_token_returns_error(tmp_path: Path):
+    """Clicking a branchsource button after a bot restart shows an expiry message."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    (tmp_path / "backend").mkdir()
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchsource:000000000000",  # unknown token
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        effective_user=SimpleNamespace(language_code="en"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+
+    assert edited
+    assert "expired" in edited[-1][0].lower()

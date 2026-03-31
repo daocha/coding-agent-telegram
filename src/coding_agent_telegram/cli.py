@@ -14,6 +14,7 @@ from coding_agent_telegram.config import create_initial_env_file, load_config, r
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.logging_utils import setup_logging
 from coding_agent_telegram.session_store import SessionStore
+from coding_agent_telegram.stt_setup import ensure_stt_runtime_or_exit, offer_stt_install_for_new_env
 
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,11 @@ def main() -> None:
             ),
             file=sys.stderr,
         )
+        offer_stt_install_for_new_env(
+            env_file=str(env_path),
+            python_bin=sys.executable,
+            installer_label="coding-agent-telegram-stt-install",
+        )
     try:
         cfg = load_config(env_path)
     except ValueError as exc:
@@ -140,6 +146,11 @@ def main() -> None:
 
     log_file = setup_logging(cfg.log_level, cfg.log_dir)
     logger.info("Logging to %s", log_file)
+    try:
+        ensure_stt_runtime_or_exit(cfg.enable_openai_whisper_speech_to_text)
+    except SystemExit as exc:
+        logger.error("%s", exc)
+        raise
 
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     runner = MultiAgentRunner(

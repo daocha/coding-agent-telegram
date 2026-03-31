@@ -38,7 +38,7 @@
   - ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
   - ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
   - ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
-  - ✅ Prend en charge le texte et les images
+  - ✅ Accepte les messages ✏️ texte, 🌄 image et 🎙️ vocaux
 
    ## 🔁 Changement fluide entre appareils et sessions
 
@@ -49,7 +49,7 @@
 
    ## 🛠️ Flux local typique
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # ou exécutez ./startup.sh
    ```
 
    ##### Dans Telegram :
@@ -99,6 +99,7 @@ Avant de démarrer le serveur, assurez-vous d’avoir :
 - Codex CLI et/ou Copilot CLI installés localement
 - [Installation Codex CLI](https://developers.openai.com/codex/cli)
 - [Installation Copilot CLI](https://github.com/features/copilot/cli)
+- [Optionnel] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -108,34 +109,60 @@ Openclaw offre des capacités très complètes et intègre déjà une boucle d�
 
 ## 🚀 Démarrage rapide
 
-### Option A : Script bootstrap en une ligne
+### Variante A : Script bootstrap en une ligne
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B : Installation depuis PyPI avec `pip`
+### Variante B : Installation depuis PyPI avec `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C : Exécution depuis un dépôt cloné
+### Variante C : Exécution depuis un dépôt cloné
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Démarrer le serveur du bot
+### 🌐 Démarrer le serveur du bot
 ##### Au premier lancement, l’application crée le fichier env et vous indique quels champs remplir.
 ##### Après avoir mis à jour le fichier env, relancez :
 ```bash
-# if you follow Option A or Option B, then run
+# si vous suivez l’option A ou l’option B, exécutez ensuite
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# si vous suivez l’option C, exécutez ceci de nouveau
 ./startup.sh
 ```
+
+## 🎙️ [Optionnel] Fonction de transcription vocale : préparer les prérequis locaux OpenAI-Whisper
+
+Cela active la transcription locale optionnelle des notes vocales Telegram avec Whisper. Les fichiers audio sont limités à `20 MB` maximum.
+
+```bash
+# si vous avez installé avec pip ou avec l’install.sh en une ligne
+coding-agent-telegram-stt-install
+
+# si vous utilisez un dépôt cloné
+./install-stt.sh
+```
+
+Réglages env recommandés :
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Remarques :
+
+- Whisper télécharge automatiquement le modèle sélectionné lors du premier usage dans `~/.cache/whisper`.
+- Si vous choisissez `OPENAI_WHISPER_MODEL=turbo`, la première transcription vocale a davantage de chances d’atteindre le délai pendant que `large-v3-turbo.pt` est encore en cours de téléchargement.
+- Après transcription d’un message vocal, le bot renvoie d’abord le texte reconnu dans Telegram avant de l’envoyer à l’agent. Cela aide à diagnostiquer les erreurs de reconnaissance.
 
 ## 🔑 Configuration Telegram
 
@@ -171,59 +198,66 @@ Remarques :
 
 ## 📨 Types de messages pris en charge
 
+Le bot accepte actuellement :
+
+- les messages texte
+- les photos
+- les messages vocaux et les fichiers audio quand `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` et que les prérequis locaux de Whisper sont installés
+- Codex et Copilot prennent actuellement en charge uniquement le texte et les images, pas la vidéo
+
 ## 🤖 Commandes Telegram
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
-    <td>Choisir le provider pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
+    <td width="332"><code>/provider</code></td>
+    <td>Choisir le fournisseur pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Définir le dossier de projet courant. Si le dossier n’existe pas, l’app le crée et le marque trusted. S’il existe déjà mais reste untrusted, l’app vous demande une confirmation.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>Préparer ou changer une branch pour le projet courant. Si la branch existe déjà, le bot la traite comme source candidate. Sinon il utilise la branch par défaut du dépôt.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Préparer ou changer une branch en utilisant `<origin_branch>` comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : `local/<branch>` et `origin/<branch>`. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>Préparer ou changer une branch en utilisant <code>&lt;origin_branch&gt;</code> comme source candidate. Pour les deux formes, le bot ne propose ensuite que les sources réellement disponibles : <code>local/&lt;branch&gt;</code> et <code>origin/&lt;branch&gt;</code>. Si une seule existe, seule celle-ci est affichée. Si aucune n’existe, le bot signale que la source de branch est introuvable.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td width="332"><code>/current</code></td>
     <td>Afficher la session active pour le bot et le chat courants.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si provider, projet ou branch manque, le bot vous guide.</td>
+    <td width="332"><code>/new [session_name]</code></td>
+    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise le véritable ID de session. Si fournisseur, projet ou branch manque, le bot vous guide.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td width="332"><code>/switch</code></td>
     <td>Afficher les sessions les plus récentes, de la plus récente à la plus ancienne. La liste inclut les sessions gérées par le bot et les sessions locales Codex/Copilot CLI du projet courant.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
     <td>Afficher une autre page des sessions enregistrées.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
     <td>Basculer vers une session précise via son ID. Si vous choisissez une session CLI locale, le bot l’importe et reprend à partir d’elle.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td width="332"><code>/compact</code></td>
     <td>Créer une nouvelle session compactée à partir de la session active et basculer dessus.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Exécuter des commandes liées à `git commit` validées dans le projet de la session active. Disponible uniquement si `ENABLE_COMMIT_COMMAND=true`. Les commandes Git mutantes exigent un projet trusted.</td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
+    <td>Exécuter des commandes liées à <code>git commit</code> validées dans le projet de la session active. Disponible uniquement si <code>ENABLE_COMMIT_COMMAND=true</code>. Les commandes Git mutantes exigent un projet trusted.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
-    <td>Pousser `origin <branch>` pour la session active courante. Le bot demande une confirmation avant le push.</td>
+    <td width="332"><code>/push</code></td>
+    <td>Pousser <code>origin &lt;branch&gt;</code> pour la session active courante. Le bot demande une confirmation avant le push.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td width="332"><code>/abort</code></td>
     <td>Annuler l’exécution d’agent en cours pour le projet courant. Si des questions attendent dans la file, le bot demande si elles doivent continuer.</td>
   </tr>
 </table>
@@ -251,15 +285,15 @@ Remarques :
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>Dossier parent qui contient vos répertoires de projet.</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>Liste de tokens de bot Telegram séparés par des virgules.</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>Liste d’IDs de chat privés Telegram autorisés, séparés par des virgules.</td>
   </tr>
 </table>
@@ -268,68 +302,88 @@ Remarques :
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>Langue de l’interface pour les messages partagés du bot et les descriptions de commandes. Valeurs prises en charge : <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Commande utilisée pour lancer Codex CLI. Valeur par défaut : <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Commande utilisée pour lancer Copilot CLI. Valeur par défaut : <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>Remplacement optionnel du modèle Codex. Laissez vide pour utiliser le modèle par défaut de Codex CLI. Exemple : <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">Modèles OpenAI Codex/OpenAI</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Remplacement optionnel du modèle Copilot. Laissez vide pour utiliser le modèle par défaut de Copilot CLI. Exemples : <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">Modèles pris en charge par GitHub Copilot</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Mode d’approbation transmis à Codex. Défaut : <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Mode sandbox transmis à Codex. Défaut : <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Si activé, contourne toujours les vérifications de dépôt trusted de Codex.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Active la commande Telegram <code>/commit</code>. Défaut : <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Timeout dur pour une exécution d’agent. Défaut : <code>0</code> (désactivé).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Taille maximale de fichier que le bot lira en texte pour construire le snapshot avant/après des diffs. Défaut : <code>200000</code>.</td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td>Taille maximale de fichier que le bot lira en texte pour construire le instantané avant/après des diffs. Défaut : <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>Taille maximale d’un message avant découpage de la réponse. Défaut : <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
     <td>Masquer les diffs des fichiers sensibles. Défaut : <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>Masquer tokens, clés, valeurs <code>.env</code>, certificats et sorties similaires avant envoi vers Telegram. Défaut : <code>true</code> (fortement recommandé).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>Toujours inclure les chemins correspondants dans les diffs. Exemple : <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Ajouter des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package. Exemple : <code>.*,personal/*,sensitive*.txt</code> Remarque : <code>.*</code> inclut les chemins cachés, y compris les fichiers dans les dossiers cachés.</td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td>Ajouter des exclusions de diff supplémentaires au-dessus des valeurs par défaut du paquet. Exemple : <code>.*,personal/*,sensitive*.txt</code> Remarque : <code>.*</code> inclut les chemins cachés, y compris les fichiers dans les dossiers cachés.</td>
+  </tr>
+</table>
+
+
+
+
+<h3>Reconnaissance vocale</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Valeur par défaut : <code>false</code>. Si activé, la reconnaissance des messages vocaux et des fichiers audio est disponible. Le système vérifie les binaires ou bibliothèques requis et invite l’utilisateur à les installer si nécessaire.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Modèle utilisé pour la STT Whisper. Valeur par défaut : <code>base</code><br />Modèles disponibles : <code>tiny</code> environ <code>72 MB</code>, <code>base</code> environ <code>139 MB</code>, <code>large-v3-turbo</code> environ <code>1.5 GB</code><br />Les modèles sont téléchargés automatiquement lors de votre premier message vocal. Recommandé : <code>base</code> pour un usage général. Si vous souhaitez une meilleure précision et qualité, vous pouvez essayer <code>turbo</code>.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Valeur par défaut : <code>120</code>. Délai d’expiration du processus STT. En général, le traitement est assez rapide. Mais si vous choisissez <code>turbo</code>, le premier message vocal peut dépasser ce délai pendant le téléchargement du modèle selon la vitesse de votre connexion.</td>
   </tr>
 </table>
 
@@ -338,15 +392,15 @@ Remarques :
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Hauptdatei für den Session-Status.</td>
+    <td>Fichier principal de l’état des sessions.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Fichier de sauvegarde de l’état.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log-Verzeichnis.</td>
+    <td>Répertoire des logs.</td>
   </tr>
 </table>
 
@@ -383,27 +437,27 @@ Exemple :
 
 La session active est aussi liée à :
 
-- project folder
-- provider
+- dossier de projet
+- fournisseur
 - nom de branch quand disponible
 
 <details>
 <summary><b>Chaque session stocke :</b></summary>
 
 - nom de session
-- project folder
+- dossier de projet
 - nom de branch
-- provider
+- fournisseur
 - horodatages
 - sélection de session active pour cette portée bot/chat
 </details>
 
 ### 🔓 Verrou de concurrence du workspace
 
-Une seule exécution d'agent peut être active à la fois par **project folder**, quel que soit le chat ou le bot Telegram qui l'a déclenchée.
+Une seule exécution d'agent peut être active à la fois par **dossier de projet**, quel que soit le chat ou le bot Telegram qui l'a déclenchée.
 
-- **project is busy** : un agent est déjà en cours dans ce workspace
-- **agent is busy** : cette exécution unique traite encore la requête courante
+- **le projet est occupé** : un agent est déjà en cours dans cet espace de travail
+- **l’agent est occupé** : cette exécution unique traite encore la requête courante
 
 Le bot impose cette limite pour éviter que deux agents écrivent en même temps dans le même workspace. Cela réduit les modifications conflictuelles et le risque de corruption.
 
@@ -425,32 +479,32 @@ Si l'exécution en cours est annulée et que des questions attendent encore, le 
 
 ## ⚠️ Diff (modifications de fichiers)
 
-_Pendant chaque exécution d'agent, le bot prend aussi un léger snapshot avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce snapshot est produit par le bot lui-même, pas par Codex ou Copilot._
+_Pendant chaque exécution d'agent, le bot prend aussi un léger instantané avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce instantané est produit par le bot lui-même, pas par Codex ou Copilot._
 
-**À savoir sur le snapshot :**
+**À savoir sur le instantané :**
 
 - l'app parcourt le dossier du projet avant et après l'exécution
-- pour les fichiers texte normaux, l'app préfère le diff du snapshot du run plutôt qu'un diff contre le head Git
+- pour les fichiers texte normaux, l'app préfère le diff du instantané du run plutôt qu'un diff contre le head Git
 - les répertoires courants de dépendances, cache et runtime sont aussi ignorés
 - les fichiers binaires et les fichiers plus gros que `SNAPSHOT_TEXT_FILE_MAX_BYTES` ne sont pas lus comme texte
 - sur les très gros projets, ce scan supplémentaire peut ajouter un surcoût notable en I/O et en mémoire
-- si un snapshot ne peut pas représenter un fichier comme texte, l'app retombe sur `git diff` lorsque c'est possible
+- si un instantané ne peut pas représenter un fichier comme texte, l'app retombe sur `git diff` lorsque c'est possible
 - pour les gros fichiers ou les fichiers non textuels, le diff peut quand même être omis et remplacé par un court message
 
-Les règles d'exclusion du snapshot se trouvent dans les ressources du package :
+Les règles d'exclusion du instantané se trouvent dans les ressources du paquet :
 
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
+- `src/coding_agent_telegram/resources/instantané_excluded_dir_names.txt`
+- `src/coding_agent_telegram/resources/instantané_excluded_dir_globs.txt`
+- `src/coding_agent_telegram/resources/instantané_excluded_file_globs.txt`
 
-Vous pouvez surcharger ces valeurs dans le fichier env sans modifier le package installé :
+Vous pouvez surcharger ces valeurs dans le fichier env sans modifier le paquet installé :
 
 - `SNAPSHOT_INCLUDE_PATH_GLOBS`
   Force l'inclusion des chemins correspondants dans les diffs.
   Exemple : `.github/*,.profile.test,.profile.prod`
 
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
-  Ajoute des exclusions de diff supplémentaires au-dessus des valeurs par défaut du package.
+  Ajoute des exclusions de diff supplémentaires au-dessus des valeurs par défaut du paquet.
   Exemple : `.*,personal/*,sensitive*.txt`
   Remarque : `.*` couvre les chemins cachés, y compris les fichiers dans des dossiers cachés.
 
@@ -466,8 +520,8 @@ Le bot traite le projet et la branch comme un ensemble.
 
 Quand vous créez ou changez une branch, le bot vous guide explicitement sur la source :
 
-- `local/<branch>` : utiliser la branch locale comme source
-- `origin/<branch>` : mettre à jour depuis la branch distante puis basculer
+- <code>local/&lt;branch&gt;</code> : utiliser la branch locale comme source
+- <code>origin/&lt;branch&gt;</code> : mettre à jour depuis la branch distante puis basculer
 
 Si le bot détecte que la branch stockée dans la session ne correspond pas à la branch courante du dépôt, il ne continue pas à l'aveugle. Il vous demande quelle branch utiliser :
 
@@ -485,7 +539,7 @@ Si votre branch source préférée est introuvable, le bot propose des sources d
 - `/commit` peut être désactivé complètement avec `ENABLE_COMMIT_COMMAND`
 - les opérations `/commit` qui modifient des fichiers ne sont autorisées que pour les projets trusted
 
-## 🪵 Logs
+## 🪵 Journaux
 
 Les logs sont écrits **à la fois sur stdout et dans un fichier rotatif** sous :
 
@@ -518,14 +572,14 @@ Les logs sont écrits **à la fois sur stdout et dans un fichier rotatif** sous 
   point d'entrée local pour le bootstrap et le démarrage
 
 - `src/coding_agent_telegram/resources/.env.example`
-  modèle d'environnement canonique utilisé à la fois par le démarrage depuis le dépôt et par les installations du package
+  modèle d'environnement canonique utilisé à la fois par le démarrage depuis le dépôt et par les installations du paquet
 
 - `pyproject.toml`
   configuration du packaging et des dépendances
 
 ## 📦 Versionnement des releases
 
-Les versions du package sont dérivées des tags Git.
+Les versions du paquet sont dérivées des tags Git.
 
 - TestPyPI/test : `v2026.3.26.dev1`
 - préversion PyPI : `v2026.3.26rc1`

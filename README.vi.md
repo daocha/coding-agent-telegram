@@ -36,9 +36,9 @@
   - ✅ Nhẹ: không cần framework nặng, minh bạch hoàn toàn
   - ✅ Nhiều bot: nhiều cuộc chat, nhiều phiên
   - ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
-  - ✅ Dễ xem câu trả lời và các file đã thay đổi trong code block
+  - ✅ Dễ xem câu trả lời và các tệp đã thay đổi trong code block
   - ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
-  - ✅ Hỗ trợ đầu vào văn bản và hình ảnh
+  - ✅ Chấp nhận tin nhắn ✏️ văn bản, 🌄 hình ảnh và 🎙️ thoại
 
    ## 🔁 Chuyển thiết bị/phiên liền mạch
 
@@ -49,7 +49,7 @@
 
    ## 🛠️ Luồng làm việc cục bộ điển hình
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # hoặc chạy ./startup.sh
    ```
 
    ##### Trong Telegram:
@@ -80,7 +80,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 
 - Danh sách trắng cho chat riêng qua `ALLOWED_CHAT_IDS`
 - Chỉ cho phép một agent hoạt động trên mỗi project để giảm xung đột ghi
-- Ẩn diff của các file nhạy cảm
+- Ẩn diff của các tệp nhạy cảm
 - API keys, tokens, giá trị `.env`, certificates, SSH keys và các đầu ra mang tính bí mật sẽ được che trước khi gửi lại Telegram
 - Dữ liệu runtime của app nằm dưới `~/.coding-agent-telegram`
 - Các thư mục có sẵn có thể yêu cầu xác nhận trust trước khi chạy Git operation có thay đổi
@@ -99,6 +99,7 @@ Trước khi khởi động server, hãy chuẩn bị:
 - Codex CLI và/hoặc Copilot CLI đã được cài cục bộ
 - [Cài Codex CLI](https://developers.openai.com/codex/cli)
 - [Cài Copilot CLI](https://github.com/features/copilot/cli)
+- [Tùy chọn] Whisper, ffmpeg
    </td>
    </tr>
 </table>
@@ -108,34 +109,60 @@ Openclaw cung cấp bộ tính năng rất đầy đủ và đã có sẵn agent
 
 ## 🚀 Bắt đầu nhanh
 
-### Option A: Script bootstrap một dòng
+### Cách A: Script bootstrap một dòng
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/install.sh | bash
 ```
 
-### Option B: Cài từ PyPI bằng `pip`
+### Cách B: Cài từ PyPI bằng `pip`
 ```bash
 pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
-### Option C: Chạy từ repository đã clone
+### Cách C: Chạy từ repository đã clone
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
 cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Khởi động bot server
-##### Ở lần chạy đầu, app sẽ tạo file env và cho bạn biết cần điền trường nào.
-##### Sau khi cập nhật file env, hãy chạy lại:
+### 🌐 Khởi động bot server
+##### Ở lần chạy đầu, app sẽ tạo tệp env và cho bạn biết cần điền trường nào.
+##### Sau khi cập nhật tệp env, hãy chạy lại:
 ```bash
-# if you follow Option A or Option B, then run
+# nếu bạn làm theo Tùy chọn A hoặc Tùy chọn B, hãy chạy
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# nếu bạn làm theo Tùy chọn C, hãy chạy lại lệnh này
 ./startup.sh
 ```
+
+## 🎙️ [Tùy chọn] Tính năng chuyển giọng nói thành văn bản: chuẩn bị các điều kiện cần cục bộ của OpenAI-Whisper
+
+Phần này dùng để bật tùy chọn chuyển tin nhắn thoại Telegram thành văn bản bằng Whisper chạy cục bộ. Tệp âm thanh được giới hạn tối đa `20 MB`.
+
+```bash
+# nếu bạn cài bằng pip
+coding-agent-telegram-stt-install
+
+# nếu bạn chạy từ repository đã clone
+./install-stt.sh
+```
+
+Thiết lập env được khuyến nghị:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Lưu ý:
+
+- Whisper sẽ tự động tải model đã chọn vào `~/.cache/whisper` ở lần dùng đầu tiên.
+- Nếu bạn chọn `OPENAI_WHISPER_MODEL=turbo`, lần chuyển giọng nói đầu tiên có khả năng chạm timeout cao hơn khi `large-v3-turbo.pt` vẫn đang được tải.
+- Sau khi một tin nhắn thoại được chép lại, bot sẽ gửi lại bản transcript đã nhận dạng vào Telegram trước rồi mới chuyển cho tác nhân. Điều này giúp kiểm tra lỗi nhận dạng dễ hơn.
 
 ## 🔑 Thiết lập Telegram
 
@@ -171,79 +198,86 @@ Lưu ý:
 
 ## 📨 Loại tin nhắn được hỗ trợ
 
+Hiện tại bot chấp nhận:
+
+- tin nhắn văn bản
+- ảnh
+- tin nhắn thoại và tệp âm thanh khi `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` và các điều kiện cần cục bộ của Whisper đã được cài đặt
+- hiện tại Codex và Copilot chỉ hỗ trợ văn bản và hình ảnh, chưa hỗ trợ video
+
 ## 🤖 Lệnh Telegram
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
-    <td>Chọn provider cho các session mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
+    <td width="332"><code>/provider</code></td>
+    <td>Chọn nhà cung cấp cho các phiên mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Đặt thư mục project hiện tại. Nếu thư mục chưa tồn tại, app sẽ tạo và đánh dấu là trusted. Nếu đã tồn tại nhưng vẫn untrusted, app sẽ yêu cầu xác nhận trust rõ ràng.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td width="332"><code>/branch &lt;new_branch&gt;</code></td>
     <td>Chuẩn bị hoặc chuyển branch cho project hiện tại. Nếu branch đã tồn tại, bot coi branch đó là source candidate. Nếu chưa có, bot dùng default branch của repository làm source candidate.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
-    <td>Chuẩn bị hoặc chuyển branch bằng cách dùng `<origin_branch>` làm source candidate. Với cả hai dạng, bot chỉ đưa ra các source choice thật sự tồn tại: `local/<branch>` và `origin/<branch>`. Nếu chỉ có một lựa chọn thì chỉ hiện lựa chọn đó. Nếu không có lựa chọn nào, bot sẽ báo thiếu branch source.</td>
+    <td width="332"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td>Chuẩn bị hoặc chuyển branch bằng cách dùng <code>&lt;origin_branch&gt;</code> làm source candidate. Với cả hai dạng, bot chỉ đưa ra các source choice thật sự tồn tại: <code>local/&lt;branch&gt;</code> và <code>origin/&lt;branch&gt;</code>. Nếu chỉ có một lựa chọn thì chỉ hiện lựa chọn đó. Nếu không có lựa chọn nào, bot sẽ báo thiếu branch source.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
-    <td>Hiển thị active session cho bot và chat hiện tại.</td>
+    <td width="332"><code>/current</code></td>
+    <td>Hiển thị phiên hoạt động cho bot và chat hiện tại.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
-    <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu provider, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
+    <td width="332"><code>/new [session_name]</code></td>
+    <td>Tạo phiên mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng mã định danh phiên thật. Nếu thiếu nhà cung cấp, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
-    <td>Hiển thị các session mới nhất, mới nhất trước. Danh sách bao gồm cả session do bot quản lý và local Codex/Copilot CLI session của project hiện tại.</td>
+    <td width="332"><code>/switch</code></td>
+    <td>Hiển thị các phiên mới nhất, mới nhất trước. Danh sách bao gồm cả phiên do bot quản lý và phiên CLI Codex/Copilot cục bộ của project hiện tại.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
-    <td>Hiển thị trang khác của các session đã lưu.</td>
+    <td width="332"><code>/switch page &lt;number&gt;</code></td>
+    <td>Hiển thị trang khác của các phiên đã lưu.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
-    <td>Chuyển sang một session cụ thể bằng ID. Nếu bạn chọn local CLI session, bot sẽ import nó và tiếp tục từ đó.</td>
+    <td width="332"><code>/switch &lt;session_id&gt;</code></td>
+    <td>Chuyển sang một phiên cụ thể bằng ID. Nếu bạn chọn phiên CLI cục bộ, bot sẽ import nó và tiếp tục từ đó.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
-    <td>Tạo một session rút gọn mới từ session đang hoạt động rồi chuyển sang session đó.</td>
+    <td width="332"><code>/compact</code></td>
+    <td>Tạo một phiên rút gọn mới từ phiên đang hoạt động rồi chuyển sang phiên đó.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Chạy các lệnh liên quan đến `git commit` đã được kiểm tra trong project của active session. Chỉ có khi `ENABLE_COMMIT_COMMAND=true`. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
+    <td width="332"><code>/commit &lt;git commands&gt;</code></td>
+    <td>Chạy các lệnh liên quan đến <code>git commit</code> đã được kiểm tra trong project của phiên hoạt động. Chỉ có khi <code>ENABLE_COMMIT_COMMAND=true</code>. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
-    <td>Push `origin <branch>` cho active session hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+    <td width="332"><code>/push</code></td>
+    <td>Push <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
-    <td>Hủy agent run hiện tại của project hiện tại. Nếu còn queued questions chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
+    <td width="332"><code>/abort</code></td>
+    <td>Hủy lần chạy tác nhân hiện tại của project hiện tại. Nếu còn các câu hỏi trong hàng đợi chờ xử lý, bot sẽ hỏi có tiếp tục hay không.</td>
   </tr>
 </table>
 
 <h2>⚙️ Biến môi trường</h2>
 
-<h3>Đường dẫn file env chính:</h3>
+<h3>Đường dẫn tệp env chính:</h3>
 
 <table>
   <tr>
     <td><code>CODING_AGENT_TELEGRAM_ENV_FILE</code></td>
-    <td>Dùng khi bạn muốn app trỏ tới một file env cụ thể.</td>
+    <td>Dùng khi bạn muốn app trỏ tới một tệp env cụ thể.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/.env_coding_agent_telegram</code></td>
-    <td>Vị trí file env mặc định.</td>
+    <td>Vị trí tệp env mặc định.</td>
   </tr>
   <tr>
     <td><code>./.env_coding_agent_telegram</code></td>
-    <td>Chỉ dùng khi file local này đã tồn tại.</td>
+    <td>Chỉ dùng khi tệp local này đã tồn tại.</td>
   </tr>
 </table>
 
@@ -251,15 +285,15 @@ Lưu ý:
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>Thư mục cha chứa các thư mục project của bạn.</td>
   </tr>
   <tr>
-    <td width="250"><code>TELEGRAM_BOT_TOKENS</code></td>
+    <td width="332"><code>TELEGRAM_BOT_TOKENS</code></td>
     <td>Các Telegram bot token, ngăn cách bằng dấu phẩy.</td>
   </tr>
   <tr>
-    <td width="250"><code>ALLOWED_CHAT_IDS</code></td>
+    <td width="332"><code>ALLOWED_CHAT_IDS</code></td>
     <td>Các Telegram private chat ID được phép dùng bot, ngăn cách bằng dấu phẩy.</td>
   </tr>
 </table>
@@ -268,68 +302,86 @@ Lưu ý:
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>Ngôn ngữ UI cho các thông điệp bot dùng chung và mô tả lệnh. Giá trị hỗ trợ: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_BIN</code></td>
+    <td width="332"><code>CODEX_BIN</code></td>
     <td>Lệnh dùng để chạy Codex CLI. Mặc định: <code>codex</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_BIN</code></td>
+    <td width="332"><code>COPILOT_BIN</code></td>
     <td>Lệnh dùng để chạy Copilot CLI. Mặc định: <code>copilot</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_MODEL</code></td>
+    <td width="332"><code>CODEX_MODEL</code></td>
     <td>Ghi đè model Codex nếu cần. Để trống để dùng model mặc định của Codex CLI. Ví dụ: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>COPILOT_MODEL</code></td>
+    <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Ghi đè model Copilot nếu cần. Để trống để dùng model mặc định của Copilot CLI. Ví dụ: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_APPROVAL_POLICY</code></td>
+    <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Chế độ approval truyền cho Codex. Mặc định: <code>never</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SANDBOX_MODE</code></td>
+    <td width="332"><code>CODEX_SANDBOX_MODE</code></td>
     <td>Chế độ sandbox truyền cho Codex. Mặc định: <code>workspace-write</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
+    <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Nếu bật, luôn bỏ qua trusted-repo check của Codex.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_COMMIT_COMMAND</code></td>
+    <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
     <td>Bật lệnh Telegram <code>/commit</code>. Mặc định: <code>false</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
-    <td>Timeout cứng cho một lần agent run. Mặc định: <code>0</code> (tắt).</td>
+    <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
+    <td>Timeout cứng cho một lần lần chạy tác nhân. Mặc định: <code>0</code> (tắt).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
-    <td>Kích thước file tối đa mà bot sẽ đọc dưới dạng văn bản khi tạo before/after snapshot cho diff của từng run. Mặc định: <code>200000</code>.</td>
+    <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
+    <td>Kích thước tệp tối đa mà bot sẽ đọc dưới dạng văn bản khi tạo ảnh chụp nhanh trước/sau cho diff của từng run. Mặc định: <code>200000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
+    <td width="332"><code>MAX_TELEGRAM_MESSAGE_LENGTH</code></td>
     <td>Kích thước tin nhắn tối đa trước khi app tách phản hồi. Mặc định: <code>3000</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
-    <td>Ẩn diff của các file nhạy cảm. Mặc định: <code>true</code>.</td>
+    <td width="332"><code>ENABLE_SENSITIVE_DIFF_FILTER</code></td>
+    <td>Ẩn diff của các tệp nhạy cảm. Mặc định: <code>true</code>.</td>
   </tr>
   <tr>
-    <td width="250"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
+    <td width="332"><code>ENABLE_SECRET_SCRUB_FILTER</code></td>
     <td>Che tokens, keys, giá trị <code>.env</code>, certificates và các đầu ra giống bí mật trước khi gửi về Telegram. Mặc định: <code>true</code> (rất nên bật).</td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
+    <td width="332"><code>SNAPSHOT_INCLUDE_PATH_GLOBS</code></td>
     <td>Luôn đưa các path khớp điều kiện vào diff. Ví dụ: <code>.github/*,.profile.test,.profile.prod</code></td>
   </tr>
   <tr>
-    <td width="250"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
-    <td>Thêm các rule loại trừ diff ngoài bộ mặc định của package. Ví dụ: <code>.*,personal/*,sensitive*.txt</code> Lưu ý: <code>.*</code> khớp cả path ẩn, gồm cả file trong thư mục ẩn.</td>
+    <td width="332"><code>SNAPSHOT_EXCLUDE_PATH_GLOBS</code></td>
+    <td>Thêm các rule loại trừ diff ngoài bộ mặc định của package. Ví dụ: <code>.*,personal/*,sensitive*.txt</code> Lưu ý: <code>.*</code> khớp cả path ẩn, gồm cả tệp trong thư mục ẩn.</td>
+  </tr>
+</table>
+
+
+<h3>Chuyển giọng nói thành văn bản</h3>
+
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Mặc định: <code>false</code>. Nếu bật <code>true</code>, hệ thống sẽ nhận dạng tin nhắn thoại và tệp âm thanh. Hệ thống sẽ kiểm tra các binary hoặc thư viện cần thiết và nhắc người dùng cài đặt nếu còn thiếu.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_MODEL</code></td>
+    <td>Mô hình dùng cho Whisper STT. Mặc định: <code>base</code><br />Các mô hình khả dụng: <code>tiny</code> khoảng <code>72 MB</code>, <code>base</code> khoảng <code>139 MB</code>, <code>large-v3-turbo</code> khoảng <code>1.5 GB</code><br />Mô hình sẽ được tự động tải xuống khi bạn gửi tin nhắn thoại đầu tiên. Khuyến nghị: <code>base</code> cho nhu cầu chung. Nếu muốn độ chính xác và chất lượng tốt hơn, bạn có thể thử <code>turbo</code>.</td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Mặc định: <code>120</code>. Thời gian chờ cho tiến trình STT. Thông thường STT đủ nhanh, nhưng nếu bạn chọn <code>turbo</code>, lần gửi tin nhắn thoại đầu tiên có thể vượt quá thời gian chờ do phải tải mô hình, tùy theo tốc độ mạng.</td>
   </tr>
 </table>
 
@@ -338,15 +390,15 @@ Lưu ý:
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Hauptdatei für den Session-Status.</td>
+    <td>Tệp trạng thái phiên chính.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
-    <td>Backup-Datei für den Status.</td>
+    <td>Tệp sao lưu trạng thái.</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/logs</code></td>
-    <td>Log-Verzeichnis.</td>
+    <td>Thư mục log.</td>
   </tr>
 </table>
 
@@ -366,14 +418,14 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Quản lý Session
+## 🧠 Quản lý phiên
 
-Session được tách theo:
+Phiên được tách theo:
 
 - Telegram bot
 - Telegram chat
 
-Vì vậy cùng một tài khoản Telegram có thể dùng nhiều bot mà không làm lẫn session.
+Vì vậy cùng một tài khoản Telegram có thể dùng nhiều bot mà không làm lẫn phiên.
 
 Ví dụ:
 
@@ -381,29 +433,29 @@ Ví dụ:
 - Bot B + chat của bạn -> việc frontend
 - Bot C + chat của bạn -> việc infra
 
-active session cũng gắn với:
+phiên hoạt động cũng gắn với:
 
-- project folder
-- provider
+- thư mục dự án
+- nhà cung cấp
 - branch name nếu có
 
 <details>
-<summary><b>Mỗi session lưu:</b></summary>
+<summary><b>Mỗi phiên lưu:</b></summary>
 
-- tên session
-- project folder
+- tên phiên
+- thư mục dự án
 - branch name
-- provider
+- nhà cung cấp
 - timestamps
-- active session được chọn cho phạm vi bot/chat đó
+- phiên hoạt động được chọn cho phạm vi bot/chat đó
 </details>
 
-### 🔓 Workspace concurrency lock
+### 🔓 Khóa đồng thời workspace
 
-Chỉ có thể có một agent run hoạt động trên mỗi **project folder** tại một thời điểm, bất kể chat hay Telegram bot nào khởi chạy.
+Chỉ có thể có một lần chạy tác nhân hoạt động trên mỗi **thư mục dự án** tại một thời điểm, bất kể chat hay Telegram bot nào khởi chạy.
 
-- **project is busy**: workspace đó đã có một agent run đang chạy
-- **agent is busy**: chính run đó vẫn đang xử lý yêu cầu hiện tại
+- **dự án đang bận**: workspace đó đã có một lần chạy tác nhân đang chạy
+- **tác nhân đang bận**: chính run đó vẫn đang xử lý yêu cầu hiện tại
 
 Bot cố ý áp dụng giới hạn này để hai agent không ghi vào cùng một workspace cùng lúc. Điều đó giúp tránh sửa đổi xung đột và giảm nguy cơ hỏng dữ liệu.
 
@@ -415,33 +467,33 @@ Lock được giữ trong bộ nhớ, không phải trên đĩa, nên sẽ tự 
 
 ### 💬 Câu hỏi trong hàng đợi
 
-Nếu project hiện tại đã có agent run đang chạy, các tin nhắn văn bản gửi sau sẽ không bị từ chối mà được đưa vào queue.
+Nếu project hiện tại đã có lần chạy tác nhân đang chạy, các tin nhắn văn bản gửi sau sẽ không bị từ chối mà được đưa vào queue.
 
-- câu hỏi mới được nối vào file queued-questions trên đĩa
+- câu hỏi mới được nối vào tệp queued-questions trên đĩa
 - agent hiện tại tiếp tục làm yêu cầu trước đó
 - khi run đó kết thúc bình thường, bot tự động bắt đầu xử lý các câu hỏi trong hàng đợi
 
-Nếu run hiện tại bị abort và vẫn còn queued questions, bot sẽ không tự tiếp tục. Bot sẽ hỏi có muốn tiếp tục xử lý phần còn lại theo dạng gộp hay từng câu một hay không.
+Nếu run hiện tại bị abort và vẫn còn các câu hỏi trong hàng đợi, bot sẽ không tự tiếp tục. Bot sẽ hỏi có muốn tiếp tục xử lý phần còn lại theo dạng gộp hay từng câu một hay không.
 
-## ⚠️ Diff (thay đổi file)
+## ⚠️ Diff (thay đổi tệp)
 
-_Trong mỗi agent run, bot cũng tạo một snapshot before/after nhẹ của project để có thể tóm tắt các file thay đổi và gửi diff về Telegram. Snapshot này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
+_Trong mỗi lần chạy tác nhân, bot cũng tạo một ảnh chụp nhanh trước/sau nhẹ của project để có thể tóm tắt các tệp thay đổi và gửi diff về Telegram. Bản chụp nhanh này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
 
-**Ghi chú về snapshot:**
+**Ghi chú về ảnh chụp nhanh:**
 
-- app quét project directory trước và sau mỗi run
-- với file văn bản thông thường, app ưu tiên snapshot diff theo từng run hơn là diff so với git head
-- các thư mục dependency, cache và runtime phổ biến cũng bị bỏ qua
-- file nhị phân và file lớn hơn `SNAPSHOT_TEXT_FILE_MAX_BYTES` sẽ không được đọc như văn bản
+- app quét thư mục dự án trước và sau mỗi run
+- với tệp văn bản thông thường, app ưu tiên diff ảnh chụp nhanh theo từng run hơn là diff so với git head
+- các thư mục phụ thuộc, bộ đệm và runtime phổ biến cũng bị bỏ qua
+- tệp nhị phân và tệp lớn hơn `SNAPSHOT_TEXT_FILE_MAX_BYTES` sẽ không được đọc như văn bản
 - với project rất lớn, lần quét bổ sung này có thể làm tăng đáng kể I/O và bộ nhớ
-- nếu snapshot không thể biểu diễn file dưới dạng văn bản, app sẽ fallback sang `git diff` khi có thể
-- với file lớn hoặc không phải văn bản, diff vẫn có thể bị bỏ qua và thay bằng thông báo ngắn
+- nếu ảnh chụp nhanh không thể biểu diễn tệp dưới dạng văn bản, app sẽ fallback sang `git diff` khi có thể
+- với tệp lớn hoặc không phải văn bản, diff vẫn có thể bị bỏ qua và thay bằng thông báo ngắn
 
-Các rule loại trừ snapshot nằm trong package resources:
+Các rule loại trừ ảnh chụp nhanh nằm trong tài nguyên gói:
 
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_names.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_dir_globs.txt`
-- `src/coding_agent_telegram/resources/snapshot_excluded_file_globs.txt`
+- `src/coding_agent_telegram/resources/ảnh chụp nhanh_excluded_dir_names.txt`
+- `src/coding_agent_telegram/resources/ảnh chụp nhanh_excluded_dir_globs.txt`
+- `src/coding_agent_telegram/resources/ảnh chụp nhanh_excluded_file_globs.txt`
 
 Bạn có thể override các giá trị mặc định này trong file env mà không cần sửa package đã cài:
 
@@ -452,7 +504,7 @@ Bạn có thể override các giá trị mặc định này trong file env mà k
 - `SNAPSHOT_EXCLUDE_PATH_GLOBS`
   Thêm các diff exclusion ngoài bộ mặc định của package.
   Ví dụ: `.*,personal/*,sensitive*.txt`
-  Lưu ý: `.*` khớp cả hidden path, kể cả file trong hidden directory.
+  Lưu ý: `.*` khớp cả đường dẫn ẩn, kể cả tệp trong thư mục ẩn.
 
 Nếu include và exclude cùng khớp, include sẽ được ưu tiên.
 
@@ -462,16 +514,16 @@ Bot coi project và branch là một cặp đi cùng nhau.
 
 - việc chọn project sẽ không âm thầm chọn một branch không liên quan
 - nếu cần branch, bot sẽ yêu cầu bạn chọn
-- khi thông tin branch được hiển thị trong các thông báo liên quan đến session, project và branch sẽ được hiển thị cùng nhau
+- khi thông tin branch được hiển thị trong các thông báo liên quan đến phiên, project và branch sẽ được hiển thị cùng nhau
 
 Khi bạn tạo hoặc đổi branch, bot sẽ hướng dẫn rõ source:
 
-- `local/<branch>` nghĩa là dùng local branch làm source
-- `origin/<branch>` nghĩa là cập nhật từ remote branch trước rồi mới chuyển
+- <code>local/&lt;branch&gt;</code> nghĩa là dùng local branch làm source
+- <code>origin/&lt;branch&gt;</code> nghĩa là cập nhật từ remote branch trước rồi mới chuyển
 
-Nếu bot phát hiện branch lưu trong session không khớp với branch hiện tại của repository, bot sẽ không tiếp tục một cách mù quáng. Bot sẽ hỏi bạn muốn dùng branch nào:
+Nếu bot phát hiện branch lưu trong phiên không khớp với branch hiện tại của repository, bot sẽ không tiếp tục một cách mù quáng. Bot sẽ hỏi bạn muốn dùng branch nào:
 
-- giữ branch đã lưu trong session
+- giữ branch đã lưu trong phiên
 - giữ branch hiện tại của repository
 
 Nếu source branch bạn muốn không còn, bot sẽ đưa ra các fallback source dựa trên default branch và current branch thay vì để bạn đối mặt với Git error thô.
@@ -481,11 +533,11 @@ Nếu source branch bạn muốn không còn, bot sẽ đưa ra các fallback so
 - thư mục đã tồn tại sẽ tuân theo `CODEX_SKIP_GIT_REPO_CHECK`
 - thư mục được tạo qua `/project <name>` sẽ được app này đánh dấu là trusted
 - thư mục đã có sẵn được chọn qua `/project <name>` sẽ vẫn là untrusted cho đến khi bạn xác nhận trust trong Telegram
-- vì vậy các project folder mới tạo có thể dùng ngay
+- vì vậy các thư mục dự án mới tạo có thể dùng ngay
 - có thể tắt hoàn toàn `/commit` bằng `ENABLE_COMMIT_COMMAND`
 - các thao tác `/commit` có sửa đổi chỉ được phép trên trusted project
 
-## 🪵 Logs
+## 🪵 Nhật ký
 
 Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
 
@@ -498,11 +550,11 @@ Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
 
 - bot khởi động và bắt đầu polling
 - chọn project
-- tạo session
-- chuyển session
-- báo cáo active session
+- tạo phiên
+- chuyển phiên
+- báo cáo phiên hoạt động
 - chạy bình thường (bao gồm audit log line với prompt đã được rút gọn)
-- thay session sau khi resume thất bại
+- thay phiên sau khi resume thất bại
 - warnings và runtime errors
 </details>
 
@@ -521,7 +573,7 @@ Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
   mẫu environment chính được dùng cả khi chạy từ repo và khi cài dưới dạng package
 
 - `pyproject.toml`
-  cấu hình packaging và dependencies
+  cấu hình đóng gói và dependencies
 
 ## 📦 Quy ước phiên bản release
 

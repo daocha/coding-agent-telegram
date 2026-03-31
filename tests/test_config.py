@@ -6,6 +6,8 @@ import pytest
 import coding_agent_telegram.config as config_module
 from coding_agent_telegram.config import (
     DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
+    DEFAULT_OPENAI_WHISPER_MODEL,
+    DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS,
     DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES,
     create_initial_env_file,
     detect_system_locale,
@@ -46,6 +48,9 @@ def _isolate_env(monkeypatch, tmp_path):
         "MAX_TELEGRAM_MESSAGE_LENGTH",
         "ENABLE_SENSITIVE_DIFF_FILTER",
         "ENABLE_SECRET_SCRUB_FILTER",
+        "ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT",
+        "OPENAI_WHISPER_MODEL",
+        "OPENAI_WHISPER_TIMEOUT_SECONDS",
         "APP_LOCALE",
         "DEFAULT_AGENT_PROVIDER",
     ):
@@ -89,6 +94,9 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.snapshot_text_file_max_bytes == DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES
     assert cfg.max_telegram_message_length == DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH
     assert cfg.enable_secret_scrub_filter is True
+    assert cfg.enable_openai_whisper_speech_to_text is False
+    assert cfg.openai_whisper_model == DEFAULT_OPENAI_WHISPER_MODEL
+    assert cfg.openai_whisper_timeout_seconds == DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS
     assert cfg.locale == "en"
     assert cfg.default_agent_provider == "codex"
     assert cfg.log_dir.name == "logs"
@@ -146,6 +154,32 @@ def test_load_config_secret_scrub_filter_can_be_disabled(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.enable_secret_scrub_filter is False
+
+
+def test_load_config_whisper_speech_to_text_can_be_enabled(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT", "true")
+
+    cfg = load_config()
+
+    assert cfg.enable_openai_whisper_speech_to_text is True
+
+
+def test_load_config_whisper_model_and_timeout_override(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("OPENAI_WHISPER_MODEL", "turbo")
+    monkeypatch.setenv("OPENAI_WHISPER_TIMEOUT_SECONDS", "300")
+
+    cfg = load_config()
+
+    assert cfg.openai_whisper_model == "turbo"
+    assert cfg.openai_whisper_timeout_seconds == 300
 
 
 def test_load_config_locale_override(monkeypatch, tmp_path):

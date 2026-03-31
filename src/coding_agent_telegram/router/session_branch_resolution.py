@@ -42,20 +42,22 @@ class SessionBranchResolutionMixin:
             if self.git.local_branch_exists(project_path, source_branch):
                 key = ("local", source_branch)
                 if key not in seen:
+                    token = self._register_branch_source_token("local", source_branch, new_branch)
                     row.append(
                         InlineKeyboardButton(
                             f"local/{source_branch}",
-                            callback_data=f"branchsource:local:{source_branch}:{new_branch}",
+                            callback_data=f"branchsource:{token}",
                         )
                     )
                     seen.add(key)
             if self.git.remote_branch_exists(project_path, source_branch):
                 key = ("origin", source_branch)
                 if key not in seen:
+                    token = self._register_branch_source_token("origin", source_branch, new_branch)
                     row.append(
                         InlineKeyboardButton(
                             f"origin/{source_branch}",
-                            callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
+                            callback_data=f"branchsource:{token}",
                         )
                     )
                     seen.add(key)
@@ -226,7 +228,7 @@ class SessionBranchResolutionMixin:
             pending_action.pop("branch_resolution", None)
             self._store_pending_action(chat_id, pending_action)
             await query.edit_message_text(self._t(update, "branch_resolution.using_current_branch", branch_name=current_branch))
-            await self._continue_pending_action(update, context)
+            await self._continue_pending_action(update, context, drain_queue_after_completion=True)
             return
 
         allow_local = self.git.local_branch_exists(project_path, stored_branch)

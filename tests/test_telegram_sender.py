@@ -36,7 +36,7 @@ def test_send_html_text_falls_back_to_plain_text_on_parse_error():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append((chat_id, text, parse_mode))
             if len(calls) == 1:
                 raise BadRequest("Can't parse entities: can't find end tag corresponding to start tag \"code\"")
@@ -54,7 +54,7 @@ def test_send_text_chunks_long_messages():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append((chat_id, text, parse_mode))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
@@ -70,7 +70,7 @@ def test_send_html_text_chunks_long_messages_as_plain_text():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append((chat_id, text, parse_mode))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
@@ -86,7 +86,7 @@ def test_send_code_block_chunks_long_code_blocks():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append((chat_id, text, parse_mode))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=123))
@@ -108,7 +108,7 @@ def test_send_text_does_nothing_when_effective_chat_is_none():
     called = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             called.append(text)
 
     update = SimpleNamespace(effective_chat=None)
@@ -122,7 +122,7 @@ def test_send_html_text_does_nothing_when_effective_chat_is_none():
     called = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             called.append(text)
 
     update = SimpleNamespace(effective_chat=None)
@@ -136,7 +136,7 @@ def test_send_code_block_does_nothing_when_effective_chat_is_none():
     called = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             called.append(text)
 
     update = SimpleNamespace(effective_chat=None)
@@ -156,7 +156,7 @@ def test_send_text_uses_default_length_when_no_bot_data():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append(text)
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=1))
@@ -184,6 +184,14 @@ def test_markdownish_to_html_renders_bold_text():
 
     result = markdownish_to_html("This is **bold** text.")
     assert "<b>bold</b>" in result
+
+
+def test_markdownish_to_html_does_not_double_escape_html_in_bold():
+    from coding_agent_telegram.telegram_sender import markdownish_to_html
+
+    result = markdownish_to_html("Use **git add & commit** to stage.")
+    assert "<b>git add &amp; commit</b>" in result
+    assert "&amp;amp;" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +230,7 @@ def test_send_markdown_text_sends_message():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append((chat_id, text, parse_mode))
 
     from telegram.constants import ParseMode
@@ -262,7 +270,7 @@ def test_send_html_text_reraises_non_parse_bad_request():
     from telegram.error import BadRequest
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             raise BadRequest("Message is too long")
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=1))
@@ -379,7 +387,7 @@ def test_send_code_block_without_language():
     calls = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text, parse_mode=None):
+        async def send_message(self, chat_id, text, parse_mode=None, reply_to_message_id=None):
             calls.append(text)
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=7))

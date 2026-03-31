@@ -43,6 +43,14 @@ class SessionCommonMixin:
     def _store_pending_action(self, chat_id: int, pending_action: dict[str, object] | None) -> None:
         self.deps.store.set_pending_action(self.deps.bot_id, chat_id, pending_action)
 
+    def _should_queue_incoming_message(self, chat_id: int) -> bool:
+        pending_action = self._pending_action(chat_id)
+        return (
+            self._is_project_busy(chat_id)
+            or self._has_pending_queue_decision(chat_id)
+            or isinstance(pending_action, dict)
+        )
+
     def _auto_session_name(self, project_folder: str, branch_name: str, provider: str, chat_id: int) -> str:
         branch_label = (branch_name or "current").replace("/", "-")
         base_name = f"{project_folder}-{branch_label}-{provider}"
