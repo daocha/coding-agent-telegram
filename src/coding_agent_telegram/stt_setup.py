@@ -101,11 +101,12 @@ def _set_env_flag(env_path: Path, enabled: bool) -> None:
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines()
 
-    def upsert(key: str, value: str, comments: list[str] | None = None) -> None:
+    def upsert(key: str, value: str, comments: list[str] | None = None, overwrite: bool = True) -> None:
         replacement = f"{key}={value}"
         for index, line in enumerate(lines):
             if line.startswith(f"{key}="):
-                lines[index] = replacement
+                if overwrite:
+                    lines[index] = replacement
                 return
         if lines and lines[-1].strip():
             lines.append("")
@@ -129,11 +130,13 @@ def _set_env_flag(env_path: Path, enabled: bool) -> None:
             "# `turbo` downloads the large-v3-turbo model (~1.5 GB) on first use into ~/.cache/whisper.",
             "# If turbo is not cached yet, the first voice transcription is more likely to hit the timeout.",
         ],
+        overwrite=False,
     )
     upsert(
         "OPENAI_WHISPER_TIMEOUT_SECONDS",
         str(DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS),
         comments=["# Timeout for a single Whisper transcription call, in seconds."],
+        overwrite=False,
     )
 
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

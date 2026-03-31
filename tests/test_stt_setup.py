@@ -66,6 +66,24 @@ def test_set_env_flag_replaces_existing_value(tmp_path):
     assert "OPENAI_WHISPER_TIMEOUT_SECONDS=120" in text
 
 
+def test_set_env_flag_preserves_user_customised_model(tmp_path):
+    env_path = tmp_path / ".env_coding_agent_telegram"
+    env_path.write_text(
+        "ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true\n"
+        "OPENAI_WHISPER_MODEL=large-v3-turbo\n"
+        "OPENAI_WHISPER_TIMEOUT_SECONDS=300\n",
+        encoding="utf-8",
+    )
+
+    stt_setup._set_env_flag(env_path, True)
+
+    text = env_path.read_text(encoding="utf-8")
+    assert "OPENAI_WHISPER_MODEL=large-v3-turbo" in text
+    assert "OPENAI_WHISPER_TIMEOUT_SECONDS=300" in text
+    assert "OPENAI_WHISPER_MODEL=base" not in text
+    assert "OPENAI_WHISPER_TIMEOUT_SECONDS=120" not in text
+
+
 def test_offer_stt_install_for_new_env_keeps_false_when_declined(monkeypatch, tmp_path):
     env_path = tmp_path / ".env_coding_agent_telegram"
     env_path.write_text("ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=false\n", encoding="utf-8")
