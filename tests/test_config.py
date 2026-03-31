@@ -422,3 +422,18 @@ def test_create_initial_env_file_initializes_app_locale_from_system_language(tmp
 
     assert app_locale == "ja"
     assert "APP_LOCALE=ja" in env_path.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# _parse_allowed_chat_ids: malformed value raises clear ValueError
+# ---------------------------------------------------------------------------
+
+
+def test_load_config_invalid_chat_id_raises_clear_error(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123,abc,456")
+
+    with pytest.raises(ValueError, match="Invalid chat ID in ALLOWED_CHAT_IDS"):
+        load_config()

@@ -28,7 +28,7 @@ from coding_agent_telegram.diff_utils import (
 )
 from coding_agent_telegram.filters import is_sensitive_path, resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager
-from coding_agent_telegram.i18n import translate
+from coding_agent_telegram.i18n import locale_from_update, translate
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
     markdownish_to_html,
@@ -129,12 +129,12 @@ class PhotoAttachmentStore:
         telegram_photo = update.message.photo[-1]
         declared_size = getattr(telegram_photo, "file_size", None)
         if isinstance(declared_size, int) and declared_size > self.MAX_PHOTO_BYTES:
-            raise PhotoAttachmentError("photo_too_large", translate("en", "runtime.photo_too_large"))
+            raise PhotoAttachmentError("photo_too_large", translate(locale_from_update(update), "runtime.photo_too_large"))
 
         telegram_file = await telegram_photo.get_file()
         content = bytes(await telegram_file.download_as_bytearray())
         if len(content) > self.MAX_PHOTO_BYTES:
-            raise PhotoAttachmentError("photo_too_large", translate("en", "runtime.photo_too_large"))
+            raise PhotoAttachmentError("photo_too_large", translate(locale_from_update(update), "runtime.photo_too_large"))
         suffix = Path(telegram_file.file_path or "image.jpg").suffix.lower() or ".jpg"
         if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
             suffix = ".jpg"

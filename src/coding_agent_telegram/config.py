@@ -80,7 +80,10 @@ def _parse_allowed_chat_ids() -> set[int]:
 
     out: set[int] = set()
     for item in values:
-        out.add(int(item))
+        try:
+            out.add(int(item))
+        except ValueError:
+            raise ValueError(f"Invalid chat ID in ALLOWED_CHAT_IDS: {item!r}") from None
     return out
 
 
