@@ -89,7 +89,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    </td>
    <td width="35%" valign="top">
 
-   ## ✅ 需求
+   ## ✅ 運行要求
 
 在啟動 server 之前，請先準備：
 
