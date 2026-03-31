@@ -49,7 +49,7 @@
 
    ## 🛠️ 일반적인 로컬 흐름
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # 또는 ./startup.sh 실행
    ```
 
    ##### Telegram에서:
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### 첫 실행 시 앱이 env 파일을 만들고 어떤 항목을 채워야 하는지 알려줍니다.
 ##### env 파일을 수정한 뒤 다시 실행하세요:
 ```bash
-# if you follow Option A or Option B, then run
+# Option A 또는 Option B를 따르는 경우 다음을 실행
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# Option C를 따르는 경우 이것을 다시 실행
 ./startup.sh
 ```
 
@@ -234,27 +234,27 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>가장 최근 session 을 최신순으로 보여줍니다. 현재 project 의 bot-managed session 과 로컬 Codex/Copilot CLI session 이 함께 표시됩니다.</td>
+    <td>가장 최근 세션을 최신순으로 보여줍니다. 현재 프로젝트의 bot 관리 세션과 로컬 Codex/Copilot CLI 세션이 함께 표시됩니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
-    <td>저장된 session 의 다른 페이지를 보여줍니다.</td>
+    <td>저장된 세션의 다른 페이지를 보여줍니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch &lt;session_id&gt;</code></td>
-    <td>ID 로 특정 session 으로 전환합니다. 로컬 CLI session 을 선택하면 bot 이 state 에 가져와 이어서 진행합니다.</td>
+    <td>ID 로 특정 세션으로 전환합니다. 로컬 CLI 세션을 선택하면 bot 이 상태에 가져와 이어서 진행합니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/compact</code></td>
-    <td>활성 session 에서 새 compact session 을 만들고 그쪽으로 전환합니다.</td>
+    <td>활성 세션에서 새 compact 세션을 만들고 그쪽으로 전환합니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>활성 세션 project 안에서 검증된 `git commit` 관련 명령을 실행합니다. `ENABLE_COMMIT_COMMAND=true` 일 때만 사용할 수 있습니다. 변경성 Git 명령은 trusted project 가 필요합니다.</td>
+    <td>활성 세션 project 안에서 검증된 <code>git commit</code> 관련 명령을 실행합니다. <code>ENABLE_COMMIT_COMMAND=true</code> 일 때만 사용할 수 있습니다. 변경성 Git 명령은 trusted project 가 필요합니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>현재 활성 세션 에 대해 `origin <branch>` 를 push 합니다. push 전에 bot 이 확인합니다.</td>
+    <td>현재 활성 세션 에 대해 <code>origin &lt;branch&gt;</code> 를 push 합니다. push 전에 bot 이 확인합니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -418,14 +418,14 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Session 관리
+## 🧠 세션 관리
 
-Session 은 다음 범위로 구분됩니다:
+세션은 다음 범위로 구분됩니다:
 
 - Telegram bot
 - Telegram chat
 
-따라서 같은 Telegram 계정이라도 여러 bot 을 사용하면서 session 이 섞이지 않게 운영할 수 있습니다.
+따라서 같은 Telegram 계정이라도 여러 bot 을 사용하면서 세션이 섞이지 않게 운영할 수 있습니다.
 
 예시:
 
@@ -440,9 +440,9 @@ Session 은 다음 범위로 구분됩니다:
 - 가능할 경우 branch 이름
 
 <details>
-<summary><b>각 session 에 저장되는 내용</b></summary>
+<summary><b>각 세션에 저장되는 내용</b></summary>
 
-- session 이름
+- 세션 이름
 - 프로젝트 폴더
 - branch 이름
 - 제공자
@@ -514,16 +514,16 @@ bot 은 project 와 branch 를 하나의 묶음으로 다룹니다.
 
 - project 를 선택해도 관련 없는 branch 를 조용히 선택하지 않습니다
 - branch 가 필요하면 bot 이 직접 선택을 요청합니다
-- session 관련 메시지에서 branch 정보를 보여줄 때는 project 와 branch 를 함께 표시합니다
+- 세션 관련 메시지에서 branch 정보를 보여줄 때는 프로젝트와 branch 를 함께 표시합니다
 
 branch 를 만들거나 바꿀 때 bot 은 source 를 명시적으로 안내합니다:
 
 - <code>local/&lt;branch&gt;</code>: local branch 를 source 로 사용
 - <code>origin/&lt;branch&gt;</code>: remote branch 에서 먼저 업데이트한 뒤 전환
 
-저장된 session branch 와 현재 repository branch 가 다르면 bot 은 그대로 진행하지 않습니다. 어떤 branch 를 쓸지 물어봅니다:
+저장된 세션 branch 와 현재 repository branch 가 다르면 bot 은 그대로 진행하지 않습니다. 어떤 branch 를 쓸지 물어봅니다:
 
-- 저장된 session branch 사용
+- 저장된 세션 branch 사용
 - 현재 repository branch 사용
 
 원하는 source branch 가 없으면 raw Git error 대신 default branch 와 current branch 를 기반으로 fallback source 를 제안합니다.
@@ -550,11 +550,11 @@ log 는 **stdout 과 회전하는 log file 양쪽**에 기록됩니다:
 
 - bot 시작과 polling 시작
 - project 선택
-- session 생성
-- session 전환
+- 세션 생성
+- 세션 전환
 - 활성 세션 표시
 - 일반 run 실행 (잘린 prompt 가 포함된 audit log line 포함)
-- resume 실패 후 session 교체
+- resume 실패 후 세션 교체
 - warning 과 runtime error
 </details>
 

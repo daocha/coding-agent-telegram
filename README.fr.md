@@ -49,7 +49,7 @@
 
    ## 🛠️ Flux local typique
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # ou exécutez ./startup.sh
    ```
 
    ##### Dans Telegram :
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### Au premier lancement, l’application crée le fichier env et vous indique quels champs remplir.
 ##### Après avoir mis à jour le fichier env, relancez :
 ```bash
-# if you follow Option A or Option B, then run
+# si vous suivez l’option A ou l’option B, exécutez ensuite
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# si vous suivez l’option C, exécutez ceci de nouveau
 ./startup.sh
 ```
 
@@ -230,7 +230,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
-    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise la vraie session ID. Si fournisseur, projet ou branch manque, le bot vous guide.</td>
+    <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise le véritable ID de session. Si fournisseur, projet ou branch manque, le bot vous guide.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
@@ -250,11 +250,11 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Exécuter des commandes liées à `git commit` validées dans le projet de la session active. Disponible uniquement si `ENABLE_COMMIT_COMMAND=true`. Les commandes Git mutantes exigent un projet trusted.</td>
+    <td>Exécuter des commandes liées à <code>git commit</code> validées dans le projet de la session active. Disponible uniquement si <code>ENABLE_COMMIT_COMMAND=true</code>. Les commandes Git mutantes exigent un projet trusted.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Pousser `origin <branch>` pour la session active courante. Le bot demande une confirmation avant le push.</td>
+    <td>Pousser <code>origin &lt;branch&gt;</code> pour la session active courante. Le bot demande une confirmation avant le push.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

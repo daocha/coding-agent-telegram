@@ -49,7 +49,7 @@
 
    ## 🛠️ Luồng làm việc cục bộ điển hình
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # hoặc chạy ./startup.sh
    ```
 
    ##### Trong Telegram:
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### Ở lần chạy đầu, app sẽ tạo file env và cho bạn biết cần điền trường nào.
 ##### Sau khi cập nhật file env, hãy chạy lại:
 ```bash
-# if you follow Option A or Option B, then run
+# nếu bạn làm theo Tùy chọn A hoặc Tùy chọn B, hãy chạy
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# nếu bạn làm theo Tùy chọn C, hãy chạy lại lệnh này
 ./startup.sh
 ```
 
@@ -210,7 +210,7 @@ Hiện tại bot chấp nhận:
 <table>
   <tr>
     <td width="332"><code>/provider</code></td>
-    <td>Chọn nhà cung cấp cho các session mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
+    <td>Chọn nhà cung cấp cho các phiên mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
@@ -230,31 +230,31 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
-    <td>Tạo session mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng session ID thật. Nếu thiếu nhà cung cấp, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
+    <td>Tạo phiên mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng mã định danh phiên thật. Nếu thiếu nhà cung cấp, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>Hiển thị các session mới nhất, mới nhất trước. Danh sách bao gồm cả session do bot quản lý và local Codex/Copilot CLI session của project hiện tại.</td>
+    <td>Hiển thị các phiên mới nhất, mới nhất trước. Danh sách bao gồm cả phiên do bot quản lý và phiên CLI Codex/Copilot cục bộ của project hiện tại.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
-    <td>Hiển thị trang khác của các session đã lưu.</td>
+    <td>Hiển thị trang khác của các phiên đã lưu.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch &lt;session_id&gt;</code></td>
-    <td>Chuyển sang một session cụ thể bằng ID. Nếu bạn chọn local CLI session, bot sẽ import nó và tiếp tục từ đó.</td>
+    <td>Chuyển sang một phiên cụ thể bằng ID. Nếu bạn chọn phiên CLI cục bộ, bot sẽ import nó và tiếp tục từ đó.</td>
   </tr>
   <tr>
     <td width="332"><code>/compact</code></td>
-    <td>Tạo một session rút gọn mới từ session đang hoạt động rồi chuyển sang session đó.</td>
+    <td>Tạo một phiên rút gọn mới từ phiên đang hoạt động rồi chuyển sang phiên đó.</td>
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Chạy các lệnh liên quan đến `git commit` đã được kiểm tra trong project của phiên hoạt động. Chỉ có khi `ENABLE_COMMIT_COMMAND=true`. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
+    <td>Chạy các lệnh liên quan đến <code>git commit</code> đã được kiểm tra trong project của phiên hoạt động. Chỉ có khi <code>ENABLE_COMMIT_COMMAND=true</code>. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Push `origin <branch>` cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+    <td>Push <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -418,14 +418,14 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Quản lý Session
+## 🧠 Quản lý phiên
 
-Session được tách theo:
+Phiên được tách theo:
 
 - Telegram bot
 - Telegram chat
 
-Vì vậy cùng một tài khoản Telegram có thể dùng nhiều bot mà không làm lẫn session.
+Vì vậy cùng một tài khoản Telegram có thể dùng nhiều bot mà không làm lẫn phiên.
 
 Ví dụ:
 
@@ -440,9 +440,9 @@ phiên hoạt động cũng gắn với:
 - branch name nếu có
 
 <details>
-<summary><b>Mỗi session lưu:</b></summary>
+<summary><b>Mỗi phiên lưu:</b></summary>
 
-- tên session
+- tên phiên
 - thư mục dự án
 - branch name
 - nhà cung cấp
@@ -514,16 +514,16 @@ Bot coi project và branch là một cặp đi cùng nhau.
 
 - việc chọn project sẽ không âm thầm chọn một branch không liên quan
 - nếu cần branch, bot sẽ yêu cầu bạn chọn
-- khi thông tin branch được hiển thị trong các thông báo liên quan đến session, project và branch sẽ được hiển thị cùng nhau
+- khi thông tin branch được hiển thị trong các thông báo liên quan đến phiên, project và branch sẽ được hiển thị cùng nhau
 
 Khi bạn tạo hoặc đổi branch, bot sẽ hướng dẫn rõ source:
 
 - <code>local/&lt;branch&gt;</code> nghĩa là dùng local branch làm source
 - <code>origin/&lt;branch&gt;</code> nghĩa là cập nhật từ remote branch trước rồi mới chuyển
 
-Nếu bot phát hiện branch lưu trong session không khớp với branch hiện tại của repository, bot sẽ không tiếp tục một cách mù quáng. Bot sẽ hỏi bạn muốn dùng branch nào:
+Nếu bot phát hiện branch lưu trong phiên không khớp với branch hiện tại của repository, bot sẽ không tiếp tục một cách mù quáng. Bot sẽ hỏi bạn muốn dùng branch nào:
 
-- giữ branch đã lưu trong session
+- giữ branch đã lưu trong phiên
 - giữ branch hiện tại của repository
 
 Nếu source branch bạn muốn không còn, bot sẽ đưa ra các fallback source dựa trên default branch và current branch thay vì để bạn đối mặt với Git error thô.
@@ -550,11 +550,11 @@ Log được ghi **cả ra stdout và vào file log quay vòng** dưới:
 
 - bot khởi động và bắt đầu polling
 - chọn project
-- tạo session
-- chuyển session
+- tạo phiên
+- chuyển phiên
 - báo cáo phiên hoạt động
 - chạy bình thường (bao gồm audit log line với prompt đã được rút gọn)
-- thay session sau khi resume thất bại
+- thay phiên sau khi resume thất bại
 - warnings và runtime errors
 </details>
 

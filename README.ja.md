@@ -49,7 +49,7 @@
 
    ## 🛠️ 典型的なローカルフロー
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # または ./startup.sh を実行
    ```
 
    ##### Telegram では:
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### 初回起動時にアプリが env ファイルを作成し、入力すべき項目を案内します。
 ##### env ファイルを更新したら、次を再実行してください:
 ```bash
-# if you follow Option A or Option B, then run
+# Option A または Option B に従う場合は、次を実行
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# Option C に従う場合は、これをもう一度実行
 ./startup.sh
 ```
 
@@ -234,27 +234,27 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>最新の session を新しい順で表示します。現在のプロジェクトに対する bot-managed session とローカルの Codex/Copilot CLI session の両方を含みます。</td>
+    <td>最新のセッションを新しい順で表示します。現在のプロジェクトに対する bot 管理セッションとローカルの Codex/Copilot CLI セッションの両方を含みます。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
-    <td>保存済み session の別ページを表示します。</td>
+    <td>保存済みセッションの別ページを表示します。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch &lt;session_id&gt;</code></td>
-    <td>ID を指定して特定の session に切り替えます。ローカル CLI session を選ぶと bot がそれを取り込み、そこから続行します。</td>
+    <td>ID を指定して特定のセッションに切り替えます。ローカル CLI セッションを選ぶと bot がそれを取り込み、そこから続行します。</td>
   </tr>
   <tr>
     <td width="332"><code>/compact</code></td>
-    <td>アクティブな session から新しい compact 済み session を作成し、そこへ切り替えます。</td>
+    <td>アクティブなセッションから新しい compact 済みセッションを作成し、そこへ切り替えます。</td>
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>アクティブなセッション の project 内で、検証済みの `git commit` 関連コマンドを実行します。`ENABLE_COMMIT_COMMAND=true` のときだけ利用できます。変更を伴う Git コマンドには trusted project が必要です。</td>
+    <td>アクティブなセッション の project 内で、検証済みの <code>git commit</code> 関連コマンドを実行します。<code>ENABLE_COMMIT_COMMAND=true</code> のときだけ利用できます。変更を伴う Git コマンドには trusted project が必要です。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>現在の アクティブなセッション に対して `origin <branch>` を push します。push 前に bot が確認します。</td>
+    <td>現在の アクティブなセッション に対して <code>origin &lt;branch&gt;</code> を push します。push 前に bot が確認します。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -418,14 +418,14 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Session 管理
+## 🧠 セッション管理
 
-Session は次の単位で分かれます:
+セッションは次の単位で分かれます:
 
 - Telegram bot
 - Telegram chat
 
-そのため、同じ Telegram アカウントでも複数の bot を使い分けながら session を混在させずに運用できます。
+そのため、同じ Telegram アカウントでも複数の bot を使い分けながらセッションを混在させずに運用できます。
 
 例:
 
@@ -440,9 +440,9 @@ Session は次の単位で分かれます:
 - 利用可能なら branch 名
 
 <details>
-<summary><b>各 session に保存される内容</b></summary>
+<summary><b>各セッションに保存される内容</b></summary>
 
-- session 名
+- セッション名
 - プロジェクトフォルダー
 - branch 名
 - プロバイダー
@@ -514,16 +514,16 @@ bot は project と branch をひとまとまりとして扱います。
 
 - project を選んでも、無関係な branch を勝手に選びません
 - branch が必要なときは、bot が選択を求めます
-- session 関連メッセージで branch を表示するときは、project と branch を一緒に表示します
+- セッション関連メッセージで branch を表示するときは、プロジェクトと branch を一緒に表示します
 
 branch を作成または切り替えるとき、bot は source を明示的に案内します:
 
 - <code>local/&lt;branch&gt;</code>: ローカル branch を source に使う
 - <code>origin/&lt;branch&gt;</code>: remote branch から更新してから切り替える
 
-保存済み session の branch と現在の repository branch が一致しない場合、bot はそのまま続行しません。どちらの branch を使うか確認します:
+保存済みセッションの branch と現在の repository branch が一致しない場合、bot はそのまま続行しません。どちらの branch を使うか確認します:
 
-- 保存済み session の branch を使う
+- 保存済みセッションの branch を使う
 - 現在の repository branch を使う
 
 希望する source branch が存在しない場合は、生の Git error にせず、default branch と current branch を元に fallback source を提案します。
@@ -550,11 +550,11 @@ log は **stdout とローテーションする log file の両方**に書き込
 
 - bot 起動と polling 開始
 - project 選択
-- session 作成
-- session 切り替え
+- セッション作成
+- セッション切り替え
 - アクティブなセッション の表示
 - 通常の run 実行（切り詰められた prompt を含む audit log 行も含む）
-- resume 失敗後の session 置き換え
+- resume 失敗後のセッション置き換え
 - warning と runtime error
 </details>
 

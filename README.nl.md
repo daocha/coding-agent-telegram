@@ -49,7 +49,7 @@
 
    ## 🛠️ Typische lokale flow
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # of voer ./startup.sh uit
    ```
 
    ##### In Telegram:
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### Bij de eerste start maakt de app het env-bestand aan en vertelt welke velden je moet invullen.
 ##### Start na het bijwerken van het env-bestand opnieuw:
 ```bash
-# if you follow Option A or Option B, then run
+# als je optie A of optie B volgt, voer dan uit
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# als je optie C volgt, voer dit dan opnieuw uit
 ./startup.sh
 ```
 
@@ -246,15 +246,15 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>/compact</code></td>
-    <td>Maak vanuit de actieve session een nieuwe compacte session en schakel daarheen over.</td>
+    <td>Maak vanuit de actieve sessie een nieuwe compacte sessie en schakel daarheen over.</td>
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Voer gevalideerde `git commit`-gerelateerde commando’s uit binnen het project van de actieve sessie. Alleen beschikbaar als `ENABLE_COMMIT_COMMAND=true`. Muterende Git-commando’s vereisen een trusted project.</td>
+    <td>Voer gevalideerde <code>git commit</code>-gerelateerde commando’s uit binnen het project van de actieve sessie. Alleen beschikbaar als <code>ENABLE_COMMIT_COMMAND=true</code>. Muterende Git-commando’s vereisen een trusted project.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Push `origin <branch>` voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
+    <td>Push <code>origin &lt;branch&gt;</code> voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

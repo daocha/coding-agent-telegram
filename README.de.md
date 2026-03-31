@@ -49,7 +49,7 @@
 
    ## 🛠️ Typischer lokaler Ablauf
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # oder ./startup.sh ausführen
    ```
 
    ##### In Telegram:
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### Beim ersten Start legt die App die Env-Datei an und sagt dir, welche Felder du ausfüllen musst.
 ##### Nach dem Bearbeiten der Env-Datei starte erneut:
 ```bash
-# if you follow Option A or Option B, then run
+# wenn du Option A oder Option B verwendest, dann ausführen
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# wenn du Option C verwendest, dann dies erneut ausführen
 ./startup.sh
 ```
 
@@ -250,11 +250,11 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>Geprüfte `git commit`-bezogene Befehle im Projekt der aktiven Session ausführen. Nur verfügbar, wenn `ENABLE_COMMIT_COMMAND=true`. Schreibende Git-Befehle erfordern ein vertrauenswürdiges Projekt.</td>
+    <td>Geprüfte <code>git commit</code>-bezogene Befehle im Projekt der aktiven Session ausführen. Nur verfügbar, wenn <code>ENABLE_COMMIT_COMMAND=true</code>. Schreibende Git-Befehle erfordern ein vertrauenswürdiges Projekt.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>`origin <branch>` für die aktuelle aktive Session pushen. Der Bot fragt vor dem Push nach einer Bestätigung.</td>
+    <td><code>origin &lt;branch&gt;</code> für die aktuelle aktive Session pushen. Der Bot fragt vor dem Push nach einer Bestätigung.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

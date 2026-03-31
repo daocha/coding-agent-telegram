@@ -49,7 +49,7 @@
 
    ## 🛠️ 典型本機流程
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # 或執行 ./startup.sh
    ```
 
    ##### 在 Telegram：
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### 第一次執行時，app 會建立 env 檔案，並告訴你需要填寫哪些欄位。
 ##### 更新 env 檔案後，再次執行：
 ```bash
-# if you follow Option A or Option B, then run
+# 如果你使用方案 A 或方案 B，則執行
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# 如果你使用方案 C，則再次執行此指令
 ./startup.sh
 ```
 
@@ -234,27 +234,27 @@ bot 目前接受：
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>顯示最新的 session，按由新到舊排序。列表同時包含 bot-managed sessions 以及目前 project 的本機 Codex/Copilot CLI sessions。</td>
+    <td>顯示最新的工作階段，按由新到舊排序。列表同時包含 bot 管理的工作階段以及目前專案的本機 Codex/Copilot CLI 工作階段。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
-    <td>顯示已儲存 sessions 的其他頁面。</td>
+    <td>顯示已儲存工作階段的其他頁面。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch &lt;session_id&gt;</code></td>
-    <td>透過 ID 切換到指定 session。如果你選擇本機 CLI session，bot 會把它匯入 state 並從那裡繼續。</td>
+    <td>透過 ID 切換到指定工作階段。如果你選擇本機 CLI 工作階段，bot 會把它匯入狀態並從那裡繼續。</td>
   </tr>
   <tr>
     <td width="332"><code>/compact</code></td>
-    <td>從目前使用中的 session 建立新的壓縮 session，並切換到該 session。</td>
+    <td>從目前使用中的工作階段建立新的壓縮工作階段，並切換到該工作階段。</td>
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>在作用中工作階段的專案內執行已驗證的 `git commit` 相關指令。只在 `ENABLE_COMMIT_COMMAND=true` 時可用。會修改內容的 Git 指令要求專案已 trusted。</td>
+    <td>在作用中工作階段的專案內執行已驗證的 <code>git commit</code> 相關指令。只在 <code>ENABLE_COMMIT_COMMAND=true</code> 時可用。會修改內容的 Git 指令要求專案已 trusted。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>為目前作用中工作階段執行 `origin <branch>` push。push 前 bot 會要求確認。</td>
+    <td>為目前作用中工作階段執行 <code>origin &lt;branch&gt;</code> push。push 前 bot 會要求確認。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -396,7 +396,7 @@ bot 目前接受：
 <table>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json</code></td>
-    <td>Session 狀態主檔。</td>
+    <td>工作階段狀態主檔。</td>
   </tr>
   <tr>
     <td><code>~/.coding-agent-telegram/state.json.bak</code></td>
@@ -424,14 +424,14 @@ ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
 
-## 🧠 Session 管理
+## 🧠 工作階段管理
 
-Session 會按以下範圍分開：
+工作階段會按以下範圍分開：
 
 - Telegram bot
 - Telegram chat
 
-這表示同一個 Telegram 帳號可以同時使用多個 bot，而不會把 session 混在一起。
+這表示同一個 Telegram 帳號可以同時使用多個 bot，而不會把工作階段混在一起。
 
 例子：
 
@@ -520,16 +520,16 @@ bot 會把 project 和 branch 當成一組來處理。
 
 - 選擇 project 時不會靜默切到無關 branch
 - 如果需要 branch 輸入，bot 會要求你選擇
-- 在 session 相關訊息中顯示 branch 資訊時，project 和 branch 會一起顯示
+- 在工作階段相關訊息中顯示 branch 資訊時，專案和 branch 會一起顯示
 
 當你建立或切換 branch 時，bot 會明確引導你選擇 source：
 
 - <code>local/&lt;branch&gt;</code>：使用本地 branch 作為 source
 - <code>origin/&lt;branch&gt;</code>：先從遠端 branch 更新，再切換
 
-如果 bot 發現 session 中儲存的 branch 與目前 repository branch 不一致，它不會盲目繼續，而會詢問你想使用哪個 branch：
+如果 bot 發現工作階段中儲存的 branch 與目前儲存庫 branch 不一致，它不會盲目繼續，而會詢問你想使用哪個 branch：
 
-- 保留 session 中儲存的 branch
+- 保留工作階段中儲存的 branch
 - 保留目前 repository branch
 
 如果你偏好的 source branch 已不存在，bot 會根據 default branch 和 current branch 提供 fallback source，而不是直接丟出原始 Git error。
@@ -556,11 +556,11 @@ log 會**同時寫入 stdout 和輪轉 log file**，路徑如下：
 
 - bot 啟動與 polling 開始
 - project 選擇
-- session 建立
-- session 切換
+- 工作階段建立
+- 工作階段切換
 - 作用中工作階段報告
 - 正常 run 執行（包含被截短的 prompt audit log 行）
-- resume 失敗後的 session 替換
+- resume 失敗後的工作階段替換
 - warnings 與 runtime errors
 </details>
 

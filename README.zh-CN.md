@@ -49,7 +49,7 @@
 
    ## 🛠️ 典型本地流程
    ```bash
-   coding-agent-telegram # or run ./startup.sh
+   coding-agent-telegram # 或运行 ./startup.sh
    ```
 
    ##### 在 Telegram 中：
@@ -131,10 +131,10 @@ cd coding-agent-telegram
 ##### 首次运行时，应用会创建 env 文件，并告诉你需要填写哪些字段。
 ##### 更新 env 文件后，再次运行：
 ```bash
-# if you follow Option A or Option B, then run
+# 如果你使用方案 A 或方案 B，则运行
 coding-agent-telegram
 
-# if you follow Option C, then run this again
+# 如果你使用方案 C，则再次运行此命令
 ./startup.sh
 ```
 
@@ -234,27 +234,27 @@ bot 当前接受：
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>显示最新的 session，按从新到旧排序。列表同时包含 bot-managed sessions 和当前 project 的本地 Codex/Copilot CLI sessions。</td>
+    <td>显示最新的会话，按从新到旧排序。列表同时包含 bot 管理的会话和当前项目的本地 Codex/Copilot CLI 会话。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
-    <td>显示已保存 sessions 的其他页。</td>
+    <td>显示已保存会话的其他页。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch &lt;session_id&gt;</code></td>
-    <td>通过 ID 切换到指定 session。如果你选择本地 CLI session，bot 会把它导入 state 并从那里继续。</td>
+    <td>通过 ID 切换到指定会话。如果你选择本地 CLI 会话，bot 会把它导入状态并从那里继续。</td>
   </tr>
   <tr>
     <td width="332"><code>/compact</code></td>
-    <td>从当前活动 session 创建一个新的压缩 session，并切换到该 session。</td>
+    <td>从当前活动会话创建一个新的压缩会话，并切换到该会话。</td>
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>在活动会话的项目内执行已校验的 `git commit` 相关命令。仅当 `ENABLE_COMMIT_COMMAND=true` 时可用。会修改内容的 Git 命令要求项目已 trusted。</td>
+    <td>在活动会话的项目内执行已校验的 <code>git commit</code> 相关命令。仅当 <code>ENABLE_COMMIT_COMMAND=true</code> 时可用。会修改内容的 Git 命令要求项目已 trusted。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>为当前活动会话执行 `origin <branch>` push。push 前 bot 会要求确认。</td>
+    <td>为当前活动会话执行 <code>origin &lt;branch&gt;</code> push。push 前 bot 会要求确认。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -425,7 +425,7 @@ ENABLE_SECRET_SCRUB_FILTER=true
 - Telegram bot
 - Telegram chat
 
-这意味着同一个 Telegram 账号可以同时使用多个 bot，而不会把 session 混在一起。
+这意味着同一个 Telegram 账号可以同时使用多个 bot，而不会把会话混在一起。
 
 示例：
 
@@ -514,16 +514,16 @@ bot 会把 project 和 branch 当成一组信息来处理。
 
 - 选择 project 时不会悄悄切到无关的 branch
 - 如果需要 branch 输入，bot 会提示你选择
-- 在 session 相关消息里显示 branch 信息时，project 和 branch 会一起展示
+- 在会话相关消息里显示 branch 信息时，项目和 branch 会一起展示
 
 当你创建或切换 branch 时，bot 会明确引导你选择 source：
 
 - <code>local/&lt;branch&gt;</code> 表示使用本地 branch 作为 source
 - <code>origin/&lt;branch&gt;</code> 表示先从远端 branch 更新，再切换
 
-如果 bot 发现 session 里保存的 branch 与当前 repository branch 不一致，它不会盲目继续，而是会询问你要使用哪一个 branch：
+如果 bot 发现会话里保存的 branch 与当前仓库 branch 不一致，它不会盲目继续，而是会询问你要使用哪一个 branch：
 
-- 保留 session 中保存的 branch
+- 保留会话中保存的 branch
 - 保留当前 repository branch
 
 如果你偏好的 source branch 已缺失，bot 会基于 default branch 和 current branch 提供 fallback source，而不是直接把你丢给原始 Git error。
@@ -550,11 +550,11 @@ log 会**同时写入 stdout 和轮转日志文件**，路径为：
 
 - bot 启动与 polling 启动
 - project 选择
-- session 创建
-- session 切换
+- 会话创建
+- 会话切换
 - 活动会话报告
 - 正常 run 执行（包含截断后的 prompt 审计日志行）
-- resume 失败后的 session 替换
+- resume 失败后的会话替换
 - warnings 与 runtime errors
 </details>
 
