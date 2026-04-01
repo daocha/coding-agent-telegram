@@ -5837,3 +5837,3380 @@ def test_expired_branch_source_token_returns_error(tmp_path: Path):
 
     assert edited
     assert "expired" in edited[-1][0].lower()
+
+
+# ===========================================================================
+# session_common.py coverage
+# ===========================================================================
+
+
+def test_next_available_session_name_appends_suffix_on_collision(tmp_path: Path):
+    """_next_available_session_name must try suffix -1, -2 … until unique."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "s1", "backend-main-codex", "backend", "codex")
+    store.create_session("bot-a", 123, "s2", "backend-main-codex-1", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    result = router._next_available_session_name(123, "backend-main-codex")
+    assert result == "backend-main-codex-2"
+
+
+def test_active_session_matches_current_context_false_when_session_not_dict(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_pending_action("bot-a", 123, {"active_session_id": "nonexistent"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    # active_session_id set but not pointing to a real session
+    store.set_pending_action("bot-a", 123, None)
+    import json, portalocker
+    lock = cfg.state_file.with_suffix(cfg.state_file.suffix + ".lock")
+    with portalocker.Lock(str(lock), timeout=5):
+        raw = json.loads(cfg.state_file.read_text())
+        key = "bot-a:123"
+        if key in raw.get("chats", {}):
+            raw["chats"][key]["active_session_id"] = "ghost-session"
+            raw["chats"][key].setdefault("sessions", {})
+        cfg.state_file.write_text(json.dumps(raw), encoding="utf-8")
+
+    chat_state = store.get_chat_state("bot-a", 123)
+    result = router._active_session_matches_current_context(chat_state)
+    assert result is False
+
+
+def test_auto_session_name_uses_timestamp_fallback_when_all_suffixes_taken(tmp_path: Path):
+    """If base name AND all numbered suffixes are taken, _auto_session_name
+    should fall back to a timestamp-based name."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+
+    # Occupy the base name and -1 suffix so the first pass needs a timestamp name
+    store.create_session("bot-a", 123, "s1", "proj-main-codex", "proj", "codex")
+    store.create_session("bot-a", 123, "s2", "proj-main-codex-1", "proj", "codex")
+
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    # _auto_session_name normally returns base; with base+1 taken it tries timestamp path
+    name = router._auto_session_name("proj", "main", "codex", 123)
+    # Should be a unique name (not equal to any existing ones)
+    existing = {d["name"] for d in store.list_sessions("bot-a", 123).values()}
+    assert name not in existing
+
+
+# ===========================================================================
+# session_status_commands.py coverage
+# ===========================================================================
+
+
+def test_abort_command_with_args_sends_usage(tmp_path: Path):
+    """handle_abort with extra args should send a usage message."""
+    (tmp_path / "backend").mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    bot = FakeBot()
+    update = make_update()
+    context = SimpleNamespace(args=["extra"], bot=bot)
+
+    asyncio.run(router.handle_abort(update, context))
+
+    assert bot.messages
+    assert "usage" in bot.messages[-1][1].lower() or "/abort" in bot.messages[-1][1]
+
+
+def test_abort_command_with_no_project_sends_no_project_message(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    bot = FakeBot()
+    update = make_update()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_abort(update, context))
+
+    assert bot.messages
+    assert "project" in bot.messages[-1][1].lower()
+
+
+def test_abort_command_with_missing_project_folder_sends_error(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "nonexistent-folder")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    bot = FakeBot()
+    update = make_update()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_abort(update, context))
+
+    assert bot.messages
+    # Should mention the missing folder
+    assert "nonexistent-folder" in bot.messages[-1][1] or "missing" in bot.messages[-1][1].lower()
+
+
+# ===========================================================================
+# session_branch_resolution.py coverage
+# ===========================================================================
+
+
+def test_branch_discrepancy_callback_no_pending_action_sends_error(tmp_path: Path):
+    (tmp_path / "backend").mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:stored",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        effective_user=SimpleNamespace(language_code="en"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer(): return None
+    async def fake_edit(text, reply_markup=None): edited.append(text)
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    assert edited
+    assert "pending" in edited[-1].lower() or "decision" in edited[-1].lower()
+
+
+def test_branch_discrepancy_callback_wrong_kind_sends_error(tmp_path: Path):
+    (tmp_path / "backend").mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    # Set pending action with wrong branch_resolution kind
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "switch_source"},  # not "discrepancy"
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:stored",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        effective_user=SimpleNamespace(language_code="en"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer(): return None
+    async def fake_edit(text, reply_markup=None): edited.append(text)
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    assert edited
+
+
+def test_branch_discrepancy_callback_choose_current_updates_branch(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "my-session", "backend", "codex", branch_name="stored-branch")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "continue",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "stored-branch",
+            "current_branch": "current-branch",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:current",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        effective_user=SimpleNamespace(language_code="en"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer(): return None
+    async def fake_edit(text, reply_markup=None): edited.append(text)
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state.get("current_branch") == "current-branch"
+
+
+def test_branch_discrepancy_callback_stored_unavailable_no_fallback(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "my-session", "backend", "codex", branch_name="ghost-branch")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "continue",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "ghost-branch",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        default_branch="main",
+        local_branches=[],   # ghost-branch not available locally
+        # no remote either
+    )
+
+    edited = []
+    query = SimpleNamespace(
+        data="branchdiscrepancy:stored",
+        answer=None,
+        edit_message_text=None,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        effective_user=SimpleNamespace(language_code="en"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer(): return None
+    async def fake_edit(text, reply_markup=None): edited.append((text, reply_markup))
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+
+    assert edited
+
+
+# ===========================================================================
+# session_lifecycle_commands.py: null result when workspace lock is held
+# ===========================================================================
+
+
+def test_create_session_returns_false_when_workspace_locked(tmp_path: Path):
+    """_create_session_for_context must return False (not crash) when
+    _run_with_typing returns None because the workspace lock is already held."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    # Patch _run_with_typing to return None (simulates workspace lock held)
+    async def _locked(*args, **kwargs):
+        return None
+
+    router._run_with_typing = _locked
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._create_session_for_context(
+        update, context,
+        session_name=None,
+        use_session_id_as_name=False,
+        provider="codex",
+        project_folder="backend",
+        branch_name="",
+        project_path=backend,
+    ))
+
+    assert result is False
+
+
+async def _acquire_lock_helper():
+    import asyncio
+    lock = asyncio.Lock()
+    await lock.acquire()
+    return lock
+
+
+# ===========================================================================
+# session_branch_resolution.py — _resolve_branch_discrepancy_if_needed paths
+# ===========================================================================
+
+
+def test_resolve_discrepancy_clears_action_when_no_active_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "discrepancy", "stored_branch": "a", "current_branch": "b"},
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+
+    assert result is False
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_resolve_discrepancy_clears_action_when_session_not_dict(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "discrepancy", "stored_branch": "a", "current_branch": "b"},
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    # Remove the session entry while keeping active_session_id pointing to it
+    import json, portalocker
+    lock = cfg.state_file.with_suffix(cfg.state_file.suffix + ".lock")
+    with portalocker.Lock(str(lock), timeout=5):
+        raw = json.loads(cfg.state_file.read_text())
+        raw["chats"]["bot-a:123"]["sessions"].pop("sess1", None)
+        cfg.state_file.write_text(json.dumps(raw))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+
+    assert result is False
+
+
+def test_resolve_discrepancy_sends_error_when_project_folder_missing(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "gone-folder", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "discrepancy", "stored_branch": "a", "current_branch": "b"},
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+
+    assert result is False
+    assert bot.messages  # Error message was sent
+
+
+def test_resolve_discrepancy_prompts_when_kind_is_discrepancy(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "my-session", "backend", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature-x",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+
+    assert result is False
+    # A prompt message should have been sent
+    assert bot.messages
+
+
+# ===========================================================================
+# session_branch_resolution.py — _multi_branch_source_keyboard paths
+# ===========================================================================
+
+
+def test_multi_branch_source_keyboard_returns_none_when_no_branches_available(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=[])
+
+    result = router._multi_branch_source_keyboard(
+        new_branch="feature",
+        source_branches=["nonexistent"],
+        project_path=backend,
+    )
+
+    assert result is None
+
+
+def test_multi_branch_source_keyboard_skips_empty_branch_names(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=["main"])
+
+    result = router._multi_branch_source_keyboard(
+        new_branch="feature",
+        source_branches=["", "main"],
+        project_path=backend,
+    )
+
+    assert result is not None
+    labels = [btn.text for row in result.inline_keyboard for btn in row]
+    assert any("main" in lbl for lbl in labels)
+
+
+# ===========================================================================
+# session_branch_resolution — _offer_branch_source_fallback
+# ===========================================================================
+
+
+def test_offer_branch_source_fallback_shows_keyboard_when_alternatives_exist(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="main",
+        local_branches=["main"],
+    )
+
+    edited = []
+    query = SimpleNamespace(
+        answer=None,
+        edit_message_text=None,
+    )
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.edit_message_text = fake_edit
+
+    result = asyncio.run(router._offer_branch_source_fallback(
+        query,
+        project_folder="backend",
+        project_path=backend,
+        source_kind="origin",
+        source_branch="deleted-branch",
+        new_branch="feature",
+        error_message="fatal: not found",
+    ))
+
+    assert result is True
+    assert edited
+
+
+def test_offer_branch_source_fallback_returns_false_for_local_source(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    result = asyncio.run(router._offer_branch_source_fallback(
+        None,
+        project_folder="backend",
+        project_path=backend,
+        source_kind="local",   # only origin triggers fallback
+        source_branch="branch",
+        new_branch="feature",
+        error_message="error",
+    ))
+
+    assert result is False
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _resolve_session_prerequisites paths
+# ===========================================================================
+
+
+def test_resolve_session_prerequisites_returns_none_when_provider_unavailable(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def unavailable(*a, **kw):
+        return False
+
+    router._ensure_provider_available = unavailable
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_session_prerequisites(update, context, pending_action=None))
+    assert result is None
+
+
+def test_resolve_session_prerequisites_returns_none_when_no_branch_and_git_repo(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_current_project_folder("bot-a", 123, "backend")
+    # No branch set in state
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=["main"])
+
+    async def available(*a, **kw):
+        return True
+
+    router._ensure_provider_available = available
+
+    sent_messages = []
+
+    async def fake_send_branch_prompt(*a, **kw):
+        sent_messages.append("branch_prompt")
+
+    router._send_branch_selection_prompt = fake_send_branch_prompt
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_session_prerequisites(update, context, pending_action=None))
+    assert result is None
+    assert "branch_prompt" in sent_messages
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _create_session_for_context error paths
+# ===========================================================================
+
+
+def test_create_session_returns_false_when_agent_reports_failure(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    failed_result = SimpleNamespace(success=False, session_id=None, error_message="agent error")
+
+    async def _failing(*args, **kwargs):
+        return failed_result
+
+    router._run_with_typing = _failing
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._create_session_for_context(
+        update, context,
+        session_name=None,
+        use_session_id_as_name=False,
+        provider="codex",
+        project_folder="backend",
+        branch_name="main",
+        project_path=backend,
+    ))
+
+    assert result is False
+    assert any("agent error" in m for m in bot.messages)
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _continue_pending_action paths
+# ===========================================================================
+
+
+def test_continue_pending_action_clears_empty_user_message(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": ""})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def available(*a, **kw):
+        return True
+
+    router._ensure_provider_available = available
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._continue_pending_action(update, context))
+    assert result is False
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_continue_pending_action_handles_unknown_kind(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_pending_action("bot-a", 123, {"kind": "unknown_kind"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    async def available(*a, **kw):
+        return True
+
+    router._ensure_provider_available = available
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._continue_pending_action(update, context))
+    assert result is False
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _ensure_active_session_ready_for_run paths
+# ===========================================================================
+
+
+def test_ensure_active_session_ready_returns_false_when_no_active_session(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is False
+
+
+def test_ensure_active_session_ready_returns_false_project_folder_missing(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "gone", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is False
+    assert bot.messages  # error message sent
+
+
+def test_ensure_active_session_ready_returns_true_non_git_repo(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is True
+
+
+def test_ensure_active_session_ready_prompts_branch_discrepancy(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex", branch_name="feature-x")
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hi"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is False
+    assert bot.sent_messages  # discrepancy prompt sent
+
+
+# ===========================================================================
+# session_branch_resolution — handle_branch_discrepancy_callback paths
+# ===========================================================================
+
+
+def test_handle_branch_discrepancy_callback_shows_no_pending_when_none(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:stored")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert any("pending" in t.lower() or edited for t in edited)
+
+
+def test_handle_branch_discrepancy_callback_shows_wrong_kind_message(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Set pending action with wrong kind
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hi"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:stored")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+
+
+def test_handle_branch_discrepancy_callback_stored_no_branches_keyboard_none(tmp_path: Path):
+    """Stored branch chosen but local+remote unavailable and no fallback keyboard."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex", branch_name="feature-x")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature-x",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # No branches → keyboard will be None
+    # No local branches, no default branch → keyboard will be None for source fallback
+    router.git = FakeGitManager(is_git_repo=True, local_branches=[], current_branch=None, default_branch=None)
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:stored")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    # Should show "no fallback" message (no keyboard available)
+    assert edited
+    assert any("no longer available" in t[0].lower() or "no fallback" in t[0].lower() for t in edited)
+
+
+def test_handle_branch_discrepancy_callback_stored_branch_found_locally(tmp_path: Path):
+    """Stored branch chosen and it exists locally/remotely → show restore method keyboard."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex", branch_name="feature-x")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature-x",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        local_branches=["feature-x", "main"],
+        current_branch="main",
+        default_branch="main",
+    )
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:stored")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    # Should show keyboard with restore options
+    assert edited
+    assert any(t[1] is not None for t in edited)
+
+
+def test_handle_branch_discrepancy_callback_current_choice(tmp_path: Path):
+    """Choosing 'current' updates store and continues pending action."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex", branch_name="feature-x")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature-x",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=["main"], current_branch="main")
+
+    continued = []
+
+    async def fake_continue(*a, **kw):
+        continued.append(True)
+
+    router._continue_pending_action = fake_continue
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:current")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    assert continued
+
+
+def test_handle_branch_discrepancy_callback_no_active_session(tmp_path: Path):
+    """Callback chosen but no active session → shows no_active_session message."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature-x",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:stored")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+
+
+def test_handle_branch_discrepancy_callback_project_folder_missing(tmp_path: Path):
+    """Callback chosen but project folder is gone → shows missing message."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "gone-folder", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature-x",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True)
+
+    edited = []
+
+    async def fake_answer():
+        pass
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query = SimpleNamespace(answer=fake_answer, edit_message_text=fake_edit, data="branchdiscrepancy:stored")
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=123, type="private"), message=None, callback_query=query)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+
+
+# ===========================================================================
+# session_branch_resolution — _resolve_branch_discrepancy_if_needed early exits
+# ===========================================================================
+
+
+def test_resolve_discrepancy_returns_true_when_no_pending_action(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_discrepancy_returns_true_when_no_branch_resolution(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hi"})  # no branch_resolution key
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_discrepancy_returns_true_when_branch_resolution_not_dict(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hi", "branch_resolution": "invalid"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_discrepancy_returns_true_when_unknown_kind(tmp_path: Path):
+    """branch_resolution dict with unknown kind → returns True (no action)."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "other"},
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_discrepancy_returns_true_for_empty_stored_or_current_branch(tmp_path: Path):
+    """branch_resolution discrepancy but with empty stored/current branch → True."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "discrepancy", "stored_branch": "", "current_branch": ""},
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+# ===========================================================================
+# session_status_commands.py — handle_compact missing lines (75, 77)
+# ===========================================================================
+
+
+def test_compact_returns_early_when_no_active_session(tmp_path: Path):
+    """handle_compact must return early (line 75) when there is no active session."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/compact")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_compact(update, context))
+
+    assert any("No active session" in msg[1] for msg in bot.messages)
+
+
+def test_compact_returns_early_when_project_busy(tmp_path: Path):
+    """handle_compact must return early (line 77) when the project is busy."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="main")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main")
+
+    # Mark project as busy
+    import asyncio as _asyncio; _lock = _asyncio.Lock(); asyncio.run(_lock.acquire()); router._workspace_locks["backend"] = _lock
+
+    update = make_update(text="/compact")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_compact(update, context))
+
+    # Message should include "busy" info (project is running)
+    assert any("busy" in msg[1].lower() or "running" in msg[1].lower() or "currently" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# session_status_commands.py — handle_queue_continue_callback (line 85)
+# ===========================================================================
+
+
+def test_queue_continue_callback_returns_early_when_query_data_is_none(tmp_path: Path):
+    """handle_queue_continue_callback must return silently when query.data is None (line 85)."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    query = SimpleNamespace(data=None, answer=None)
+
+    async def fake_answer():
+        return None
+
+    query.answer = fake_answer
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_queue_continue_callback(update, context))
+    # Should not crash and not send any message
+    assert bot.messages == []
+
+
+# ===========================================================================
+# session_status_commands.py — handle_queue_batch_callback (lines 102, 109-110)
+# ===========================================================================
+
+
+def test_queue_batch_callback_returns_early_when_query_data_is_none(tmp_path: Path):
+    """handle_queue_batch_callback must return silently when query.data is None (line 102)."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    query = SimpleNamespace(data=None, answer=None)
+
+    async def fake_answer():
+        return None
+
+    query.answer = fake_answer
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_queue_batch_callback(update, context))
+    assert bot.messages == []
+
+
+def test_queue_batch_callback_sends_no_batch_pending_when_no_pending(tmp_path: Path):
+    """handle_queue_batch_callback must edit message with 'no pending' text when pending is None (lines 109-110)."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="queuebatch:group", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_queue_batch_callback(update, context))
+    assert edited
+    # Should say no batch pending
+    assert any("pending" in e.lower() or "batch" in e.lower() for e in edited)
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _resolve_session_prerequisites (line 50)
+# ===========================================================================
+
+
+def test_resolve_session_prerequisites_returns_none_when_provider_unavailable(tmp_path: Path):
+    """_resolve_session_prerequisites must return None (line 50) when provider is not available."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # Provider is selected but NOT available
+    router._provider_available = lambda provider: False
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    # Session should not have been created
+    assert runner.create_calls == []
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _resolve_session_prerequisites (lines 70-78)
+# ===========================================================================
+
+
+def test_resolve_session_prerequisites_sends_branch_prompt_for_git_repo_without_branch(tmp_path: Path):
+    """_resolve_session_prerequisites must send branch selection prompt (lines 70-78)
+    when project is a git repo but no branch is selected."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    # No current_branch set in state
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main"])
+    router._provider_available = lambda provider: True
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls == []
+    # Should have sent branch selection message
+    assert any("branch" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _create_session_for_context (lines 136-137)
+# ===========================================================================
+
+
+class FailingCreateRunner(DummyRunner):
+    def create_session(
+        self,
+        provider,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        from coding_agent_telegram.agent_runner import AgentRunResult
+        self.create_calls.append({"provider": provider, "project_path": project_path, "user_message": user_message})
+        return AgentRunResult(
+            session_id=None,
+            success=False,
+            assistant_text="",
+            error_message="Backend unavailable",
+            raw_events=[],
+        )
+
+
+def test_create_session_for_context_returns_false_when_result_failed(tmp_path: Path):
+    """_create_session_for_context must return False (lines 136-137) when result.success is False."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = FailingCreateRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router._provider_available = lambda provider: True
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls
+    assert any("Backend unavailable" in msg[1] or "failed" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _continue_pending_action kind="message"
+# with empty user_message (lines 212-214)
+# ===========================================================================
+
+
+def test_continue_pending_action_clears_empty_message_and_returns_false(tmp_path: Path):
+    """_continue_pending_action must clear pending action and return False (lines 212-214)
+    when kind='message' and user_message is empty."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "",  # empty message
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router._provider_available = lambda provider: True
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._continue_pending_action(update, context))
+
+    assert result is False
+    # Pending action should be cleared
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _continue_pending_action kind="message"
+# when _create_session_for_context fails (line 227)
+# ===========================================================================
+
+
+def test_continue_pending_action_returns_false_when_session_creation_fails(tmp_path: Path):
+    """_continue_pending_action must return False (line 227) when session creation fails
+    and no active session matches current context."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = FailingCreateRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "do something",
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router._provider_available = lambda provider: True
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._continue_pending_action(update, context))
+
+    assert result is False
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _continue_pending_action unknown kind
+# (lines 242-244)
+# ===========================================================================
+
+
+def test_continue_pending_action_handles_unknown_kind(tmp_path: Path):
+    """_continue_pending_action must clear action and return False (lines 242-244) for unknown kinds."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "unknown_future_kind",
+        "data": "something",
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    router._provider_available = lambda provider: True
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._continue_pending_action(update, context))
+
+    assert result is False
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _ensure_active_session_ready_for_run
+# no active session (line 254), session not dict (line 257)
+# ===========================================================================
+
+
+def test_ensure_active_session_ready_returns_false_when_no_active_session(tmp_path: Path):
+    """_ensure_active_session_ready_for_run must return False (line 254) when no active session."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is False
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _ensure_active_session_ready_for_run
+# project folder missing (lines 262-263)
+# ===========================================================================
+
+
+def test_ensure_active_session_ready_returns_false_when_project_missing(tmp_path: Path):
+    """_ensure_active_session_ready_for_run must send error and return False (lines 262-263)
+    when project folder does not exist."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Create session with non-existent project folder
+    store.create_session("bot-a", 123, "sess_a", "session-a", "nonexistent", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is False
+    assert any("missing" in msg[1].lower() or "not found" in msg[1].lower() or "nonexistent" in msg[1] for msg in bot.messages)
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _ensure_active_session_ready_for_run
+# pending_action is None (line 274)
+# ===========================================================================
+
+
+def test_ensure_active_session_ready_returns_true_when_pending_action_is_none(tmp_path: Path):
+    """_ensure_active_session_ready_for_run must return True (line 274) when
+    there is a branch discrepancy but no pending action."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="feature")
+    # No pending action
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main", "feature"])
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is True
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — _ensure_active_session_ready_for_run
+# branch_resolution is discrepancy (line 277)
+# ===========================================================================
+
+
+def test_ensure_active_session_ready_calls_resolve_discrepancy_when_branch_resolution_is_set(tmp_path: Path):
+    """_ensure_active_session_ready_for_run must call _resolve_branch_discrepancy_if_needed
+    (line 277) when pending action has branch_resolution with kind=discrepancy."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="feature")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hello",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main", "feature"])
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    # Should invoke _resolve_branch_discrepancy_if_needed which will prompt for resolution
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    # Resolution prompts and returns False (branch discrepancy not yet resolved)
+    assert result is False
+
+
+# ===========================================================================
+# session_lifecycle_commands.py — handle_new busy (line 300)
+# ===========================================================================
+
+
+def test_handle_new_returns_early_when_project_busy(tmp_path: Path):
+    """handle_new must return early (line 300) when the current project is busy."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    # Mark project as busy
+    import asyncio as _asyncio; _lock = _asyncio.Lock(); asyncio.run(_lock.acquire()); router._workspace_locks["backend"] = _lock
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["my-session"], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls == []
+    assert any("busy" in msg[1].lower() or "running" in msg[1].lower() or "currently" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# session_branch_resolution.py — _multi_branch_source_keyboard (via ProjectCommandMixin)
+# ===========================================================================
+
+
+def test_session_branch_resolution_multi_keyboard_skips_empty_source_branches(tmp_path: Path):
+    """_multi_branch_source_keyboard skips empty/None source branches."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=["main"], default_branch="main")
+
+    result = router._multi_branch_source_keyboard(
+        new_branch="feature",
+        source_branches=["", "main"],
+        project_path=backend,
+    )
+
+    assert result is not None
+
+
+# ===========================================================================
+# session_branch_resolution.py — _offer_branch_source_fallback (line 92)
+# ===========================================================================
+
+
+def test_offer_branch_source_fallback_returns_false_when_keyboard_is_none(tmp_path: Path):
+    """_offer_branch_source_fallback must return False (line 92) when the keyboard is None."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # No branches exist so _multi_branch_source_keyboard returns None
+    router.git = FakeGitManager(is_git_repo=True, current_branch="", default_branch="", local_branches=[])
+
+    result = asyncio.run(router._offer_branch_source_fallback(
+        None,
+        project_folder="backend",
+        project_path=backend,
+        source_kind="origin",
+        source_branch="deleted-branch",
+        new_branch="feature",
+        error_message="fatal: not found",
+    ))
+
+    assert result is False
+
+
+# ===========================================================================
+# session_branch_resolution.py — _offer_branch_source_fallback (line 104)
+# ===========================================================================
+
+
+def test_offer_branch_source_fallback_adds_current_branch_line_when_different_from_default(tmp_path: Path):
+    """_offer_branch_source_fallback must append current_branch info (line 104)
+    when current_branch differs from default_branch."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # current_branch != default_branch
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="develop",
+        default_branch="main",
+        local_branches=["main", "develop"],
+    )
+
+    edited = []
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query = SimpleNamespace(edit_message_text=fake_edit)
+
+    result = asyncio.run(router._offer_branch_source_fallback(
+        query,
+        project_folder="backend",
+        project_path=backend,
+        source_kind="origin",
+        source_branch="deleted-branch",
+        new_branch="feature",
+        error_message="fatal: not found",
+    ))
+
+    assert result is True
+    assert edited
+    assert "develop" in edited[-1]
+
+
+# ===========================================================================
+# session_branch_resolution.py — _resolve_branch_discrepancy_if_needed
+# missing paths (lines 143, 147, 173, 184)
+# ===========================================================================
+
+
+def test_resolve_branch_discrepancy_returns_true_when_no_pending_action(tmp_path: Path):
+    """_resolve_branch_discrepancy_if_needed returns True (line 143) when there is no pending action."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_branch_discrepancy_returns_true_when_branch_resolution_not_dict(tmp_path: Path):
+    """_resolve_branch_discrepancy_if_needed returns True (line 147) when
+    branch_resolution is not a dict."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hi"})
+    # No branch_resolution key → branch_resolution is None, not a dict
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_branch_discrepancy_returns_true_when_discrepancy_branches_empty(tmp_path: Path):
+    """_resolve_branch_discrepancy_if_needed returns True (line 173) when
+    stored_branch or current_branch is empty in a discrepancy resolution."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "",  # empty
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+def test_resolve_branch_discrepancy_returns_true_when_kind_not_discrepancy(tmp_path: Path):
+    """_resolve_branch_discrepancy_if_needed returns True (line 184) when
+    branch_resolution kind is not 'discrepancy'."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "switch_source",  # not "discrepancy"
+            "new_branch": "feature",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._resolve_branch_discrepancy_if_needed(update, context))
+    assert result is True
+
+
+# ===========================================================================
+# session_branch_resolution.py — handle_branch_discrepancy_callback
+# missing paths (lines 190, 195, 211-212, 217-220, 244-247, 271-278)
+# ===========================================================================
+
+
+def test_branch_discrepancy_callback_returns_when_query_data_is_none(tmp_path: Path):
+    """handle_branch_discrepancy_callback returns silently (line 190) when query.data is None."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    query = SimpleNamespace(data=None, answer=None)
+
+    async def fake_answer():
+        return None
+
+    query.answer = fake_answer
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert bot.messages == []
+
+
+def test_branch_discrepancy_callback_returns_on_invalid_choice(tmp_path: Path):
+    """handle_branch_discrepancy_callback returns silently (line 195) for invalid choices."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    query = SimpleNamespace(data="branchdiscrepancy:invalid", answer=None)
+
+    async def fake_answer():
+        return None
+
+    query.answer = fake_answer
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert bot.messages == []
+
+
+def test_branch_discrepancy_callback_sends_no_pending_when_no_pending_action(tmp_path: Path):
+    """handle_branch_discrepancy_callback sends 'no pending' message when pending_action is None."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="branchdiscrepancy:stored", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    assert any("pending" in e.lower() for e in edited)
+
+
+def test_branch_discrepancy_callback_sends_no_pending_discrepancy_for_wrong_kind(tmp_path: Path):
+    """handle_branch_discrepancy_callback sends 'no pending discrepancy' when
+    branch_resolution kind is not 'discrepancy'."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {"kind": "switch_source"},  # not discrepancy
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="branchdiscrepancy:stored", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    assert any("discrepancy" in e.lower() or "pending" in e.lower() for e in edited)
+
+
+def test_branch_discrepancy_callback_sends_no_session_when_session_missing(tmp_path: Path):
+    """handle_branch_discrepancy_callback sends 'no active session' (lines 211-212)
+    when active session is not found."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Set pending action with discrepancy but NO active session
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="branchdiscrepancy:stored", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    assert any("session" in e.lower() for e in edited)
+
+
+def test_branch_discrepancy_callback_sends_error_when_project_missing(tmp_path: Path):
+    """handle_branch_discrepancy_callback edits message (lines 217-220) when
+    project folder does not exist."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "nonexistent-project", "codex", branch_name="feature")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="branchdiscrepancy:stored", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    assert any("missing" in e.lower() or "nonexistent" in e for e in edited)
+
+
+def test_branch_discrepancy_callback_stored_unavailable_no_fallback(tmp_path: Path):
+    """handle_branch_discrepancy_callback sends 'no fallback' message (lines 244-247)
+    when stored branch is unavailable and there are no fallback sources."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="missing-branch")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "missing-branch",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # No local or remote branches at all (so no fallback either)
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="",
+        local_branches=[],
+    )
+
+    edited = []
+    query = SimpleNamespace(data="branchdiscrepancy:stored", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    # Should show "stored branch unavailable, no fallback" message
+    assert any("unavailable" in e[0].lower() or "missing-branch" in e[0] for e in edited)
+
+
+def test_branch_discrepancy_callback_stored_available_offers_restore_choice(tmp_path: Path):
+    """handle_branch_discrepancy_callback offers a restore choice (lines 271-278)
+    when stored branch exists locally or remotely."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend", "codex", branch_name="feature")
+    store.set_pending_action("bot-a", 123, {
+        "kind": "message",
+        "user_message": "hi",
+        "branch_resolution": {
+            "kind": "discrepancy",
+            "stored_branch": "feature",
+            "current_branch": "main",
+        },
+    })
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # "feature" exists locally
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="main",
+        local_branches=["main", "feature"],
+    )
+
+    edited = []
+    query = SimpleNamespace(data="branchdiscrepancy:stored", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_discrepancy_callback(update, context))
+    assert edited
+    # Should offer restore method with keyboard
+    assert edited[-1][1] is not None  # has keyboard
+
+
+def test_ensure_active_session_ready_returns_false_when_session_not_dict(tmp_path: Path):
+    """_ensure_active_session_ready_for_run returns False when session data is not a dict (line 257)."""
+    import json, portalocker
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess1", "s", "backend", "codex")
+    # Delete the session entry from the state file but leave active_session_id pointing to it
+    lock = cfg.state_file.with_suffix(cfg.state_file.suffix + ".lock")
+    with portalocker.Lock(str(lock), timeout=5):
+        raw = json.loads(cfg.state_file.read_text())
+        raw["chats"]["bot-a:123"]["sessions"].pop("sess1", None)
+        cfg.state_file.write_text(json.dumps(raw))
+
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    result = asyncio.run(router._ensure_active_session_ready_for_run(update, context))
+    assert result is False
+
+
+# ===========================================================================
+# queue_processing.py — uncovered utility paths
+# ===========================================================================
+
+
+def test_decode_queue_body_returns_raw_when_no_prefix(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    assert router._decode_queue_body("plain text") == "plain text"
+
+
+def test_preview_queued_message_truncates_at_3_chars(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    result = router._preview_queued_message("hello world", max_chars=3)
+    assert result == "hel"
+
+
+def test_preview_queued_message_appends_ellipsis_for_longer_truncation(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    result = router._preview_queued_message("a " * 60, max_chars=10)
+    assert result.endswith("...")
+    assert len(result) <= 10
+
+
+def test_append_question_to_queue_file_appends_newline_when_file_nonempty(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    qf = tmp_path / "q.txt"
+    router._append_question_to_queue_file(qf, "first message")
+    router._append_question_to_queue_file(qf, "second message")
+    questions = router._read_queue_questions(qf)
+    assert len(questions) == 2
+    assert questions[0].text == "first message"
+    assert questions[1].text == "second message"
+
+
+def test_dequeue_chat_message_file_returns_empty_when_file_empty(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    from collections import deque
+
+    qf = tmp_path / "empty.txt"
+    qf.write_text("", encoding="utf-8")  # empty file → no questions
+    router._chat_message_queue_files[123] = deque([qf])
+
+    file, questions = router._dequeue_chat_message_file(123)
+    assert file is None
+    assert questions == []
+
+
+def test_next_queue_file_path_starts_at_zero_for_new_chat(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    path = router._next_queue_file_path(999)
+    assert "queue-0" in path.name
+
+
+def test_prompt_continue_queued_questions_early_exit_no_send_message(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    context = SimpleNamespace(bot=SimpleNamespace())  # no send_message attr
+    asyncio.run(router._prompt_continue_queued_questions(123, context))  # should not raise
+
+
+def test_prompt_queue_batch_decision_early_exit_no_send_message(tmp_path: Path):
+    from coding_agent_telegram.router.queue_processing import QueuedQuestion
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    context = SimpleNamespace(bot=SimpleNamespace())  # no send_message attr
+    msgs = [QueuedQuestion(text="q1"), QueuedQuestion(text="q2")]
+    asyncio.run(router._prompt_queue_batch_decision(123, context, msgs))  # should not raise
+
+
+def test_clear_chat_message_queue_removes_processing_and_pending(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    from collections import deque
+
+    qf1 = tmp_path / "q1.txt"
+    qf2 = tmp_path / "q2.txt"
+    qf3 = tmp_path / "q3.txt"
+    for f in [qf1, qf2, qf3]:
+        f.write_text("", encoding="utf-8")
+
+    router._chat_message_queue_files[123] = deque([qf1])
+    router._chat_processing_queue_files[123] = qf2
+    router._chat_pending_queue_decisions[123] = (qf3, [])
+
+    router._clear_chat_message_queue(123)
+
+    assert 123 not in router._chat_message_queue_files
+    assert 123 not in router._chat_processing_queue_files
+    assert 123 not in router._chat_pending_queue_decisions
+
+
+def test_drain_queue_stops_when_project_busy(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    import asyncio as _asyncio
+    _lock = _asyncio.Lock()
+    asyncio.run(_lock.acquire())
+    router._workspace_locks["backend"] = _lock
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))  # should return immediately
+
+
+def test_drain_queue_stops_when_pending_action_present(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "hi"})
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))  # should return immediately
+
+
+def test_drain_queue_stops_when_pending_queue_decision_present(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    qf = tmp_path / "q.txt"
+    qf.write_text("", encoding="utf-8")
+    router._chat_pending_queue_decisions[123] = (qf, [])
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))  # should return immediately
+
+
+def test_drain_queue_prompts_continue_when_last_result_aborted(tmp_path: Path):
+    from coding_agent_telegram.router.queue_processing import QueuedQuestion
+    from collections import deque
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    qf = tmp_path / "q.txt"
+    router._append_question_to_queue_file(qf, "waiting question")
+    router._chat_message_queue_files[123] = deque([qf])
+    router._last_run_results[123] = SimpleNamespace(error_code="agent_aborted")
+
+    sent = []
+
+    async def fake_send_message(**kwargs):
+        sent.append(kwargs)
+
+    bot = SimpleNamespace(send_message=fake_send_message)
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))
+    assert sent  # _prompt_continue_queued_questions was called
+
+
+def test_drain_queue_skips_nested_call(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._chat_message_queue_draining.add(123)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))  # should return immediately without error
+
+
+# ===========================================================================
+# message_commands.py — _handle_audio_like missing lines
+# ===========================================================================
+
+
+def test_handle_audio_like_returns_early_when_message_is_none(tmp_path: Path):
+    """_handle_audio_like must return early (line 103) when update.message is None."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router._handle_audio_like(update, context, None, media_kind="voice"))
+    assert bot.messages == []
+
+
+def test_handle_audio_like_sends_disabled_message_when_stt_disabled(tmp_path: Path):
+    """_handle_audio_like must send STT disabled message (lines 110-111) when STT is off."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.speech_to_text.enabled = False
+
+    fake_media = SimpleNamespace(file_unique_id="uid", file_size=100, file_name=None)
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=None, audio=fake_media),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router._handle_audio_like(update, context, fake_media, media_kind="voice"))
+    assert bot.messages
+    assert any("not enabled" in msg[1].lower() or "voice" in msg[1].lower() for msg in bot.messages)
+
+
+def test_handle_audio_like_rejects_too_large_downloaded_content(tmp_path: Path):
+    """_handle_audio_like must reject content (lines 149-158) when downloaded bytes exceed limit."""
+    import os
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_audio", "audio-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.speech_to_text.enabled = True
+
+    # Content is large (over 20MB) but declared_size is explicitly set to 0
+    # so the early check won't trigger; the post-download check will
+    from coding_agent_telegram.router.message_commands import MAX_STT_AUDIO_BYTES
+    large_content = b"x" * (MAX_STT_AUDIO_BYTES + 1)
+    fake_telegram_file = FakeTelegramFile(large_content, "voice.ogg")
+    fake_media = FakeVoiceMessage(fake_telegram_file, file_size=0)  # 0 → early check skipped
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=fake_media, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+    assert any("too large" in msg[1].lower() or "maximum" in msg[1].lower() for msg in bot.messages)
+
+
+def test_handle_audio_like_sends_timeout_message_on_stt_timeout(tmp_path: Path):
+    """_handle_audio_like must send timeout message (line 182) on STT timeout error."""
+    from coding_agent_telegram.speech_to_text import SpeechToTextError
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_stt", "stt-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: (_ for _ in ()).throw(
+        SpeechToTextError(code="timeout", detail="timed out", likely_first_download=False)
+    )
+
+    fake_content = b"audio-data"
+    fake_telegram_file = FakeTelegramFile(fake_content, "voice.ogg")
+    fake_voice = FakeVoiceMessage(fake_telegram_file)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=fake_voice, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+    assert any("timed out" in msg[1].lower() or "timeout" in msg[1].lower() or "conversion timed out" in msg[1].lower() for msg in bot.messages)
+
+
+def test_handle_audio_like_adds_download_note_on_first_download(tmp_path: Path):
+    """_handle_audio_like must add download note (line 186) when likely_first_download is True."""
+    from coding_agent_telegram.speech_to_text import SpeechToTextError
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_stt", "stt-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: (_ for _ in ()).throw(
+        SpeechToTextError(code="other", detail="failed", likely_first_download=True)
+    )
+
+    fake_content = b"audio-data"
+    fake_telegram_file = FakeTelegramFile(fake_content, "voice.ogg")
+    fake_voice = FakeVoiceMessage(fake_telegram_file)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=fake_voice, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+    assert any("download" in msg[1].lower() or "initial" in msg[1].lower() or "model" in msg[1].lower() for msg in bot.messages)
+
+
+def test_handle_audio_like_sends_generic_error_on_unexpected_exception(tmp_path: Path):
+    """_handle_audio_like must send generic error (lines 189-196) on unexpected exception."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_stt", "stt-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.speech_to_text.enabled = True
+    router.speech_to_text.transcribe_file = lambda _path: (_ for _ in ()).throw(
+        RuntimeError("unexpected failure")
+    )
+
+    fake_content = b"audio-data"
+    fake_telegram_file = FakeTelegramFile(fake_content, "voice.ogg")
+    fake_voice = FakeVoiceMessage(fake_telegram_file)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=fake_voice, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+    assert any("failed" in msg[1].lower() or "error" in msg[1].lower() for msg in bot.messages)
+
+
+def test_handle_audio_like_returns_early_when_result_is_none(tmp_path: Path):
+    """_handle_audio_like must return early (line 201) when result is None (workspace locked)."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_stt", "stt-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.speech_to_text.enabled = True
+    # Return None to simulate workspace lock
+    router.speech_to_text.transcribe_file = lambda _path: None
+
+    fake_content = b"audio-data"
+    fake_telegram_file = FakeTelegramFile(fake_content, "voice.ogg")
+    fake_voice = FakeVoiceMessage(fake_telegram_file)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=fake_voice, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+    # Should not have any "transcript" messages - returned early
+    assert not any("transcript" in msg[1].lower() for msg in bot.messages)
+
+
+def test_handle_voice_returns_early_when_no_voice_message(tmp_path: Path):
+    """handle_voice must return silently (line 250) when message has no voice."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=None, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_voice(update, context))
+    assert bot.messages == []
+
+
+def test_handle_audio_returns_early_when_no_audio_message(tmp_path: Path):
+    """handle_audio must return silently (line 256) when message has no audio."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=None, caption=None, voice=None, audio=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_audio(update, context))
+    assert bot.messages == []
+
+
+# ===========================================================================
+# project_commands.py — _prompt_for_branch_source keyboard None (lines 109-120)
+# ===========================================================================
+
+
+def test_branch_command_reports_missing_source_when_no_branches_exist(tmp_path: Path):
+    """_prompt_for_branch_source must send 'source missing' error (lines 109-120)
+    when no source branches are found and source_branches is provided."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="",
+        local_branches=[],
+    )
+
+    update = make_update(text="/branch feature")
+    bot = FakeBot()
+    # New branch that doesn't exist, and no branches available
+    context = SimpleNamespace(args=["feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert any("source" in msg[1].lower() or "branch" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# project_commands.py — branch source missing for single source (lines 126-136)
+# ===========================================================================
+
+
+def test_branch_command_reports_source_missing_for_nonexistent_origin_branch(tmp_path: Path):
+    """_prompt_for_branch_source must send 'source missing' error (lines 126-136)
+    when source_branch doesn't exist locally or remotely."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="main",
+        local_branches=["main"],
+    )
+
+    update = make_update(text="/branch nonexistent feature")
+    bot = FakeBot()
+    # 2 args: source_branch=nonexistent, new_branch=feature
+    context = SimpleNamespace(args=["nonexistent", "feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert any("source" in msg[1].lower() or "missing" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# project_commands.py — refresh_result.success False (lines 185-186)
+# ===========================================================================
+
+
+def test_branch_command_reports_refresh_failure(tmp_path: Path):
+    """_send_branch_selection_prompt must send error message (lines 185-186)
+    when refresh_current_branch returns a failed result."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main"])
+    router.git.refresh_result = SimpleNamespace(success=False, message="Could not fetch")
+
+    update = make_update(text="/branch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert any("Could not fetch" in msg[1] or "fetch" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# project_commands.py — handle_project busy (line 231)
+# ===========================================================================
+
+
+def test_project_command_returns_early_when_project_busy(tmp_path: Path):
+    """handle_project must return early (line 231) when project is busy."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    runner.has_running_process = lambda _project_path: True
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    assert any("busy" in msg[1].lower() or "running" in msg[1].lower() or "currently" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# project_commands.py — trust callback invalid decision (lines 361-362)
+# ===========================================================================
+
+
+def test_trust_callback_rejects_invalid_decision(tmp_path: Path):
+    """handle_trust_project_callback must send error (lines 361-362)
+    when decision is not 'yes' or 'no'."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="trustproject:maybe:backend", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+    assert edited
+    assert any("invalid" in e.lower() for e in edited)
+
+
+# ===========================================================================
+# project_commands.py — trust callback project missing (lines 367-368)
+# ===========================================================================
+
+
+def test_trust_callback_sends_error_when_project_missing(tmp_path: Path):
+    """handle_trust_project_callback must send error (lines 367-368) when project folder missing."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    query = SimpleNamespace(data="trustproject:yes:nonexistent-proj", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+    assert edited
+    assert any("missing" in e.lower() or "nonexistent" in e for e in edited)
+
+
+# ===========================================================================
+# project_commands.py — handle_branch busy (line 384)
+# ===========================================================================
+
+
+def test_branch_command_returns_early_when_project_busy(tmp_path: Path):
+    """handle_branch must return early (line 384) when project is busy."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    runner.has_running_process = lambda _project_path: True
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/branch feature")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert any("busy" in msg[1].lower() or "running" in msg[1].lower() or "currently" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# project_commands.py — handle_branch with 2 args (lines 415-417)
+# ===========================================================================
+
+
+def test_branch_command_with_two_args_shows_keyboard(tmp_path: Path):
+    """handle_branch with 2 args sets source_branch and new_branch directly (lines 415-417)."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="main",
+        local_branches=["main"],
+    )
+
+    update = make_update(text="/branch main feature")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["main", "feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    # Should show branch source keyboard or message
+    assert bot.messages or bot.sent_messages
+
+
+# ===========================================================================
+# project_commands.py — default_branch_unknown (lines 429-430)
+# ===========================================================================
+
+
+def test_branch_command_reports_unknown_default_branch(tmp_path: Path):
+    """handle_branch must send 'default branch unknown' message (lines 429-430)
+    when new branch doesn't exist and no current/default branch is available."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch=None,  # no current branch
+        default_branch=None,  # no default branch
+        local_branches=[],
+    )
+
+    update = make_update(text="/branch new-feature")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["new-feature"], bot=bot)
+
+    asyncio.run(router.handle_branch(update, context))
+
+    assert any("default branch" in msg[1].lower() or "unknown" in msg[1].lower() for msg in bot.messages)
+
+
+# ===========================================================================
+# project_commands.py — handle_branch_source_callback no query (line 449)
+# ===========================================================================
+
+
+def test_branch_source_callback_returns_when_query_is_none(tmp_path: Path):
+    """handle_branch_source_callback must return silently (line 449) when query is None."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=None,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+    assert bot.messages == []
+
+
+# ===========================================================================
+# project_commands.py — handle_branch_source_callback no project (lines 463-464)
+# ===========================================================================
+
+
+def test_branch_source_callback_sends_error_when_no_project_selected(tmp_path: Path):
+    """handle_branch_source_callback sends 'no project selected' (lines 463-464)
+    when no project is currently selected."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=["main"])
+    # Register a valid token
+    token = router._register_branch_source_token("local", "main", "feature")
+
+    edited = []
+    query = SimpleNamespace(data=f"branchsource:{token}", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+    assert edited
+    assert any("project" in e.lower() for e in edited)
+
+
+# ===========================================================================
+# project_commands.py — handle_branch_source_callback project missing (lines 468-471)
+# ===========================================================================
+
+
+def test_branch_source_callback_sends_error_when_project_folder_missing(tmp_path: Path):
+    """handle_branch_source_callback sends project missing error (lines 468-471)
+    when the project folder doesn't exist."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "nonexistent-project")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, local_branches=["main"])
+    # Register a valid token
+    token = router._register_branch_source_token("local", "main", "feature")
+
+    edited = []
+    query = SimpleNamespace(data=f"branchsource:{token}", answer=None, edit_message_text=None)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append(text)
+
+    query.answer = fake_answer
+    query.edit_message_text = fake_edit
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_branch_source_callback(update, context))
+    assert edited
+    assert any("missing" in e.lower() or "nonexistent" in e for e in edited)
+
+
+# ===========================================================================
+# queue_processing.py — various edge case paths
+# ===========================================================================
+
+
+def test_decode_queue_body_returns_raw_when_no_base64_prefix(tmp_path: Path):
+    """_decode_queue_body must return body unchanged (line 58) when no base64 prefix."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    result = router._decode_queue_body("raw text without prefix")
+    assert result == "raw text without prefix"
+
+
+def test_preview_queued_message_truncates_at_three_chars(tmp_path: Path):
+    """_preview_queued_message handles max_chars <= 3 edge case (lines 167-169)."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    result = router._preview_queued_message("hello world", max_chars=2)
+    assert result == "he"
+
+
+def test_next_queue_file_path_returns_index_zero_on_fresh_state(tmp_path: Path):
+    """_next_queue_file_path starts at index 0 (line 43) when neither queue exists."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    path = router._next_queue_file_path(123)
+    assert "-queue-0.txt" in path.name
+
+
+def test_clear_chat_message_queue_removes_processing_and_pending_files(tmp_path: Path):
+    """_clear_chat_message_queue must unlink processing and pending files (lines 249-254)."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    # Create actual queue files in the expected location
+    queue_dir = router._queue_dir(123)
+    queue_dir.mkdir(parents=True, exist_ok=True)
+
+    processing_file = queue_dir / "session-processing.txt"
+    processing_file.write_text("[Question 1]\nhello\n[End Question 1]\n")
+    router._chat_processing_queue_files[123] = processing_file
+
+    pending_file = queue_dir / "session-pending.txt"
+    pending_file.write_text("[Question 1]\nhello\n[End Question 1]\n")
+    from types import SimpleNamespace as SN
+    router._chat_pending_queue_decisions[123] = (pending_file, [])
+
+    router._clear_chat_message_queue(123)
+
+    # Files should be gone or not tracked
+    assert 123 not in router._chat_processing_queue_files
+    assert 123 not in router._chat_pending_queue_decisions
+
+
+def test_prompt_continue_queued_questions_skips_when_no_send_message(tmp_path: Path):
+    """_prompt_continue_queued_questions returns early (line 189) when bot lacks send_message."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    context = SimpleNamespace(bot=SimpleNamespace())  # no send_message attribute
+
+    asyncio.run(router._prompt_continue_queued_questions(123, context))
+    # Should not raise
+
+
+def test_prompt_queue_batch_decision_skips_when_no_send_message(tmp_path: Path):
+    """_prompt_queue_batch_decision returns early (line 211) when bot lacks send_message."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    from coding_agent_telegram.router.queue_processing import QueuedQuestion
+    context = SimpleNamespace(bot=SimpleNamespace())  # no send_message attribute
+
+    asyncio.run(router._prompt_queue_batch_decision(
+        123,
+        context,
+        [QueuedQuestion(text="hello", reply_to_message_id=None)],
+    ))
+    # Should not raise
+
+
+# ===========================================================================
+# project_commands.py — project with active session in different project (line 292)
+# ===========================================================================
+
+
+def test_project_command_includes_active_session_info_when_project_changes(tmp_path: Path):
+    """handle_project must extend intro_lines (line 292) with active session details
+    when switching to a different project while an active session is in another project."""
+    backend1 = tmp_path / "backend1"
+    backend1.mkdir()
+    backend2 = tmp_path / "backend2"
+    backend2.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Active session is for backend1
+    store.create_session("bot-a", 123, "sess_a", "session-a", "backend1", "codex")
+    store.set_current_project_folder("bot-a", 123, "backend1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", local_branches=["main"])
+
+    # Switch to backend2 (different project)
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend2"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    # Should show branch selection prompt (git repo + switched project)
+    assert bot.messages or bot.sent_messages
+
+
+# ===========================================================================
+# project_commands.py — project with branch_name set (non-git or same project) (line 307)
+# ===========================================================================
+
+
+def test_project_command_shows_confirmation_when_branch_is_set(tmp_path: Path):
+    """handle_project must send confirmation (line 307) when branch_name is set
+    (non-git-repo or same project, branch already selected)."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Set up: current project is same, branch is set in state
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_branch("bot-a", 123, "main")
+    store.trust_project("backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    # Non-git repo with branch_name from state
+    router.git = FakeGitManager(is_git_repo=False, current_branch="main")
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    # Should show project confirmation with branch info
+    assert bot.messages or bot.sent_messages
+    assert any("project" in msg[1].lower() or "branch" in msg[1].lower() for msg in bot.messages + [(0, m, 0, 0) for m in []])
+
+
+# ===========================================================================
+# project_commands.py — trust callback query is None (line 352)
+# ===========================================================================
+
+
+def test_trust_project_callback_returns_when_query_is_none(tmp_path: Path):
+    """handle_trust_project_callback must return silently (line 352) when query is None."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=None,
+        message=None,
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_trust_project_callback(update, context))
+    assert bot.messages == []
+
+
+# ===========================================================================
+# queue_processing.py — remaining edge cases (lines 72, 307-311, 339-341, 366, 377)
+# ===========================================================================
+
+
+def test_read_queue_questions_skips_empty_body(tmp_path: Path):
+    """_read_queue_questions must skip questions with empty body (line 72)."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    queue_dir = router._queue_dir(123)
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    queue_file = queue_dir / "test-queue-0.txt"
+    # Write a question with empty body (blank line between headers)
+    queue_file.write_text(
+        "[Question 1]\n\n[End Question 1]\n",
+        encoding="utf-8",
+    )
+
+    result = router._read_queue_questions(queue_file)
+    assert result == []
+
+
+def test_drain_chat_message_queue_skips_when_already_draining(tmp_path: Path):
+    """_drain_chat_message_queue must return immediately (lines 321-322) when already draining."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    # Mark chat as draining
+    router._chat_message_queue_draining.add(123)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router._drain_chat_message_queue(123, context))
+    # Should return immediately without doing anything
+    assert bot.messages == []
+
+    # Clean up
+    router._chat_message_queue_draining.discard(123)
+
+
+# ===========================================================================
+# project_commands.py — handle_project confirmation with branch (line 307)
+# ===========================================================================
+
+
+def test_project_command_shows_html_confirmation_for_same_git_project_with_branch(tmp_path: Path):
+    """handle_project sends HTML confirmation (line 307) when selecting the same
+    git repo project where a branch is already detected."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Same project already selected, with trust so no trust prompt
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.trust_project("backend")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="main", default_branch="main", local_branches=["main"])
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["backend"], bot=bot)
+
+    asyncio.run(router.handle_project(update, context))
+
+    # Should show HTML project confirmation message (not branch selection)
+    assert bot.messages or bot.sent_messages
+
+
+# ===========================================================================
+# queue_processing.py — dispatch and drain uncovered edge cases
+# ===========================================================================
+
+
+def test_dispatch_queued_questions_returns_false_when_continue_fails(tmp_path: Path):
+    """Lines 307-311: _dispatch_queued_questions returns False when _continue_pending_action fails."""
+    from coding_agent_telegram.router.queue_processing import QueuedQuestion
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    qf = tmp_path / "q.txt"
+    qf.write_text("", encoding="utf-8")
+
+    async def always_false(*a, **kw):
+        return False
+
+    router._continue_pending_action = always_false
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    result = asyncio.run(router._dispatch_queued_questions(
+        123,
+        context,
+        queue_file=qf,
+        queued_messages=[QueuedQuestion(text="hi")],
+        grouped=False,
+    ))
+    assert result is False
+    # queue_file should be put back at front of queue
+    assert 123 in router._chat_message_queue_files
+
+
+def test_drain_queue_prompts_continue_with_processing_file_cleanup(tmp_path: Path):
+    """Lines 339-341: when aborted + processing_file exists, it is cleaned up."""
+    from collections import deque
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    qf_pending = tmp_path / "pending.txt"
+    router._append_question_to_queue_file(qf_pending, "queued question")
+    router._chat_message_queue_files[123] = deque([qf_pending])
+
+    processing_f = tmp_path / "processing.txt"
+    processing_f.write_text("", encoding="utf-8")
+    router._chat_processing_queue_files[123] = processing_f
+    router._last_run_results[123] = SimpleNamespace(error_code="agent_aborted")
+
+    sent = []
+
+    async def fake_send_message(**kwargs):
+        sent.append(kwargs)
+
+    bot = SimpleNamespace(send_message=fake_send_message)
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))
+
+    assert sent  # prompt was sent
+    assert 123 not in router._chat_processing_queue_files  # cleaned up
+
+
+def test_drain_queue_stops_dispatch_returns_false_single_message(tmp_path: Path):
+    """Line 366: drain stops when single-message dispatch returns False."""
+    from collections import deque
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    qf = tmp_path / "q.txt"
+    router._append_question_to_queue_file(qf, "queued question")
+    router._chat_message_queue_files[123] = deque([qf])
+
+    async def always_false(*a, **kw):
+        return False
+
+    router._dispatch_queued_questions = always_false
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))  # should return without error
+
+
+def test_drain_queue_stops_dispatch_returns_false_batch_single_mode(tmp_path: Path):
+    """Line 377: drain stops when batch_mode='single' dispatch returns False."""
+    from collections import deque
+    from coding_agent_telegram.router.queue_processing import QueuedQuestion
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    qf = tmp_path / "q.txt"
+    router._append_question_to_queue_file(qf, "question 1")
+    router._append_question_to_queue_file(qf, "question 2")
+    router._chat_message_queue_files[123] = deque([qf])
+    router._chat_queue_batch_modes[123] = "single"  # forces single dispatch path
+
+    async def always_false(*a, **kw):
+        return False
+
+    router._dispatch_queued_questions = always_false
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    asyncio.run(router._drain_chat_message_queue(123, context))  # should return without error

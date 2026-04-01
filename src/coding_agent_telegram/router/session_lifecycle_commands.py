@@ -129,6 +129,9 @@ class SessionLifecycleCommandMixin:
             stall_message=self._t(update, "runtime.replacement_session_stall"),
         )
 
+        if result is None:
+            return False
+
         if not result.success or not result.session_id:
             await send_text(update, context, result.error_message or self._t(update, "lifecycle.failed_create_session"))
             return False

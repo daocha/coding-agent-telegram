@@ -26,47 +26,6 @@ class SessionBranchResolutionMixin:
             ]
         )
 
-    def _multi_branch_source_keyboard(
-        self,
-        *,
-        new_branch: str,
-        source_branches: list[str],
-        project_path,
-    ) -> InlineKeyboardMarkup | None:
-        rows: list[list[InlineKeyboardButton]] = []
-        seen: set[tuple[str, str]] = set()
-        for source_branch in source_branches:
-            if not source_branch:
-                continue
-            row: list[InlineKeyboardButton] = []
-            if self.git.local_branch_exists(project_path, source_branch):
-                key = ("local", source_branch)
-                if key not in seen:
-                    token = self._register_branch_source_token("local", source_branch, new_branch)
-                    row.append(
-                        InlineKeyboardButton(
-                            f"local/{source_branch}",
-                            callback_data=f"branchsource:{token}",
-                        )
-                    )
-                    seen.add(key)
-            if self.git.remote_branch_exists(project_path, source_branch):
-                key = ("origin", source_branch)
-                if key not in seen:
-                    token = self._register_branch_source_token("origin", source_branch, new_branch)
-                    row.append(
-                        InlineKeyboardButton(
-                            f"origin/{source_branch}",
-                            callback_data=f"branchsource:{token}",
-                        )
-                    )
-                    seen.add(key)
-            if row:
-                rows.append(row)
-        if not rows:
-            return None
-        return InlineKeyboardMarkup(rows)
-
     async def _offer_branch_source_fallback(
         self,
         query,
