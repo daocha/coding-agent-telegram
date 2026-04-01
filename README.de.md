@@ -209,7 +209,7 @@ Der Bot akzeptiert derzeit:
 
 <table>
   <tr>
-    <td width="332"><code>/Anbieter</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>Provider für neue Sessions wählen. Die Auswahl wird pro Bot und Chat gespeichert, bis du sie änderst.</td>
   </tr>
   <tr>
