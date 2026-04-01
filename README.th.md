@@ -209,7 +209,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
-    <td width="332"><code>/ผู้ให้บริการ</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>เลือกผู้ให้บริการสำหรับเซสชันใหม่ โดยค่าที่เลือกจะถูกเก็บแยกตาม bot และ chat จนกว่าคุณจะเปลี่ยน</td>
   </tr>
   <tr>
