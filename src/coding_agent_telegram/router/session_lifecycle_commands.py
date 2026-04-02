@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -10,6 +12,18 @@ from .base import logger, require_allowed_chat
 
 
 class SessionLifecycleCommandMixin:
+    _CREATE_SESSION_TEXT_RE = re.compile(r"^\s*create\s+session\s*:\s*(.*?)\s*$", re.IGNORECASE)
+
+    def _parse_create_session_text(self, text: str) -> tuple[bool, str | None]:
+        match = self._CREATE_SESSION_TEXT_RE.match(text)
+        if not match:
+            return False, None
+
+        session_name = match.group(1).strip() or None
+        if session_name and session_name.lower() == "new session":
+            session_name = None
+        return True, session_name
+
     async def _prompt_for_provider_selection(
         self,
         update: Update,
