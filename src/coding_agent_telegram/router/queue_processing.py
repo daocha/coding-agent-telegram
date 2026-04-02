@@ -120,10 +120,11 @@ class QueueProcessingMixin:
         user_message: str,
         *,
         reply_to_message_id: int | None = None,
+        separate_batch: bool = False,
     ) -> tuple[Path, int]:
         queue = self._chat_message_queue_files.setdefault(chat_id, deque())
-        queue_file = queue[-1] if queue else self._next_queue_file_path(chat_id)
-        if not queue:
+        queue_file = self._next_queue_file_path(chat_id) if separate_batch or not queue else queue[-1]
+        if separate_batch or not queue:
             queue.append(queue_file)
         question_number = self._append_question_to_queue_file(
             queue_file,
