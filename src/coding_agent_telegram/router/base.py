@@ -226,6 +226,12 @@ class CommandRouterBase:
     def _t(self, update: Update | None, key: str, **kwargs) -> str:
         return translate(self._locale(update), key, **kwargs)
 
+    def _affirmative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
+        return {"api_kwargs": {"style": "primary"}}
+
+    def _negative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
+        return {"api_kwargs": {"style": "danger"}}
+
     async def _notify_if_current_project_busy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         chat = update.effective_chat
         if chat is None:
