@@ -14,6 +14,7 @@ from coding_agent_telegram.diff_utils import (
     collect_diffs,
     collect_snapshot_diffs,
     is_snapshot_excluded_path,
+    split_changed_files,
     snapshot_project_files,
 )
 
@@ -57,6 +58,19 @@ def test_build_summary_includes_branch_next_to_project():
 def test_parse_status_paths_includes_renames_and_untracked():
     output = " M src/app.py\n?? src/new.py\nR  old.py -> new.py\n"
     assert _parse_status_paths(output) == ["src/app.py", "src/new.py", "new.py"]
+
+
+def test_split_changed_files_separates_tracked_and_untracked(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        diff_utils_module,
+        "_git",
+        lambda _project_path, _args: " M src/app.py\n?? src/new.py\nR  old.py -> new.py\n",
+    )
+
+    tracked, untracked = split_changed_files(tmp_path)
+
+    assert tracked == ["src/app.py", "new.py"]
+    assert untracked == ["src/new.py"]
 
 
 def test_new_javascript_file_uses_language_code_block():

@@ -4205,6 +4205,14 @@ def _run_pull_command(router: CommandRouter, *, args: list[str] | None = None) -
     return bot
 
 
+def _run_diff_command(router: CommandRouter, *, args: list[str] | None = None) -> FakeBot:
+    update = make_update(text="/diff" if not args else "/diff " + " ".join(args))
+    bot = FakeBot()
+    context = SimpleNamespace(args=args or [], bot=bot)
+    asyncio.run(router.handle_diff(update, context))
+    return bot
+
+
 def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tmp_path: Path):
     router, backend = _make_commit_router(
         tmp_path,
@@ -4776,6 +4784,47 @@ def test_pull_confirmation_cancel_does_not_refresh(tmp_path: Path):
 
     assert edited == ["Pull cancelled."]
     assert router.git.refresh_calls == []
+
+
+def test_diff_lists_tracked_and_untracked_filenames(monkeypatch, tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_diff", "diff-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.git_commands.split_changed_files",
+        lambda _project_path: (["src/app.py"], ["notes/todo.md"]),
+    )
+
+    bot = _run_diff_command(router)
+
+    assert "Session: diff-session" in bot.messages[-1][1]
+    assert "Project: backend &lt;feature-1&gt;" in bot.messages[-1][1]
+    assert "Tracked changed files:" in bot.messages[-1][1]
+    assert "Untracked files:" in bot.messages[-1][1]
+    assert "- src/app.py" in bot.messages[-1][1]
+    assert "- notes/todo.md" in bot.messages[-1][1]
+
+
+def test_diff_sends_usage_when_extra_args_provided(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_diff", "diff-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+
+    bot = _run_diff_command(router, args=["extra"])
+
+    assert bot.messages[-1][1] == "Usage: /diff"
 
 
 def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):

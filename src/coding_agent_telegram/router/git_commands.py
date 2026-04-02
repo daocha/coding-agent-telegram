@@ -5,6 +5,7 @@ import asyncio
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.diff_utils import split_changed_files
 from coding_agent_telegram.telegram_sender import send_html_text, send_text
 
 from .base import require_allowed_chat
@@ -88,6 +89,42 @@ class GitCommandMixin:
                 return
 
         await send_html_text(update, context, self._bash_block(self._format_git_response(command_results, ignored)))
+
+    @require_allowed_chat()
+    async def handle_diff(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if context.args:
+            await send_text(update, context, self._t(update, "git.usage_diff"))
+            return
+
+        session, project_path = await self._active_session_project_or_notify(
+            update,
+            context,
+            require_git_repo=True,
+        )
+        if session is None or project_path is None:
+            return
+
+        branch_name = session.get("branch_name") or self.git.current_branch(project_path) or self._t(
+            update,
+            "status.current_branch_placeholder",
+        )
+        tracked_files, untracked_files = split_changed_files(project_path)
+        lines = [
+            self._t(update, "diff.session_label", session_name=session["name"]),
+            f"{self._t(update, 'diff.project_label', project_folder=session['project_folder'])} <{branch_name}>",
+            "",
+            self._t(update, "diff.tracked_files"),
+        ]
+        if tracked_files:
+            lines.extend(f"- {path}" for path in tracked_files)
+        else:
+            lines.append(f"- {self._t(update, 'diff.none')}")
+        lines.extend(["", self._t(update, "diff.untracked_files")])
+        if untracked_files:
+            lines.extend(f"- {path}" for path in untracked_files)
+        else:
+            lines.append(f"- {self._t(update, 'diff.none')}")
+        await send_text(update, context, "\n".join(lines))
 
     @require_allowed_chat()
     async def handle_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

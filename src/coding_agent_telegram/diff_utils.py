@@ -233,6 +233,30 @@ def changed_files(project_path: Path) -> list[str]:
     ]
 
 
+def split_changed_files(project_path: Path) -> tuple[list[str], list[str]]:
+    output = _git(project_path, ["status", "--short", "--untracked-files=all"])
+    tracked: list[str] = []
+    untracked: list[str] = []
+    for line in output.splitlines():
+        if len(line) < 4:
+            continue
+        status = line[:2]
+        path = line[3:].strip()
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip()
+        if (
+            not path
+            or path.startswith(f"{INTERNAL_APP_DIR}/")
+            or is_snapshot_excluded_path(path)
+        ):
+            continue
+        if status == "??":
+            untracked.append(path)
+        else:
+            tracked.append(path)
+    return tracked, untracked
+
+
 def _collect_diff_for_file(project_path: Path, path: str) -> str:
     return _git(project_path, ["diff", "--", path]).strip()
 
