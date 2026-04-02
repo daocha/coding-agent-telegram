@@ -1921,8 +1921,12 @@ def test_switch_lists_latest_10_sessions_by_default(tmp_path: Path):
     assert "session-7" in message
     assert "session-6" not in message
     assert "session-4" not in message
-    assert "Pages: /switch page 1 ... /switch page 3" in message
     assert "/switch &lt;session_id&gt;" in message
+    reply_markup = bot.messages[-1][3]
+    assert reply_markup is not None
+    buttons = reply_markup.inline_keyboard[0]
+    assert [button.text for button in buttons] == ["Next"]
+    assert [button.callback_data for button in buttons] == ["switchpage:2"]
 
 
 def test_switch_lists_requested_page(tmp_path: Path):
@@ -1945,6 +1949,48 @@ def test_switch_lists_requested_page(tmp_path: Path):
     assert "session-4" in message
     assert "session-2" in message
     assert "session-9" not in message
+
+
+def test_switch_page_callback_edits_listing_with_inline_pagination(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    for idx in range(12):
+        store.create_session("bot-a", 123, f"sess_{idx}", f"session-{idx}", "backend", "codex")
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="switchpage:2",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_switch_page_callback(update, context))
+
+    assert "Available sessions (page 2/3):" in edited[-1][0]
+    assert "session-4" in edited[-1][0]
+    assert "session-2" in edited[-1][0]
+    reply_markup = edited[-1][2]
+    assert reply_markup is not None
+    buttons = reply_markup.inline_keyboard[0]
+    assert [button.text for button in buttons] == ["Prev", "Next"]
+    assert [button.callback_data for button in buttons] == ["switchpage:1", "switchpage:3"]
 
 
 def test_switch_lists_mixed_bot_and_native_project_sessions_with_legend(tmp_path: Path, monkeypatch):
@@ -5359,6 +5405,7 @@ def test_switch_command_lists_sessions_when_no_arg(tmp_path: Path):
     asyncio.run(router.handle_switch(update, context))
 
     assert "my-session" in bot.messages[-1][1]
+    assert bot.messages[-1][3] is None
 
 
 def test_switch_command_handles_page_arg(tmp_path: Path):

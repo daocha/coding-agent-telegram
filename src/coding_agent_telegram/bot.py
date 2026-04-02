@@ -163,6 +163,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CallbackQueryHandler(router.handle_commit_generate_callback, pattern=r"^commitgen:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_commit_execute_callback, pattern=r"^commitexec:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_diff_callback, pattern=r"^diff(?:show|page):\d+$"))
+    app.add_handler(CallbackQueryHandler(router.handle_switch_page_callback, pattern=r"^switchpage:\d+$"))
     app.add_handler(CallbackQueryHandler(router.handle_pull_callback, pattern=r"^pull:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
