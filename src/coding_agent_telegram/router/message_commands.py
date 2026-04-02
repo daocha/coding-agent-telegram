@@ -29,11 +29,19 @@ class MessageCommandMixin:
         suppress_working_notice: bool = False,
     ) -> None:
         chat_id = update.effective_chat.id
+        pending_action = self._pending_action(chat_id)
+        should_prioritize_existing_queue = (
+            self._has_pending_queue_files(chat_id)
+            and not self._is_project_busy(chat_id)
+            and not self._has_pending_queue_decision(chat_id)
+            and not isinstance(pending_action, dict)
+        )
         if self._should_queue_incoming_message(chat_id):
             _queue_file, question_number = self._enqueue_chat_message(
                 chat_id,
                 user_message,
                 reply_to_message_id=getattr(update.message, "message_id", None),
+                separate_batch=should_prioritize_existing_queue,
             )
             logger.info(
                 "Queued user message for chat %s as Q%s. Preview: %.120r",
@@ -47,6 +55,8 @@ class MessageCommandMixin:
                 self._t(update, "message.question_queued", question_number=question_number),
                 reply_to_message_id=getattr(update.message, "message_id", None),
             )
+            if should_prioritize_existing_queue:
+                await self._drain_chat_message_queue(chat_id, context)
             return
         logger.info("Processing user message immediately for chat %s. Preview: %.120r", chat_id, user_message)
         self._store_pending_action(
@@ -97,7 +107,16 @@ class MessageCommandMixin:
             await send_text(update, context, error_text)
             return
         prompt = self.photo_attachments.build_prompt(attachment_path, project_path, caption)
-        await self.runtime.run_active_session(update, context, user_message=prompt, image_paths=(attachment_path,))
+        chat_id = update.effective_chat.id
+        try:
+            self._last_run_results[chat_id] = await self.runtime.run_active_session(
+                update,
+                context,
+                user_message=prompt,
+                image_paths=(attachment_path,),
+            )
+        finally:
+            await self._drain_chat_message_queue(chat_id, context)
 
     async def _handle_audio_like(
         self,

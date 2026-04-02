@@ -1,7 +1,7 @@
 from __future__ import annotations
 import html
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.filters import resolve_project_path
@@ -92,7 +92,7 @@ class SwitchCommandMixin:
         entries: list[dict[str, str]],
         current_project_folder: str | None,
         page: int,
-    ) -> str:
+    ) -> tuple[str, InlineKeyboardMarkup | None]:
         locale = self._chat_locale(chat_id)
         total_sessions = len(entries)
         total_pages = max(1, (total_sessions + self.SWITCH_PAGE_SIZE - 1) // self.SWITCH_PAGE_SIZE)
@@ -128,13 +128,29 @@ class SwitchCommandMixin:
             [
                 translate(locale, "switch.use_label"),
                 "/switch &lt;session_id&gt;",
-                f"/switch page {page}",
                 translate(locale, "switch.native_import_note"),
             ]
         )
+        reply_markup = None
         if total_pages > 1:
-            lines.append(translate(locale, "switch.pages_label", total_pages=total_pages))
-        return "\n".join(lines).strip()
+            nav_buttons: list[InlineKeyboardButton] = []
+            if page > 1:
+                nav_buttons.append(
+                    InlineKeyboardButton(
+                        translate(locale, "diff.button_prev_page"),
+                        callback_data=f"switchpage:{page - 1}",
+                    )
+                )
+            if page < total_pages:
+                nav_buttons.append(
+                    InlineKeyboardButton(
+                        translate(locale, "diff.button_next_page"),
+                        callback_data=f"switchpage:{page + 1}",
+                    )
+                )
+            if nav_buttons:
+                reply_markup = InlineKeyboardMarkup([nav_buttons])
+        return "\n".join(lines).strip(), reply_markup
 
     @require_allowed_chat()
     async def handle_switch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -148,7 +164,13 @@ class SwitchCommandMixin:
                 await send_text(update, context, self._t(update, "switch.no_sessions_found"))
                 return
             logger.info("Listed sessions page 1 for chat %s (%d sessions total).", chat_id, len(entries))
-            await send_html_text(update, context, self._build_switch_page_from_entries(chat_id, entries, current_project_folder, 1))
+            text, reply_markup = self._build_switch_page_from_entries(chat_id, entries, current_project_folder, 1)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
             return
 
         if len(context.args) == 2 and context.args[0].lower() == "page":
@@ -164,7 +186,13 @@ class SwitchCommandMixin:
                 await send_text(update, context, self._t(update, "switch.invalid_page_number"))
                 return
             logger.info("Listed sessions page %d for chat %s (%d sessions total).", page, chat_id, len(entries))
-            await send_html_text(update, context, self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page))
+            text, reply_markup = self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
             return
 
         session_id = " ".join(context.args).strip()
@@ -232,4 +260,33 @@ class SwitchCommandMixin:
                     )
                 )
             ),
+        )
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_switch_page_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None:
+            return
+
+        await query.answer()
+        data = (query.data or "").strip()
+        if not data.startswith("switchpage:"):
+            return
+        try:
+            page = int(data.partition(":")[2])
+        except ValueError:
+            return
+        if page < 1:
+            return
+
+        chat_id = update.effective_chat.id
+        entries, current_project_folder = self._switch_listing_entries(chat_id)
+        if not entries:
+            await query.edit_message_text(self._t(update, "switch.no_sessions_found"))
+            return
+        text, reply_markup = self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page)
+        await query.edit_message_text(
+            text=text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
         )

@@ -47,6 +47,7 @@ class SessionCommonMixin:
         pending_action = self._pending_action(chat_id)
         return (
             self._is_project_busy(chat_id)
+            or self._has_pending_queue_files(chat_id)
             or self._has_pending_queue_decision(chat_id)
             or isinstance(pending_action, dict)
         )
