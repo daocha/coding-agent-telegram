@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -10,6 +12,18 @@ from .base import logger, require_allowed_chat
 
 
 class SessionLifecycleCommandMixin:
+    _CREATE_SESSION_TEXT_RE = re.compile(r"^\s*create\s+session\s*:\s*(.*?)\s*$", re.IGNORECASE)
+
+    def _parse_create_session_text(self, text: str) -> tuple[bool, str | None]:
+        match = self._CREATE_SESSION_TEXT_RE.match(text)
+        if not match:
+            return False, None
+
+        session_name = match.group(1).strip() or None
+        if session_name and session_name.lower() == "new session":
+            session_name = None
+        return True, session_name
+
     async def _prompt_for_provider_selection(
         self,
         update: Update,
@@ -129,6 +143,9 @@ class SessionLifecycleCommandMixin:
             stall_message=self._t(update, "runtime.replacement_session_stall"),
         )
 
+        if result is None:
+            return False
+
         if not result.success or not result.session_id:
             await send_text(update, context, result.error_message or self._t(update, "lifecycle.failed_create_session"))
             return False
@@ -167,59 +184,81 @@ class SessionLifecycleCommandMixin:
         )
         return True
 
-    async def _continue_pending_action(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    async def _continue_pending_action(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        drain_queue_after_completion: bool = False,
+    ) -> bool:
         chat_id = update.effective_chat.id
         pending_action = self._pending_action(chat_id)
         if not pending_action:
             return False
+        completed = False
 
-        resolved = await self._resolve_session_prerequisites(update, context, pending_action=pending_action)
-        if resolved is None:
-            return False
-        provider, project_folder, branch_name, project_path = resolved
-        kind = str(pending_action.get("kind") or "")
-
-        if kind == "new_session":
-            if await self._create_session_for_context(
-                update,
-                context,
-                session_name=str(pending_action.get("session_name") or "").strip() or None,
-                use_session_id_as_name=bool(pending_action.get("use_session_id_as_name")),
-                provider=provider,
-                project_folder=project_folder,
-                branch_name=branch_name,
-                project_path=project_path,
-            ):
-                self._store_pending_action(chat_id, None)
-                return True
-            return False
-
-        if kind == "message":
-            user_message = str(pending_action.get("user_message") or "").strip()
-            if not user_message:
-                self._store_pending_action(chat_id, None)
+        try:
+            resolved = await self._resolve_session_prerequisites(update, context, pending_action=pending_action)
+            if resolved is None:
                 return False
-            chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
-            if not self._active_session_matches_current_context(chat_state):
-                if not await self._create_session_for_context(
+            provider, project_folder, branch_name, project_path = resolved
+            kind = str(pending_action.get("kind") or "")
+
+            if kind == "new_session":
+                if await self._create_session_for_context(
                     update,
                     context,
                     session_name=str(pending_action.get("session_name") or "").strip() or None,
-                    use_session_id_as_name=False,
+                    use_session_id_as_name=bool(pending_action.get("use_session_id_as_name")),
                     provider=provider,
                     project_folder=project_folder,
                     branch_name=branch_name,
                     project_path=project_path,
                 ):
-                    return False
-            if not await self._ensure_active_session_ready_for_run(update, context):
+                    self._store_pending_action(chat_id, None)
+                    completed = True
+                    return True
                 return False
-            self._store_pending_action(chat_id, None)
-            self._last_run_results[chat_id] = await self.runtime.run_active_session(update, context, user_message=user_message)
-            return True
 
-        self._store_pending_action(chat_id, None)
-        return False
+            if kind == "message":
+                user_message = str(pending_action.get("user_message") or "").strip()
+                if not user_message:
+                    self._store_pending_action(chat_id, None)
+                    completed = True
+                    return False
+                chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+                if not self._active_session_matches_current_context(chat_state):
+                    if not await self._create_session_for_context(
+                        update,
+                        context,
+                        session_name=str(pending_action.get("session_name") or "").strip() or None,
+                        use_session_id_as_name=False,
+                        provider=provider,
+                        project_folder=project_folder,
+                        branch_name=branch_name,
+                        project_path=project_path,
+                    ):
+                        return False
+                if not await self._ensure_active_session_ready_for_run(update, context):
+                    return False
+                try:
+                    self._last_run_results[chat_id] = await self.runtime.run_active_session(
+                        update,
+                        context,
+                        user_message=user_message,
+                        suppress_working_notice=bool(pending_action.get("suppress_working_notice")),
+                    )
+                finally:
+                    self._store_pending_action(chat_id, None)
+                completed = True
+                return True
+
+            self._store_pending_action(chat_id, None)
+            completed = True
+            return False
+        finally:
+            if completed and drain_queue_after_completion:
+                await self._drain_chat_message_queue(chat_id, context)
 
     async def _ensure_active_session_ready_for_run(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         chat_id = update.effective_chat.id
@@ -283,4 +322,4 @@ class SessionLifecycleCommandMixin:
                 "use_session_id_as_name": not bool(session_name),
             },
         )
-        await self._continue_pending_action(update, context)
+        await self._continue_pending_action(update, context, drain_queue_after_completion=True)

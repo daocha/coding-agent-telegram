@@ -451,3 +451,79 @@ def test_switch_session_sets_current_branch_from_session(tmp_path: Path):
     store.switch_session("bot1", 1, "ses1")
     state = store.get_chat_state("bot1", 1)
     assert state.get("current_branch") == "my-branch"
+
+
+# ---------------------------------------------------------------------------
+# set_active_session_branch: no-op when no active session or session missing
+# (lines 315, 327)
+# ---------------------------------------------------------------------------
+
+
+def test_set_active_session_branch_is_noop_when_no_active_session(tmp_path: Path):
+    store = SessionStore(tmp_path / "state.json", tmp_path / "state.json.bak")
+    store.set_current_project_folder("bot1", 1, "proj")
+    # No active session_id in chat state
+    store.set_active_session_branch("bot1", 1, "some-branch")
+    state = store.get_chat_state("bot1", 1)
+    # current_branch should not have been set
+    assert state.get("current_branch") is None
+
+
+def test_set_active_session_branch_is_noop_when_session_not_found(tmp_path: Path):
+    store = SessionStore(tmp_path / "state.json", tmp_path / "state.json.bak")
+    store.create_session("bot1", 1, "sess1", "Session 1", "proj", "codex")
+    store.switch_session("bot1", 1, "sess1")
+    # Manually remove the session entry while keeping active_session_id set
+    import json, portalocker
+    lock_path = tmp_path / "state.json.lock"
+    with portalocker.Lock(str(lock_path), timeout=5):
+        raw = json.loads((tmp_path / "state.json").read_text())
+        raw["chats"]["bot1:1"]["sessions"].pop("sess1", None)
+        (tmp_path / "state.json").write_text(json.dumps(raw), encoding="utf-8")
+
+    store.set_active_session_branch("bot1", 1, "new-branch")
+    state = store.get_chat_state("bot1", 1)
+    # Should not crash and branch should not be updated
+    assert state.get("current_branch") != "new-branch"
+
+
+# ---------------------------------------------------------------------------
+# list_sessions: triggers migration when state uses legacy single-bot key
+# (line 315 — _save_unlocked after migrated=True)
+# ---------------------------------------------------------------------------
+
+
+def test_list_sessions_migrates_legacy_chat_key_format(tmp_path: Path):
+    """When the state file uses the old bare-chat-id key format, list_sessions
+    must migrate it to the new scoped key and persist the migration."""
+    import json
+
+    state_path = tmp_path / "state.json"
+    backup_path = tmp_path / "state.json.bak"
+
+    # Write a state file in the legacy format (bare chat_id key)
+    legacy_state = {
+        "chats": {
+            "123": {
+                "sessions": {
+                    "s1": {
+                        "name": "old-session",
+                        "project_folder": "proj",
+                        "provider": "codex",
+                        "branch_name": "",
+                    }
+                }
+            }
+        },
+        "trusted_projects": [],
+    }
+    state_path.write_text(json.dumps(legacy_state), encoding="utf-8")
+
+    store = SessionStore(state_path, backup_path)
+    sessions = store.list_sessions("bot-a", 123)
+
+    assert "s1" in sessions
+    # After migration the file should have been rewritten with the scoped key
+    reloaded = json.loads(state_path.read_text())
+    assert "bot-a:123" in reloaded["chats"]
+    assert "123" not in reloaded["chats"]

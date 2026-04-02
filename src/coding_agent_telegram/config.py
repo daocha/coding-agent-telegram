@@ -21,6 +21,8 @@ DEFAULT_INTERNAL_APP_DIR_NAME = ".coding-agent-telegram"
 DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
 # 0 = disabled. Set to a positive value to kill runaway agent processes.
 DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
+DEFAULT_OPENAI_WHISPER_MODEL = "base"
+DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,9 @@ class AppConfig:
     max_telegram_message_length: int
     enable_sensitive_diff_filter: bool
     enable_secret_scrub_filter: bool
+    enable_openai_whisper_speech_to_text: bool
+    openai_whisper_model: str
+    openai_whisper_timeout_seconds: int
     default_agent_provider: str
     agent_hard_timeout_seconds: int
     app_internal_root: Path
@@ -75,7 +80,10 @@ def _parse_allowed_chat_ids() -> set[int]:
 
     out: set[int] = set()
     for item in values:
-        out.add(int(item))
+        try:
+            out.add(int(item))
+        except ValueError:
+            raise ValueError(f"Invalid chat ID in ALLOWED_CHAT_IDS: {item!r}") from None
     return out
 
 
@@ -227,6 +235,15 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         ),
         enable_sensitive_diff_filter=_parse_bool(os.getenv("ENABLE_SENSITIVE_DIFF_FILTER", "true"), default=True),
         enable_secret_scrub_filter=_parse_bool(os.getenv("ENABLE_SECRET_SCRUB_FILTER", "true"), default=True),
+        enable_openai_whisper_speech_to_text=_parse_bool(
+            os.getenv("ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT", "false")
+        ),
+        openai_whisper_model=os.getenv("OPENAI_WHISPER_MODEL", DEFAULT_OPENAI_WHISPER_MODEL).strip()
+        or DEFAULT_OPENAI_WHISPER_MODEL,
+        openai_whisper_timeout_seconds=max(
+            1,
+            int(os.getenv("OPENAI_WHISPER_TIMEOUT_SECONDS", str(DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS))),
+        ),
         default_agent_provider=provider,
         agent_hard_timeout_seconds=int(
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))

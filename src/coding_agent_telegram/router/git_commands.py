@@ -94,8 +94,16 @@ class GitCommandMixin:
         confirm_markup = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(self._t(update, "git.push_confirm_button"), callback_data="push:confirm"),
-                    InlineKeyboardButton(self._t(update, "git.cancel_button"), callback_data="push:cancel"),
+                    InlineKeyboardButton(
+                        self._t(update, "git.push_confirm_button"),
+                        callback_data="push:confirm",
+                        **self._affirmative_inline_button_kwargs(),
+                    ),
+                    InlineKeyboardButton(
+                        self._t(update, "git.cancel_button"),
+                        callback_data="push:cancel",
+                        **self._negative_inline_button_kwargs(),
+                    ),
                 ]
             ]
         )

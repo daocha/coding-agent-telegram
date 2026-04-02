@@ -38,7 +38,7 @@
    - ✅ Use Telegram to control Codex / Copilot CLI
    - ✅ Easily review files changed by agent in code block
    - ✅ Queue follow-up messages while the agent is working
-   - ✅ Accept Text and Image input
+   - ✅ Accept ✏️ Text, 🌄 Image, and 🎙️ Voice messages
 
    ## 🔁 Seamless Device/Session Switching
    
@@ -62,7 +62,7 @@
    
    </td>
    <td width="350" border="0">
-   <img src="https://github.com/user-attachments/assets/cecb6de6-ecf0-4bf4-af70-b98071c68885" />
+   <img src="https://github.com/user-attachments/assets/54e8745b-a0d4-48ff-b0d8-178198d00a3d" />
    </td>
    </tr>
 </table>
@@ -97,8 +97,8 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
    - Telegram bot token created from _@BotFather_
    - Your Telegram chat ID
    - Codex CLI and/or Copilot CLI installed locally
-   - [Codex CLI install](https://developers.openai.com/codex/cli)
-   - [Copilot CLI install](https://github.com/features/copilot/cli)
+   - [Codex CLI install](https://developers.openai.com/codex/cli) / [Copilot CLI install](https://github.com/features/copilot/cli)
+   - [Optional] `Whisper`, `ffmpeg`
    </td>
    </tr>
 </table>
@@ -129,7 +129,7 @@ cd coding-agent-telegram
 ./startup.sh
 ```
 
-### Start Bot Server
+### 🌐 Start Bot Server
 ##### On first run, the app creates the env file, tells you what to fill in.
 ##### After updating the environment file then run:
 
@@ -140,6 +140,40 @@ coding-agent-telegram
 # if you follow Option C, then run this again
 ./startup.sh
 ```
+
+## 🎙️ [Optional] Speech-to-Text Feature: prepare local OpenAI-Whisper prerequisites
+
+This enables optional local Whisper-based voice-message speech-to-text for Telegram voice notes. Voice files are capped to `20MB` max.
+
+```bash
+# if you installed from pip or one-liner install.sh
+coding-agent-telegram-stt-install
+
+# if you run from a cloned repository
+./install-stt.sh
+```
+
+The installer writes the STT env flags automatically after prerequisites are ready.
+
+Estimated local footprint:
+
+- `openai-whisper`: about `50 MB`
+- `ffmpeg` package: about `50 MB`
+- Whisper model downloads vary by model: `tiny` about `72 MB`, `base` about `139 MB`, `large-v3-turbo` about `1.5 GB`
+
+Recommended env settings for the local Whisper backend:
+
+```text
+ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true
+OPENAI_WHISPER_MODEL=base
+OPENAI_WHISPER_TIMEOUT_SECONDS=120
+```
+
+Notes:
+
+- Whisper downloads the selected model automatically on first use into `~/.cache/whisper`.
+- If you choose `OPENAI_WHISPER_MODEL=turbo`, the first voice transcription is more likely to hit the timeout while `large-v3-turbo.pt` is still downloading.
+- After a voice note is transcribed, the bot immediately sends the recognized transcript back to Telegram before the agent reply. If the run can start immediately it says “working on it”; if the project is busy it shows that the transcript was queued instead.
 
 ## 🔑 Telegram Setup
 
@@ -179,61 +213,62 @@ The bot currently accepts:
 
 - Text messages
 - photos
+- voice messages when `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` and local Whisper prerequisites are installed
 - Codex and Copilot currently supports text and image only, video is not supported.
 
 ## 🤖 Telegram Commands
 
 <table>
   <tr>
-    <td width="250"><code>/provider</code></td>
+    <td width="332"><code>/provider</code></td>
     <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
   </tr>
   <tr>
-    <td width="250"><code>/project &lt;project_folder&gt;</code></td>
+    <td><code>/project &lt;project_folder&gt;</code></td>
     <td>Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If it already exists and is still untrusted, the app asks you to trust it explicitly.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;new_branch&gt;</code></td>
+    <td><code>/branch &lt;new_branch&gt;</code></td>
     <td>Prepare or switch a branch for the current project. If the branch already exists, the bot treats that branch as the source candidate. Otherwise it uses the repository default branch as the source candidate.</td>
   </tr>
   <tr>
-    <td width="250"><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
+    <td><code>/branch &lt;origin_branch&gt; &lt;new_branch&gt;</code></td>
     <td>Prepare or switch a branch using <code>&lt;origin_branch&gt;</code> as the source candidate. <br /> For both forms, the bot then offers the source choices that actually exist: <code>local/&lt;branch&gt;</code> <code>origin/&lt;branch&gt;</code> <br />If only one of those exists, only that option is shown. If neither exists, the bot tells you the branch source is missing.</td>
   </tr>
   <tr>
-    <td width="250"><code>/current</code></td>
+    <td><code>/current</code></td>
     <td>Show the active session for the current bot and chat.</td>
   </tr>
   <tr>
-    <td width="250"><code>/new [session_name]</code></td>
+    <td><code>/new [session_name]</code></td>
     <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch</code></td>
+    <td><code>/switch</code></td>
     <td>Show the latest sessions, newest first. The list includes both bot-managed sessions and local Codex/Copilot CLI sessions for the current project.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch page &lt;number&gt;</code></td>
+    <td><code>/switch page &lt;number&gt;</code></td>
     <td>Show another page of stored sessions.</td>
   </tr>
   <tr>
-    <td width="250"><code>/switch &lt;session_id&gt;</code></td>
+    <td><code>/switch &lt;session_id&gt;</code></td>
     <td>Switch to a specific session by ID. If you choose a local CLI session, the bot imports it and continues from there.</td>
   </tr>
   <tr>
-    <td width="250"><code>/compact</code></td>
+    <td><code>/compact</code></td>
     <td>Create a fresh compacted session from the active session and switch to it.</td>
   </tr>
   <tr>
-    <td width="250"><code>/commit &lt;git commands&gt;</code></td>
+    <td><code>/commit &lt;git commands&gt;</code></td>
     <td>Run validated git commit-related commands inside the active session project. Available only when <code>ENABLE_COMMIT_COMMAND=true</code>. Mutating git commands require a trusted project.</td>
   </tr>
   <tr>
-    <td width="250"><code>/push</code></td>
+    <td><code>/push</code></td>
     <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
   </tr>
   <tr>
-    <td width="250"><code>/abort</code></td>
+    <td><code>/abort</code></td>
     <td>Abort the current agent run for the current project. If queued questions are waiting, the bot asks whether to continue them.</td>
   </tr>
 </table>
@@ -260,7 +295,7 @@ The bot currently accepts:
 
 <table>
   <tr>
-    <td width="250"><code>WORKSPACE_ROOT</code></td>
+    <td width="332"><code>WORKSPACE_ROOT</code></td>
     <td>Parent folder that contains your project directories.</td>
   </tr>
   <tr>
@@ -277,7 +312,7 @@ The bot currently accepts:
 
 <table>
   <tr>
-    <td width="250"><code>APP_LOCALE</code></td>
+    <td width="332"><code>APP_LOCALE</code></td>
     <td>UI locale for shared bot messages and command descriptions. Supported values: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
@@ -349,6 +384,24 @@ The bot currently accepts:
     <td>Add extra diff exclusions on top of the packaged defaults.
   Example: <code>.*,personal/*,sensitive*.txt</code>
   Note: <code>.*</code> matches hidden paths, including files inside hidden directories.</td>
+  </tr>
+</table>
+
+<h3>Speech to Text</h3>
+<table>
+  <tr>
+    <td width="332"><code>ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT</code></td>
+    <td>Default: <code>false</code>. If true, it enables the audio messages capability. System will check the prerequisites regarding required binaries or libraries on startup.</td>
+  </tr>
+  <tr>
+  <td><code>OPENAI_WHISPER_MODEL</code></td>
+  <td>Model for the Whisper SST. Default: <code>base</code><br />Available models: <code>tiny</code> about <code>72 MB</code>, <code>base</code> about <codoe>139 MB</codoe>, <code>large-v3-turbo</code> about <code>1.5 GB</code><br /> 
+  Models will be automatically downloaded on your first voice message. Recommended: <code>base</code> for general usage. If you want better accuracy and quality, you can try with <code>turbo</code>
+  </td>
+  </tr>
+  <tr>
+    <td><code>OPENAI_WHISPER_TIMEOUT_SECONDS</code></td>
+    <td>Default: <code>120</code>Timeout for the STT process. Usually the STT processing is fast enough.</td>
   </tr>
 </table>
 

@@ -28,7 +28,4 @@ if [[ -z "$COMMAND_PATH" && ":$PATH:" != *":$SCRIPT_DIR:"* ]]; then
 fi
 
 echo "Starting coding-agent-telegram..."
-if [[ -n "$COMMAND_PATH" ]]; then
-  exec "$COMMAND_PATH"
-fi
 exec "$PYTHON_BIN" -m coding_agent_telegram

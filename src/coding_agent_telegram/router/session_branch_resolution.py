@@ -26,45 +26,6 @@ class SessionBranchResolutionMixin:
             ]
         )
 
-    def _multi_branch_source_keyboard(
-        self,
-        *,
-        new_branch: str,
-        source_branches: list[str],
-        project_path,
-    ) -> InlineKeyboardMarkup | None:
-        rows: list[list[InlineKeyboardButton]] = []
-        seen: set[tuple[str, str]] = set()
-        for source_branch in source_branches:
-            if not source_branch:
-                continue
-            row: list[InlineKeyboardButton] = []
-            if self.git.local_branch_exists(project_path, source_branch):
-                key = ("local", source_branch)
-                if key not in seen:
-                    row.append(
-                        InlineKeyboardButton(
-                            f"local/{source_branch}",
-                            callback_data=f"branchsource:local:{source_branch}:{new_branch}",
-                        )
-                    )
-                    seen.add(key)
-            if self.git.remote_branch_exists(project_path, source_branch):
-                key = ("origin", source_branch)
-                if key not in seen:
-                    row.append(
-                        InlineKeyboardButton(
-                            f"origin/{source_branch}",
-                            callback_data=f"branchsource:origin:{source_branch}:{new_branch}",
-                        )
-                    )
-                    seen.add(key)
-            if row:
-                rows.append(row)
-        if not rows:
-            return None
-        return InlineKeyboardMarkup(rows)
-
     async def _offer_branch_source_fallback(
         self,
         query,
@@ -226,7 +187,7 @@ class SessionBranchResolutionMixin:
             pending_action.pop("branch_resolution", None)
             self._store_pending_action(chat_id, pending_action)
             await query.edit_message_text(self._t(update, "branch_resolution.using_current_branch", branch_name=current_branch))
-            await self._continue_pending_action(update, context)
+            await self._continue_pending_action(update, context, drain_queue_after_completion=True)
             return
 
         allow_local = self.git.local_branch_exists(project_path, stored_branch)

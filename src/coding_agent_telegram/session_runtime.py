@@ -28,7 +28,7 @@ from coding_agent_telegram.diff_utils import (
 )
 from coding_agent_telegram.filters import is_sensitive_path, resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager
-from coding_agent_telegram.i18n import translate
+from coding_agent_telegram.i18n import locale_from_update, translate
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
     markdownish_to_html,
@@ -56,6 +56,11 @@ COMPACT_BOOTSTRAP_TEMPLATE = (
 
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
+
+
+def _reply_to_message_id(update: Update) -> int | None:
+    message = getattr(update, "message", None)
+    return getattr(message, "message_id", None)
 
 
 def _load_secret_scrub_patterns() -> tuple[tuple[re.Pattern[str], str], ...]:
@@ -124,12 +129,12 @@ class PhotoAttachmentStore:
         telegram_photo = update.message.photo[-1]
         declared_size = getattr(telegram_photo, "file_size", None)
         if isinstance(declared_size, int) and declared_size > self.MAX_PHOTO_BYTES:
-            raise PhotoAttachmentError("photo_too_large", translate("en", "runtime.photo_too_large"))
+            raise PhotoAttachmentError("photo_too_large", translate(locale_from_update(update), "runtime.photo_too_large"))
 
         telegram_file = await telegram_photo.get_file()
         content = bytes(await telegram_file.download_as_bytearray())
         if len(content) > self.MAX_PHOTO_BYTES:
-            raise PhotoAttachmentError("photo_too_large", translate("en", "runtime.photo_too_large"))
+            raise PhotoAttachmentError("photo_too_large", translate(locale_from_update(update), "runtime.photo_too_large"))
         suffix = Path(telegram_file.file_path or "image.jpg").suffix.lower() or ".jpg"
         if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
             suffix = ".jpg"
@@ -183,6 +188,11 @@ class SessionRuntime:
     def _t(self, update: Update | None, key: str, **kwargs) -> str:
         return translate(self._locale(update), key, **kwargs)
 
+    def _take_reply_to_message_id(self, reply_state: dict[str, int | None]) -> int | None:
+        reply_to_message_id = reply_state.get("reply_to_message_id")
+        reply_state["reply_to_message_id"] = None
+        return reply_to_message_id
+
     def _next_rotated_session_name(self, chat_id: int, base_name: str) -> str:
         existing = {
             data.get("name", "").strip().lower()
@@ -234,6 +244,7 @@ class SessionRuntime:
         *,
         user_message: str,
         image_paths: Sequence[Path] = (),
+        suppress_working_notice: bool = False,
     ) -> AgentRunResult | None:
         chat_id = update.effective_chat.id
         active_id, session, project_path = await self._active_session_or_notify(update, context)
@@ -264,7 +275,14 @@ class SessionRuntime:
             max_text_file_bytes=self.cfg.snapshot_text_file_max_bytes,
         )
         before = set(changed_files(project_path))
-        await send_text(update, context, self._t(update, "runtime.working_on_it"))
+        reply_to_message_id = _reply_to_message_id(update)
+        if not suppress_working_notice:
+            await send_text(
+                update,
+                context,
+                self._t(update, "runtime.working_on_it"),
+                reply_to_message_id=reply_to_message_id,
+            )
         result = await self.run_with_typing(
             update,
             context,
@@ -366,6 +384,7 @@ class SessionRuntime:
             result=result,
             before_snapshot=before_snapshot,
             before=before,
+            reply_to_message_id=reply_to_message_id,
         )
         return result
 
@@ -589,6 +608,7 @@ class SessionRuntime:
         result,
         before_snapshot: dict[str, str | None],
         before: set[str],
+        reply_to_message_id: int | None,
     ) -> None:
         after_snapshot = snapshot_project_files(
             project_path,
@@ -603,8 +623,15 @@ class SessionRuntime:
             for file_diff in collect_snapshot_diffs(before_snapshot, after_snapshot, files)
         }
         diffs = self._merge_snapshot_diffs(diffs, snapshot_diffs_by_path)
+        reply_state = {"reply_to_message_id": reply_to_message_id}
 
-        await self._send_assistant_chunks(update, context, result.assistant_text, provider=provider)
+        await self._send_assistant_chunks(
+            update,
+            context,
+            result.assistant_text,
+            provider=provider,
+            reply_state=reply_state,
+        )
         logger.info(
             "Completed run for chat %s on session '%s' (%s); %d changed file(s).",
             update.effective_chat.id,
@@ -622,8 +649,9 @@ class SessionRuntime:
                 branch_name=branch_name or None,
                 locale=self._locale(update),
             ),
+            reply_to_message_id=self._take_reply_to_message_id(reply_state),
         )
-        await self._send_diffs(update, context, diffs)
+        await self._send_diffs(update, context, diffs, reply_state=reply_state)
 
     def _merge_snapshot_diffs(self, diffs, snapshot_diffs_by_path):
         if not snapshot_diffs_by_path:
@@ -650,6 +678,7 @@ class SessionRuntime:
         assistant_text: str,
         *,
         provider: str,
+        reply_state: dict[str, int | None],
     ) -> None:
         if self.cfg.enable_secret_scrub_filter:
             assistant_text = _scrub_secrets(assistant_text)
@@ -666,6 +695,7 @@ class SessionRuntime:
                     f"{segment.header} ({index}/{total})",
                     segment.text,
                     language=segment.language,
+                    reply_to_message_id=self._take_reply_to_message_id(reply_state),
                 )
                 continue
 
@@ -682,7 +712,12 @@ class SessionRuntime:
                 )
             )
             for message in self._chunk_assistant_prose(title_prefix, segment.text):
-                await send_html_text(update, context, message)
+                await send_html_text(
+                    update,
+                    context,
+                    message,
+                    reply_to_message_id=self._take_reply_to_message_id(reply_state),
+                )
 
     def _chunk_assistant_prose(self, title_prefix: str, text: str) -> list[str]:
         normalized = text.strip()
@@ -726,10 +761,22 @@ class SessionRuntime:
             left = body[:-1].rstrip() or body[:1]
         return left, right
 
-    async def _send_diffs(self, update: Update, context: ContextTypes.DEFAULT_TYPE, diffs) -> None:
+    async def _send_diffs(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        diffs,
+        *,
+        reply_state: dict[str, int | None],
+    ) -> None:
         for file_diff in diffs:
             if self.cfg.enable_sensitive_diff_filter and is_sensitive_path(file_diff.path):
-                await send_text(update, context, self._t(update, "runtime.sensitive_diff_omitted", path=file_diff.path))
+                await send_text(
+                    update,
+                    context,
+                    self._t(update, "runtime.sensitive_diff_omitted", path=file_diff.path),
+                    reply_to_message_id=self._take_reply_to_message_id(reply_state),
+                )
                 continue
             for chunk in chunk_fenced_diff(
                 file_diff.path,
@@ -737,4 +784,11 @@ class SessionRuntime:
                 self.cfg.max_telegram_message_length,
                 locale=self._locale(update),
             ):
-                await send_code_block(update, context, chunk.header, chunk.code, language=chunk.language)
+                await send_code_block(
+                    update,
+                    context,
+                    chunk.header,
+                    chunk.code,
+                    language=chunk.language,
+                    reply_to_message_id=self._take_reply_to_message_id(reply_state),
+                )

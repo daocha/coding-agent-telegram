@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import logging
 import os
@@ -25,6 +26,7 @@ from coding_agent_telegram.git_utils import GitWorkspaceManager, _sanitize_git_o
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
 from coding_agent_telegram.session_store import SessionStore
+from coding_agent_telegram.speech_to_text import WhisperSpeechToText
 from coding_agent_telegram.telegram_sender import send_text
 
 
@@ -108,6 +110,7 @@ class CommandRouterBase:
         self.deps = deps
         self.git = GitWorkspaceManager()
         self.photo_attachments = PhotoAttachmentStore(deps.cfg.app_internal_root)
+        self.speech_to_text = WhisperSpeechToText(deps.cfg)
         self.runtime = SessionRuntime(
             cfg=deps.cfg,
             store=deps.store,
@@ -128,6 +131,16 @@ class CommandRouterBase:
         self._chat_next_queue_file_index: dict[int, int] = {}
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}
+        self._branch_source_tokens: dict[str, tuple[str, str, str]] = {}
+
+    def _register_branch_source_token(self, source_kind: str, source_branch: str, new_branch: str) -> str:
+        key = f"{source_kind}:{source_branch}:{new_branch}"
+        token = hashlib.sha256(key.encode()).hexdigest()[:12]
+        self._branch_source_tokens[token] = (source_kind, source_branch, new_branch)
+        return token
+
+    def _lookup_branch_source_token(self, token: str) -> tuple[str, str, str] | None:
+        return self._branch_source_tokens.get(token)
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         indexed_sessions = list(enumerate(sessions.items()))
@@ -213,6 +226,12 @@ class CommandRouterBase:
     def _t(self, update: Update | None, key: str, **kwargs) -> str:
         return translate(self._locale(update), key, **kwargs)
 
+    def _affirmative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
+        return {"api_kwargs": {"style": "primary"}}
+
+    def _negative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
+        return {"api_kwargs": {"style": "danger"}}
+
     async def _notify_if_current_project_busy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         chat = update.effective_chat
         if chat is None:
@@ -224,6 +243,7 @@ class CommandRouterBase:
             update,
             context,
             self._t(update, "common.project_busy", project_folder=project_folder),
+            reply_to_message_id=getattr(update.message, "message_id", None),
         )
         return True
 
@@ -245,6 +265,7 @@ class CommandRouterBase:
                     update,
                     context,
                     self._t(update, "common.agent_already_running", project_folder=workspace_lock_key),
+                    reply_to_message_id=getattr(update.message, "message_id", None),
                 )
                 return None
             async with lock:
@@ -350,8 +371,18 @@ class CommandRouterBase:
                         text=message_text,
                     )
                 except BadRequest:
+                    previous_message_id = progress_state["message_id"]
                     message = await context.bot.send_message(chat_id=chat.id, text=message_text)
                     message_id = getattr(message, "message_id", None)
+                    if (
+                        previous_message_id is not None
+                        and previous_message_id != message_id
+                        and hasattr(context.bot, "delete_message")
+                    ):
+                        try:
+                            await context.bot.delete_message(chat_id=chat.id, message_id=previous_message_id)
+                        except BadRequest:
+                            pass
                     if progress_state.get("closed") and message_id is not None and hasattr(context.bot, "delete_message"):
                         try:
                             await context.bot.delete_message(chat_id=chat.id, message_id=message_id)

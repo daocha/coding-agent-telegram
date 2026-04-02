@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -56,6 +57,7 @@ COMMAND_PREFIXES = (
 )
 SHELL_LANGUAGES = {"bash", "console", "shell", "sh", "zsh"}
 DEFAULT_TELEGRAM_MESSAGE_LENGTH = 3000
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -75,45 +77,92 @@ def _max_telegram_message_length(context: ContextTypes.DEFAULT_TYPE) -> int:
     return DEFAULT_TELEGRAM_MESSAGE_LENGTH
 
 
-async def send_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+def _default_reply_to_message_id(update: Update, explicit_reply_to_message_id: Optional[int] = None) -> Optional[int]:
+    return explicit_reply_to_message_id
+
+
+async def send_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> None:
     if update.effective_chat is None:
         return
     max_length = _max_telegram_message_length(context)
-    for chunk in _split_text_chunks(text, max_length=max_length):
+    resolved_reply_to_message_id = _default_reply_to_message_id(update, reply_to_message_id)
+    chunks = _split_text_chunks(text, max_length=max_length)
+    logger.debug(
+        "Sending Telegram text message chat=%s chunks=%s reply_to_message_id=%s preview=%.120r",
+        update.effective_chat.id,
+        len(chunks),
+        resolved_reply_to_message_id,
+        text,
+    )
+    for index, chunk in enumerate(chunks):
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=html.escape(chunk),
             parse_mode=ParseMode.HTML,
+            reply_to_message_id=resolved_reply_to_message_id if index == 0 else None,
         )
 
 
-async def send_markdown_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+async def send_markdown_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> None:
     if update.effective_chat is None:
         return
+    logger.debug(
+        "Sending Telegram markdown message chat=%s reply_to_message_id=%s preview=%.120r",
+        update.effective_chat.id,
+        reply_to_message_id,
+        text,
+    )
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=text,
         parse_mode=ParseMode.MARKDOWN,
+        reply_to_message_id=_default_reply_to_message_id(update, reply_to_message_id),
     )
 
 
-async def send_html_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+async def send_html_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> None:
     if update.effective_chat is None:
         return
     max_length = _max_telegram_message_length(context)
+    logger.debug(
+        "Sending Telegram HTML message chat=%s reply_to_message_id=%s length=%s preview=%.120r",
+        update.effective_chat.id,
+        reply_to_message_id,
+        len(text),
+        text,
+    )
     if len(text) > max_length:
-        await send_text(update, context, _strip_html_tags(text))
+        await send_text(update, context, _strip_html_tags(text), reply_to_message_id=reply_to_message_id)
         return
     try:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=text,
             parse_mode=ParseMode.HTML,
+            reply_to_message_id=_default_reply_to_message_id(update, reply_to_message_id),
         )
     except BadRequest as exc:
         if "Can't parse entities" not in str(exc):
             raise
-        await send_text(update, context, _strip_html_tags(text))
+        await send_text(update, context, _strip_html_tags(text), reply_to_message_id=reply_to_message_id)
 
 
 def markdownish_to_html(text: str) -> str:
@@ -141,7 +190,7 @@ def markdownish_to_html(text: str) -> str:
 
 def _format_plain_markdownish(text: str) -> str:
     escaped = html.escape(text)
-    return BOLD_RE.sub(lambda match: f"<b>{html.escape(match.group(1))}</b>", escaped)
+    return BOLD_RE.sub(lambda match: f"<b>{match.group(1)}</b>", escaped)
 
 
 def _strip_html_tags(text: str) -> str:
@@ -276,12 +325,22 @@ async def send_code_block(
     code: str,
     *,
     language: Optional[str] = None,
+    reply_to_message_id: Optional[int] = None,
 ) -> None:
     if update.effective_chat is None:
         return
     max_length = _max_telegram_message_length(context)
     chunks = _split_code_chunks(code, language, max_length=max_length)
     total = len(chunks)
+    resolved_reply_to_message_id = _default_reply_to_message_id(update, reply_to_message_id)
+    logger.debug(
+        "Sending Telegram code block chat=%s header=%r chunks=%s reply_to_message_id=%s language=%r",
+        update.effective_chat.id,
+        header,
+        total,
+        resolved_reply_to_message_id,
+        language,
+    )
     for index, chunk in enumerate(chunks, start=1):
         current_header = header if total == 1 else f"{header} ({index}/{total})"
         escaped_code = html.escape(chunk)
@@ -289,6 +348,7 @@ async def send_code_block(
             chat_id=update.effective_chat.id,
             text=html.escape(current_header),
             parse_mode=ParseMode.HTML,
+            reply_to_message_id=resolved_reply_to_message_id if index == 1 else None,
         )
         if language:
             text = f"<pre><code class=\"language-{html.escape(language)}\">{escaped_code}</code></pre>"
@@ -298,4 +358,5 @@ async def send_code_block(
             chat_id=update.effective_chat.id,
             text=text,
             parse_mode=ParseMode.HTML,
+            reply_to_message_id=None,
         )
