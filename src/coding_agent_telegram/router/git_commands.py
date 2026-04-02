@@ -81,6 +81,16 @@ class GitCommandMixin:
             self._t(update, "diff.tracked_files"),
         ]
         if page_files:
+            if len(tracked_files) > len(page_files):
+                lines.append(
+                    self._t(
+                        update,
+                        "diff.tracked_files_page_info",
+                        start=start + 1,
+                        end=start + len(page_files),
+                        total=len(tracked_files),
+                    )
+                )
             lines.extend(f"{start + index}. {path}" for index, path in enumerate(page_files, start=1))
         else:
             lines.append(f"- {self._t(update, 'diff.none')}")
@@ -113,7 +123,7 @@ class GitCommandMixin:
             return False, result.message, ()
         return True, result.message, tuple(result.warnings)
 
-    def _generated_commit_commands(self) -> dict[int, str]:
+    def _generated_commit_commands(self) -> dict[int, dict[str, str]]:
         commands = getattr(self, "_chat_generated_commit_commands", None)
         if not isinstance(commands, dict):
             commands = {}
@@ -317,7 +327,7 @@ class GitCommandMixin:
             return
 
         file_path = tracked_files[file_index]
-        diffs = collect_diffs(project_path, [file_path])
+        diffs = collect_diffs(project_path, [file_path], include_cached=True)
         if not diffs:
             await send_text(update, context, self._t(update, "diff.none"))
             return
@@ -359,7 +369,21 @@ class GitCommandMixin:
             await query.edit_message_text(self._t(update, "git.no_valid_commit_commands"))
             return
 
-        self._generated_commit_commands()[update.effective_chat.id] = generated_command
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, update.effective_chat.id)
+        active_session_id = str(chat_state.get("active_session_id") or "").strip()
+        if not active_session_id:
+            await query.edit_message_text(self._t(update, "common.no_active_session"))
+            return
+        session = chat_state.get("sessions", {}).get(active_session_id)
+        if not isinstance(session, dict):
+            await query.edit_message_text(self._t(update, "common.no_active_session"))
+            return
+
+        self._generated_commit_commands()[update.effective_chat.id] = {
+            "command": generated_command,
+            "session_id": active_session_id,
+            "project_folder": str(session.get("project_folder") or ""),
+        }
         execute_markup = InlineKeyboardMarkup(
             [
                 [
@@ -407,8 +431,24 @@ class GitCommandMixin:
         if action != "commitexec:confirm":
             return
 
-        command = self._generated_commit_commands().get(update.effective_chat.id)
-        if command is None:
+        payload = self._generated_commit_commands().get(update.effective_chat.id)
+        if payload is None:
+            await query.edit_message_text(self._t(update, "git.no_valid_commit_commands"))
+            return
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, update.effective_chat.id)
+        active_session_id = str(chat_state.get("active_session_id") or "").strip()
+        active_session = chat_state.get("sessions", {}).get(active_session_id) if active_session_id else None
+        active_project_folder = str(active_session.get("project_folder") or "") if isinstance(active_session, dict) else ""
+        if (
+            active_session_id != str(payload.get("session_id") or "")
+            or active_project_folder != str(payload.get("project_folder") or "")
+        ):
+            self._generated_commit_commands().pop(update.effective_chat.id, None)
+            await query.edit_message_text(self._t(update, "git.commit_execute_context_changed"))
+            return
+        command = str(payload.get("command") or "").strip()
+        if not command:
+            self._generated_commit_commands().pop(update.effective_chat.id, None)
             await query.edit_message_text(self._t(update, "git.no_valid_commit_commands"))
             return
 

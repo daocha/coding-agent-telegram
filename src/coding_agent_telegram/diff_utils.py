@@ -257,16 +257,42 @@ def split_changed_files(project_path: Path) -> tuple[list[str], list[str]]:
     return tracked, untracked
 
 
-def _collect_diff_for_file(project_path: Path, path: str) -> str:
-    return _git(project_path, ["diff", "--", path]).strip()
+def _collect_diff_for_file(
+    project_path: Path,
+    path: str,
+    *,
+    against_ref: str | None = None,
+    cached: bool = False,
+) -> str:
+    args = ["diff"]
+    if cached:
+        args.append("--cached")
+    if against_ref:
+        args.append(against_ref)
+    args.extend(["--", path])
+    return _git(project_path, args).strip()
 
 
-def collect_diffs(project_path: Path, files: list[str]) -> list[FileDiff]:
+def collect_diffs(
+    project_path: Path,
+    files: list[str],
+    *,
+    against_ref: str | None = None,
+    include_cached: bool = False,
+) -> list[FileDiff]:
     results: list[FileDiff] = []
     for path in files:
         if is_snapshot_excluded_path(path):
             continue
-        diff = _collect_diff_for_file(project_path, path)
+        parts: list[str] = []
+        diff = _collect_diff_for_file(project_path, path, against_ref=against_ref)
+        if diff:
+            parts.append(diff)
+        if include_cached:
+            cached_diff = _collect_diff_for_file(project_path, path, cached=True)
+            if cached_diff and cached_diff not in parts:
+                parts.append(cached_diff)
+        diff = "\n\n".join(parts).strip()
         results.append(FileDiff(path=path, diff=diff.strip()))
     return results
 

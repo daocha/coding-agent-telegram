@@ -4904,7 +4904,11 @@ def test_diff_callback_sends_selected_file_diff(monkeypatch, tmp_path: Path):
     )
     monkeypatch.setattr(
         "coding_agent_telegram.router.git_commands.collect_diffs",
-        lambda _project_path, files: [SimpleNamespace(path=files[0], diff="--- a/src/worker.py\n+++ b/src/worker.py\n@@\n-old\n+new")],
+        lambda _project_path, files, *, against_ref=None, include_cached=False: [
+            SimpleNamespace(path=files[0], diff="--- a/src/worker.py\n+++ b/src/worker.py\n@@\n-old\n+new")
+        ]
+        if include_cached
+        else [],
     )
 
     update = SimpleNamespace(
@@ -4957,6 +4961,7 @@ def test_diff_limits_buttons_to_ten_per_page(monkeypatch, tmp_path: Path):
     assert [button.callback_data for button in file_buttons[-2:]] == ["diffshow:8", "diffshow:9"]
     assert [button.text for button in nav_buttons] == ["Next"]
     assert [button.callback_data for button in nav_buttons] == ["diffpage:1"]
+    assert "Showing 1-10 of 12." in bot.messages[-1][1]
     assert "10. src/file_10.py" in bot.messages[-1][1]
     assert "11. src/file_11.py" not in bot.messages[-1][1]
 
@@ -5000,6 +5005,7 @@ def test_diff_pagination_edits_message_for_next_page(monkeypatch, tmp_path: Path
 
     asyncio.run(router.handle_diff_callback(update, context))
 
+    assert "Showing 11-12 of 12." in edited[-1][0]
     assert "11. src/file_11.py" in edited[-1][0]
     assert "10. src/file_10.py" not in edited[-1][0]
     reply_markup = edited[-1][2]
@@ -5692,6 +5698,11 @@ def test_commit_generate_callback_sends_generated_command(monkeypatch, tmp_path:
     asyncio.run(router.handle_commit_generate_callback(update, context))
 
     assert edited == ["Generated commit command below."]
+    assert router._generated_commit_commands()[123] == {
+        "command": 'git add src/app.py && git commit -m "Update app"',
+        "session_id": "sess_commit",
+        "project_folder": "backend",
+    }
     assert bot.messages[-1][1] == "Do you want to execute the commit?"
     reply_markup = bot.messages[-1][3]
     assert reply_markup is not None
@@ -5728,7 +5739,11 @@ def test_commit_execute_callback_runs_generated_commit_command(monkeypatch, tmp_
             ],
         ),
     )
-    router._generated_commit_commands()[123] = 'git add src/app.py && git commit -m "Update app"'
+    router._generated_commit_commands()[123] = {
+        "command": 'git add src/app.py && git commit -m "Update app"',
+        "session_id": "sess_commit",
+        "project_folder": "backend",
+    }
 
     edited = []
     update = SimpleNamespace(
@@ -5760,6 +5775,44 @@ def test_commit_execute_callback_runs_generated_commit_command(monkeypatch, tmp_
     assert any("$git add src/app.py" in message[1] for message in bot.messages)
     assert any("$git commit -m &#x27;Update app&#x27; --no-verify --no-post-rewrite" in message[1] for message in bot.messages)
     assert any("[Completed]" in message[1] for message in bot.messages)
+
+
+def test_commit_execute_callback_rejects_when_active_session_changes(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+    (tmp_path / "frontend").mkdir()
+    router.deps.store.create_session("bot-a", 123, "sess_other", "other-session", "frontend", "codex")
+    router._generated_commit_commands()[123] = {
+        "command": 'git add src/app.py && git commit -m "Update app"',
+        "session_id": "sess_commit",
+        "project_folder": "backend",
+    }
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="commitexec:confirm",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_commit_execute_callback(update, context))
+
+    assert edited == ["The active session or project changed. Please generate the commit command again."]
+    assert router.git.safe_git_commands == []
+    assert 123 not in router._generated_commit_commands()
 
 
 def test_commit_no_valid_git_commands_found(tmp_path: Path):

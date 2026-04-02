@@ -234,6 +234,28 @@ def test_collect_diffs_excludes_snapshot_ignored_paths(tmp_path: Path):
     assert [diff.path for diff in diffs] == ["src/app.py"]
 
 
+def test_collect_diffs_include_cached_includes_staged_only_changes(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('before')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "src/app.py"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    (tmp_path / "src" / "app.py").write_text("print('after')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "src/app.py"], cwd=tmp_path, check=True, capture_output=True)
+
+    diffs = collect_diffs(tmp_path, ["src/app.py"], include_cached=True)
+
+    assert len(diffs) == 1
+    assert "-print('before')" in diffs[0].diff
+    assert "+print('after')" in diffs[0].diff
+
+
 def test_snapshot_override_globs_can_hide_hidden_paths(monkeypatch):
     monkeypatch.setenv("SNAPSHOT_EXCLUDE_PATH_GLOBS", ".*")
     diff_utils_module._snapshot_exclude_path_globs_from_env.cache_clear()
