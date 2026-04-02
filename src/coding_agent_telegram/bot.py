@@ -51,6 +51,7 @@ def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_L
     ]
     if enable_commit_command:
         commands.append(BotCommand("commit", translate(locale, "bot.command.commit")))
+    commands.append(BotCommand("pull", translate(locale, "bot.command.pull")))
     commands.append(BotCommand("push", translate(locale, "bot.command.push")))
     commands.append(BotCommand("abort", translate(locale, "bot.command.abort")))
     return commands
@@ -149,6 +150,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CommandHandler("switch", router.handle_switch, filters=allowed_private))
     app.add_handler(CommandHandler("compact", router.handle_compact, filters=allowed_private))
     app.add_handler(CommandHandler("commit", router.handle_commit, filters=allowed_private))
+    app.add_handler(CommandHandler("pull", router.handle_pull, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
     app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
     app.add_handler(CallbackQueryHandler(router.handle_provider_callback, pattern=r"^provider:set:(codex|copilot)$", block=False))
@@ -156,6 +158,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CallbackQueryHandler(router.handle_queue_continue_callback, pattern=r"^queuecontinue:(yes|no)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_source_callback, pattern=r"^branchsource:[0-9a-f]{12}$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_discrepancy_callback, pattern=r"^branchdiscrepancy:(stored|current)$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_pull_callback, pattern=r"^pull:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo, block=False))

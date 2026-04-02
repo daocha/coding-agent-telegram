@@ -395,6 +395,7 @@ class FakeGitManager:
         self.git_commands = []
         self.safe_git_commands = []
         self.push_calls = []
+        self.refresh_calls = []
         self.prepare_from_source_calls = []
 
     def is_git_repo(self, project_path):
@@ -416,7 +417,19 @@ class FakeGitManager:
         return branch_name in self._local_branches or branch_name == self._default_branch
 
     def refresh_current_branch(self, project_path):
-        return self.refresh_result
+        self.refresh_calls.append((project_path, self._current_branch))
+        if self.refresh_result is not None:
+            message = getattr(self.refresh_result, "message", None) or f"Updated branch '{self._current_branch}' from origin."
+            return SimpleNamespace(
+                success=getattr(self.refresh_result, "success", True),
+                message=message,
+                warnings=getattr(self.refresh_result, "warnings", ()),
+            )
+        return SimpleNamespace(
+            success=True,
+            message=f"Updated branch '{self._current_branch}' from origin.",
+            warnings=(),
+        )
 
     def prepare_branch(self, project_path, *, origin_branch, new_branch):
         return self.prepare_result
@@ -4184,6 +4197,14 @@ def _run_push_command(router: CommandRouter) -> FakeBot:
     return bot
 
 
+def _run_pull_command(router: CommandRouter, *, args: list[str] | None = None) -> FakeBot:
+    update = make_update(text="/pull" if not args else "/pull " + " ".join(args))
+    bot = FakeBot()
+    context = SimpleNamespace(args=args or [], bot=bot)
+    asyncio.run(router.handle_pull(update, context))
+    return bot
+
+
 def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tmp_path: Path):
     router, backend = _make_commit_router(
         tmp_path,
@@ -4616,7 +4637,145 @@ def test_push_confirmation_cancel_does_not_push(tmp_path: Path):
     asyncio.run(router.handle_push_callback(update, context))
 
     assert edited == ["Push cancelled."]
+
+
+def test_pull_refreshes_active_session_branch(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_pull", "pull-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="feature-1",
+    )
+    router.git.refresh_result = SimpleNamespace(
+        success=True,
+        message="Updated branch 'feature-1' from origin.",
+        warnings=(),
+    )
+    router.runtime.git = router.git
+
+    bot = _run_pull_command(router)
+
+    assert router.git.refresh_calls == []
+    assert bot.messages[-1][1] == "Pull branch `feature-1` from `origin`?"
+    buttons = bot.messages[-1][3].inline_keyboard[0]
+    assert buttons[0].callback_data == "pull:confirm"
+    assert buttons[1].callback_data == "pull:cancel"
+    assert buttons[0].text == "Confirm pull"
+    assert buttons[1].text == "Cancel"
+
+
+def test_pull_sends_usage_when_extra_args_provided(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_pull", "pull-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+
+    bot = _run_pull_command(router, args=["extra"])
+
+    assert router.git.refresh_calls == []
+    assert bot.messages[-1][1] == "Usage: /pull"
+
+
+def test_pull_confirmation_refreshes_default_and_session_branch(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_pull", "pull-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(
+        is_git_repo=True,
+        current_branch="main",
+        default_branch="develop",
+        checkout_result=SimpleNamespace(success=True, message="Checked out branch"),
+    )
+    router.git.refresh_result = SimpleNamespace(
+        success=True,
+        warnings=("git fetch origin failed.",),
+    )
+    router.runtime.git = router.git
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="pull:confirm",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append((text, parse_mode))
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_pull_callback(update, context))
+
+    assert edited == [("Pulling branch `feature-1` from `origin` and refreshing default branch `develop`...", "Markdown")]
+    assert router.git.refresh_calls == [
+        (backend, "develop"),
+        (backend, "feature-1"),
+    ]
+    assert "Updated branch &#x27;develop&#x27; from origin." in bot.messages[-1][1]
+    assert "Updated branch &#x27;feature-1&#x27; from origin." in bot.messages[-1][1]
+    assert "Refresh warnings:" in bot.messages[-1][1]
+    assert "- git fetch origin failed." in bot.messages[-1][1]
     assert router.git.push_calls == []
+
+
+def test_pull_confirmation_cancel_does_not_refresh(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_pull", "pull-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="pull:cancel",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_pull_callback(update, context))
+
+    assert edited == ["Pull cancelled."]
+    assert router.git.refresh_calls == []
 
 
 def test_push_reports_missing_project_folder_before_git_calls(tmp_path: Path):

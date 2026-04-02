@@ -11,6 +11,25 @@ from .base import require_allowed_chat
 
 
 class GitCommandMixin:
+    async def _refresh_branch_with_checkout(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        project_path,
+        branch_name: str,
+    ) -> tuple[bool, str | None, tuple[str, ...]]:
+        current_branch = self.git.current_branch(project_path)
+        if current_branch != branch_name:
+            checkout = await asyncio.to_thread(self.git.checkout_branch, project_path, branch_name)
+            if not checkout.success:
+                return False, checkout.message, ()
+
+        result = await asyncio.to_thread(self.git.refresh_current_branch, project_path)
+        if not result.success:
+            return False, result.message, ()
+        return True, result.message, tuple(result.warnings)
+
     @require_allowed_chat()
     async def handle_commit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if await self._notify_if_current_project_busy(update, context):
@@ -113,6 +132,132 @@ class GitCommandMixin:
             parse_mode="Markdown",
             reply_markup=confirm_markup,
         )
+
+    @require_allowed_chat()
+    async def handle_pull(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self._notify_if_current_project_busy(update, context):
+            return
+        if context.args:
+            await send_text(update, context, self._t(update, "git.usage_pull"))
+            return
+
+        session, project_path = await self._active_session_project_or_notify(
+            update,
+            context,
+            require_git_repo=True,
+        )
+        if session is None or project_path is None:
+            return
+
+        branch_name = session.get("branch_name") or self.git.current_branch(project_path)
+        if not branch_name:
+            await send_text(update, context, self._t(update, "git.branch_unknown"))
+            return
+
+        default_branch = self.git.default_branch(project_path) or branch_name
+        prompt_key = "git.pull_confirm_prompt_with_default" if default_branch and default_branch != branch_name else "git.pull_confirm_prompt"
+
+        confirm_markup = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        self._t(update, "git.pull_confirm_button"),
+                        callback_data="pull:confirm",
+                        **self._affirmative_inline_button_kwargs(),
+                    ),
+                    InlineKeyboardButton(
+                        self._t(update, "git.cancel_button"),
+                        callback_data="pull:cancel",
+                        **self._negative_inline_button_kwargs(),
+                    ),
+                ]
+            ]
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=self._t(
+                update,
+                prompt_key,
+                branch_name=branch_name,
+                default_branch=default_branch,
+            ),
+            parse_mode="Markdown",
+            reply_markup=confirm_markup,
+        )
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_pull_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None:
+            return
+
+        action = (query.data or "").strip()
+        if action == "pull:cancel":
+            await query.edit_message_text(self._t(update, "git.pull_cancelled"))
+            return
+        if action != "pull:confirm":
+            return
+
+        session, project_path = await self._active_session_project_or_notify(
+            update,
+            context,
+            require_git_repo=True,
+        )
+        if session is None or project_path is None:
+            return
+
+        branch_name = session.get("branch_name") or self.git.current_branch(project_path)
+        if not branch_name:
+            await query.edit_message_text(self._t(update, "git.branch_unknown"))
+            return
+
+        default_branch = self.git.default_branch(project_path) or branch_name
+        prompt_key = "git.pull_in_progress_with_default" if default_branch and default_branch != branch_name else "git.pull_in_progress"
+        await query.edit_message_text(
+            self._t(
+                update,
+                prompt_key,
+                branch_name=branch_name,
+                default_branch=default_branch,
+            ),
+            parse_mode="Markdown",
+        )
+
+        completed_messages: list[str] = []
+        warnings: list[str] = []
+
+        if default_branch and default_branch != branch_name:
+            ok, message, branch_warnings = await self._refresh_branch_with_checkout(
+                update,
+                context,
+                project_path=project_path,
+                branch_name=default_branch,
+            )
+            if not ok:
+                await send_text(update, context, message or self._t(update, "bot.error.command_failed"))
+                return
+            if message:
+                completed_messages.append(message)
+            warnings.extend(branch_warnings)
+
+        ok, message, branch_warnings = await self._refresh_branch_with_checkout(
+            update,
+            context,
+            project_path=project_path,
+            branch_name=branch_name,
+        )
+        if not ok:
+            await send_text(update, context, message or self._t(update, "bot.error.command_failed"))
+            return
+        if message:
+            completed_messages.append(message)
+        warnings.extend(branch_warnings)
+
+        lines = completed_messages or [self._t(update, "git.pull_completed")]
+        if warnings:
+            lines.extend(["", self._t(update, "project.refresh_warnings")])
+            lines.extend(f"- {warning}" for warning in warnings)
+        await send_text(update, context, "\n".join(lines))
 
     @require_allowed_chat(answer_callback=True)
     async def handle_push_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
