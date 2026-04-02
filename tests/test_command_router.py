@@ -682,6 +682,11 @@ def test_project_command_warns_when_existing_project_is_untrusted(tmp_path: Path
 
     assert bot.messages[-1][1] == "Do you trust this project?\nProject: <code>backend</code>"
     assert bot.messages[-1][3] is not None
+    buttons = bot.messages[-1][3].inline_keyboard[0]
+    assert buttons[0].text == "Yes"
+    assert buttons[1].text == "No"
+    assert buttons[0].api_kwargs == {"style": "primary"}
+    assert buttons[1].api_kwargs == {"style": "danger"}
     assert store.is_project_trusted("backend") is False
 
 
@@ -1537,6 +1542,50 @@ def test_new_without_name_ignores_existing_new_session_labels(tmp_path: Path):
     assert "Session created successfully: sess_abc123" in bot.messages[-1][1]
 
 
+def test_plain_text_create_session_new_session_uses_unnamed_flow(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    update = make_update(text="Create session: new session")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
+    assert runner.create_calls[-1]["user_message"] == "Create session: new session"
+
+
+def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    update = make_update(text="Create session: release prep")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_abc123"]["name"] == "release prep"
+    assert runner.create_calls[-1]["user_message"] == "Create session: release prep"
+
+
 def test_provider_command_sends_inline_buttons(tmp_path: Path):
     runner = DummyRunner()
     cfg = make_config(tmp_path)
@@ -1561,6 +1610,8 @@ def test_provider_command_sends_inline_buttons(tmp_path: Path):
     assert buttons[1].callback_data == "provider:set:copilot"
     assert "missing" in buttons[0].text
     assert "current" in buttons[1].text
+    assert buttons[0].api_kwargs == {"style": "success"}
+    assert buttons[1].api_kwargs == {"style": "success"}
 
 
 def test_provider_callback_updates_current_provider(tmp_path: Path):
@@ -3680,6 +3731,12 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         assert buttons[0].callback_data == "queuebatch:group"
         assert buttons[1].callback_data == "queuebatch:single"
         assert buttons[2].callback_data == "queuebatch:cancel"
+        assert buttons[0].text == "Group the questions"
+        assert buttons[1].text == "Process one by one"
+        assert buttons[2].text == "Cancel"
+        assert buttons[0].api_kwargs == {}
+        assert buttons[1].api_kwargs == {}
+        assert buttons[2].api_kwargs == {"style": "danger"}
 
         answers = []
         edited = []
@@ -3882,6 +3939,10 @@ def test_aborted_run_with_pending_queue_prompts_before_continuing(tmp_path: Path
         buttons = keyboard.inline_keyboard[0]
         assert buttons[0].callback_data == "queuecontinue:yes"
         assert buttons[1].callback_data == "queuecontinue:no"
+        assert buttons[0].text == "Yes"
+        assert buttons[1].text == "No"
+        assert buttons[0].api_kwargs == {"style": "primary"}
+        assert buttons[1].api_kwargs == {"style": "danger"}
 
     asyncio.run(exercise())
 
@@ -4469,6 +4530,11 @@ def test_push_uses_current_session_branch(tmp_path: Path):
     assert bot.messages[-1][1] == "Push branch `feature-1` to `origin`?"
     assert bot.messages[-1][2] == "Markdown"
     assert bot.messages[-1][3] is not None
+    buttons = bot.messages[-1][3].inline_keyboard[0]
+    assert buttons[0].text == "Confirm push"
+    assert buttons[1].text == "Cancel"
+    assert buttons[0].api_kwargs == {"style": "primary"}
+    assert buttons[1].api_kwargs == {"style": "danger"}
 
 
 def test_push_confirmation_executes_push(tmp_path: Path):
