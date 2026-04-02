@@ -17,11 +17,11 @@ from .base import require_allowed_chat
 class GitCommandMixin:
     DIFF_BUTTON_PAGE_SIZE = 10
     COMMIT_GENERATION_PROMPT = (
-        'Execute: Analyze and compare to git HEAD, then generate a git commit command for the files you changed in this task, with a detailed changelog-style commit message. '
+        'Execute: Analyze and compare to git HEAD, then Generate a git commit command for the files you changed in this task, with a detailed changelog-style commit message. '
         'Only include files you intentionally modified for this task. '
         'Do not include unrelated changed files. '
         'Do not include untracked files unless they were created for this task and are clearly required. '
-        'Output only a single executable command in this format with \ if there is line break: git add <files> && git commit -m "<message>".'
+        'Output only a single executable command in this format with \\ if there is line break: git add <files> && git commit -m "<message>".'
     )
 
     @staticmethod
