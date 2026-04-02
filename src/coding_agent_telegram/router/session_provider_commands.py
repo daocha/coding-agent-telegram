@@ -64,8 +64,16 @@ class SessionProviderCommandMixin:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(button_label("codex"), callback_data="provider:set:codex"),
-                    InlineKeyboardButton(button_label("copilot"), callback_data="provider:set:copilot"),
+                    InlineKeyboardButton(
+                        button_label("codex"),
+                        callback_data="provider:set:codex",
+                        api_kwargs={"style": "success"},
+                    ),
+                    InlineKeyboardButton(
+                        button_label("copilot"),
+                        callback_data="provider:set:copilot",
+                        api_kwargs={"style": "success"},
+                    ),
                 ]
             ]
         )

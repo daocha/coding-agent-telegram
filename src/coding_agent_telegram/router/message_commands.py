@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -65,6 +66,13 @@ class MessageCommandMixin:
     @require_allowed_chat()
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or not update.message.text:
+            return
+        is_create_session, session_name = self._parse_create_session_text(update.message.text)
+        if is_create_session:
+            await self.handle_new(
+                update,
+                SimpleNamespace(args=[session_name] if session_name else [], bot=context.bot),
+            )
             return
         await self._process_user_message(update, context, update.message.text)
 
