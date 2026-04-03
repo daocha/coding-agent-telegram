@@ -743,9 +743,9 @@ def test_project_command_is_localized_in_zh_tw(tmp_path: Path):
 
     message = bot.messages[0][1]
     assert "已切換專案至：backend" in message
-    assert "必須先選擇 branch" in message
-    assert "儲存庫目前 branch：main" in message
-    assert "請用以下指令選擇 branch：" in message
+    assert "必須先選擇分支" in message
+    assert "儲存庫目前分支：main" in message
+    assert "請用以下指令選擇分支：" in message
 
 
 def test_project_command_warns_when_active_session_belongs_to_another_project(tmp_path: Path):
@@ -1019,9 +1019,9 @@ def test_branch_command_is_localized_in_zh_tw(tmp_path: Path):
     asyncio.run(router.handle_branch(update, context))
 
     message = bot.messages[-1][1]
-    assert "要建立新 branch feature-1" in message
-    assert "請選擇 branch 來源：" in message
-    assert "目標 branch：feature-1" in message
+    assert "要建立新分支 feature-1" in message
+    assert "請選擇分支來源：" in message
+    assert "目標分支：feature-1" in message
 
     token = router._register_branch_source_token("origin", "main", "feature-1")
     query = SimpleNamespace(
@@ -1046,7 +1046,7 @@ def test_branch_command_is_localized_in_zh_tw(tmp_path: Path):
 
     asyncio.run(router.handle_branch_source_callback(callback_update, context))
 
-    assert "目前 branch：feature-1" in edited[-1][0]
+    assert "目前分支：feature-1" in edited[-1][0]
 
 
 def test_branch_command_for_new_branch_offers_current_and_default_sources(tmp_path: Path):
@@ -5507,8 +5507,8 @@ def test_handle_provider_localizes_prompt_text(tmp_path: Path):
     context = SimpleNamespace(args=[], bot=bot)
     asyncio.run(router.handle_provider(update, context))
 
-    assert "目前 provider：codex" in bot.messages[-1][1]
-    assert "請選擇新 session 使用的 provider。" in bot.messages[-1][1]
+    assert "目前提供者：codex" in bot.messages[-1][1]
+    assert "請選擇新工作階段使用的提供者。" in bot.messages[-1][1]
 
 
 def test_handle_provider_sends_usage_when_args_provided(tmp_path: Path):
