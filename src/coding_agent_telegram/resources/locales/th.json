@@ -204,9 +204,9 @@
   "cli.created_env_if_missing": "ได้สร้าง {env_path} แล้วหากไฟล์นี้ยังไม่มีอยู่",
   "cli.update_fields_in_env": "อัปเดตค่าต่อไปนี้ใน {env_path}:",
   "cli.then_run": "จากนั้นรัน: coding-agent-telegram",
-  "bot.command.compact": "ย่อ เซสชัน ที่กำลังใช้งาน",
+  "bot.command.compact": "ย่อเซสชันที่กำลังใช้งาน",
   "status.usage_compact": "วิธีใช้: /compact",
-  "runtime.compacting_session": "กำลังย่อ เซสชัน ที่กำลังใช้งาน...",
-  "runtime.compact_summary_missing": "ผู้ให้บริการ ไม่ได้ส่ง compact handoff summary ที่ใช้งานได้กลับมา",
-  "runtime.session_compacted": "ย่อ เซสชัน สำเร็จแล้ว และสลับไปที่ {session_name} ({session_id})"
+  "runtime.compacting_session": "กำลังย่อเซสชันที่กำลังใช้งาน...",
+  "runtime.compact_summary_missing": "ผู้ให้บริการไม่ได้ส่งสรุปการส่งต่องานแบบย่อที่ใช้งานได้กลับมา",
+  "runtime.session_compacted": "ย่อเซสชันสำเร็จแล้ว และสลับไปที่ {session_name} ({session_id})"
 }

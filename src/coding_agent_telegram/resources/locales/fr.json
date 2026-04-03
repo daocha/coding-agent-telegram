@@ -92,7 +92,7 @@
   "switch.switched_to_session": "session activée",
   "switch.project_label": "Projet",
   "switch.provider_label": "Fournisseur",
-  "switch.branch_label": "Branchee",
+  "switch.branch_label": "Branche",
   "switch.source_label": "Origine",
   "switch.imported_into_state_json": "Importé dans state.json.",
   "switch.status_active": "actif",
