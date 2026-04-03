@@ -204,9 +204,9 @@
   "cli.created_env_if_missing": "{env_path} が存在しない場合は作成しました。",
   "cli.update_fields_in_env": "{env_path} の次の項目を更新してください:",
   "cli.then_run": "その後、次を実行してください: coding-agent-telegram",
-  "bot.command.compact": "アクティブなセッションを compact",
+  "bot.command.compact": "アクティブなセッションを圧縮",
   "status.usage_compact": "使い方: /compact",
-  "runtime.compacting_session": "アクティブな セッション を compact 中です...",
-  "runtime.compact_summary_missing": "プロバイダー から利用可能な compact handoff summary が返されませんでした。",
-  "runtime.session_compacted": "セッション の compact に成功しました。{session_name} ({session_id}) に切り替えました。"
+  "runtime.compacting_session": "アクティブなセッションを圧縮しています...",
+  "runtime.compact_summary_missing": "プロバイダーから利用可能な簡潔な引き継ぎ要約が返されませんでした。",
+  "runtime.session_compacted": "セッションの圧縮に成功しました。{session_name} ({session_id}) に切り替えました。"
 }

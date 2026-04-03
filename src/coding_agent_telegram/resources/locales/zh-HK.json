@@ -207,6 +207,6 @@
   "bot.command.compact": "壓縮目前使用中的工作階段",
   "status.usage_compact": "用法：/compact",
   "runtime.compacting_session": "正在壓縮目前使用中的工作階段...",
-  "runtime.compact_summary_missing": "供應方 沒有返回可用的壓縮交接摘要。",
+  "runtime.compact_summary_missing": "供應方沒有返回可用的壓縮交接摘要。",
   "runtime.session_compacted": "工作階段壓縮成功。已切換到 {session_name} ({session_id})。"
 }

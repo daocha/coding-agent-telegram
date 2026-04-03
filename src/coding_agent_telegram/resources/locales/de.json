@@ -19,7 +19,7 @@
   "common.project_busy": "Auf Projekt '{project_folder}' läuft gerade ein Agent.\nBis zum Abschluss werden nur /current und /abort unterstützt.",
   "common.project_folder_missing": "⚠️ Der Projektordner für diese Sitzung existiert nicht mehr: {project_folder}",
   "common.button_expired": "⚠️ Diese Schaltfläche ist abgelaufen. Bitte führe den Befehl erneut aus.",
-  "git.branch_unknown": "⚠️ Die Zweig der aktuellen Sitzung konnte nicht ermittelt werden.",
+  "git.branch_unknown": "⚠️ Der Zweig der aktuellen Sitzung konnte nicht ermittelt werden.",
   "git.cancel_button": "Abbrechen",
   "git.usage_diff": "Verwendung: /diff",
   "git.usage_pull": "Verwendung: /pull",
