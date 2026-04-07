@@ -253,6 +253,14 @@ De bot accepteert momenteel:
     <td>Voer gevalideerde <code>git commit</code>-gerelateerde commando’s uit binnen het project van de actieve sessie. Alleen beschikbaar als <code>ENABLE_COMMIT_COMMAND=true</code>. Muterende Git-commando’s vereisen een trusted project.</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>Toon gewijzigde bestandsnamen voor het project van de actieve sessie, gescheiden in gevolgde en niet-gevolgde bestanden. Gevolgde bestanden krijgen inline-knoppen om de diff per bestand te openen.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>Voer na bevestiging een pull uit vanaf <code>origin</code> voor de branch van de actieve sessie. De bot ververst ook de standaardbranch wanneer dat van toepassing is.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>Push <code>origin &lt;branch&gt;</code> voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
   </tr>

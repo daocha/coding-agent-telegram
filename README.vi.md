@@ -253,6 +253,14 @@ Hiện tại bot chấp nhận:
     <td>Chạy các lệnh liên quan đến <code>git commit</code> đã được kiểm tra trong project của phiên hoạt động. Chỉ có khi <code>ENABLE_COMMIT_COMMAND=true</code>. Các lệnh Git có thay đổi yêu cầu project đã trusted.</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>Hiển thị tên các tệp đã thay đổi trong project của phiên đang hoạt động, tách riêng tệp đã theo dõi và tệp chưa theo dõi. Các tệp đã theo dõi có nút inline để mở diff của từng tệp.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>Sau khi xác nhận, thực hiện pull từ <code>origin</code> cho branch của phiên đang hoạt động. Bot cũng làm mới branch mặc định khi cần.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>Push <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
   </tr>

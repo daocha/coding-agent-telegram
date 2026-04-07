@@ -253,6 +253,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>활성 세션 project 안에서 검증된 <code>git commit</code> 관련 명령을 실행합니다. <code>ENABLE_COMMIT_COMMAND=true</code> 일 때만 사용할 수 있습니다. 변경성 Git 명령은 trusted project 가 필요합니다.</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>활성 세션 project 의 변경된 파일 이름을 추적 중인 파일과 추적되지 않은 파일로 나누어 표시합니다. 추적 중인 파일에는 각 파일의 diff 를 여는 inline 버튼이 함께 표시됩니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>확인 후 활성 세션 브랜치에 대해 <code>origin</code> 에서 pull 합니다. 필요하면 기본 브랜치도 함께 새로고칩니다.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>현재 활성 세션 에 대해 <code>origin &lt;branch&gt;</code> 를 push 합니다. push 전에 bot 이 확인합니다.</td>
   </tr>
