@@ -253,6 +253,14 @@ bot 目前接受：
     <td>在作用中工作階段的專案內執行已驗證的 <code>git commit</code> 相關指令。僅在 <code>ENABLE_COMMIT_COMMAND=true</code> 時可用。會修改內容的 Git 指令要求專案已 trusted。</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>顯示作用中工作階段專案內已變更的檔案名稱，並分開列出已追蹤與未追蹤檔案。已追蹤檔案會附帶 inline 按鈕，可直接開啟單一檔案的 diff。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>確認後，從 <code>origin</code> 拉取作用中工作階段目前的分支。適用時，bot 也會一併重新整理預設分支。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>為目前作用中工作階段執行 <code>origin &lt;branch&gt;</code> push。push 前 bot 會要求確認。</td>
   </tr>

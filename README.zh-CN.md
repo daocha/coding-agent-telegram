@@ -253,6 +253,14 @@ bot 当前接受：
     <td>在活动会话的项目内执行已校验的 <code>git commit</code> 相关命令。仅当 <code>ENABLE_COMMIT_COMMAND=true</code> 时可用。会修改内容的 Git 命令要求项目已 trusted。</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>显示活动会话项目里的已变更文件名，并分开列出已跟踪文件与未跟踪文件。已跟踪文件会附带 inline 按钮，可直接打开单个文件的 diff。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>确认后，从 <code>origin</code> 拉取活动会话当前分支。适用时，bot 也会一并刷新默认分支。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>为当前活动会话执行 <code>origin &lt;branch&gt;</code> push。push 前 bot 会要求确认。</td>
   </tr>

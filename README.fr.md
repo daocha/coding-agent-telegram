@@ -253,6 +253,14 @@ Le bot accepte actuellement :
     <td>Exécuter des commandes liées à <code>git commit</code> validées dans le projet de la session active. Disponible uniquement si <code>ENABLE_COMMIT_COMMAND=true</code>. Les commandes Git mutantes exigent un projet trusted.</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>Afficher les noms des fichiers modifiés du projet de la session active, séparés entre fichiers suivis et non suivis. Les fichiers suivis proposent des boutons inline pour ouvrir le diff de chaque fichier.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>Après confirmation, exécuter un <code>pull</code> depuis <code>origin</code> pour la branche de la session active. Le bot rafraîchit aussi la branche par défaut si nécessaire.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>Pousser <code>origin &lt;branch&gt;</code> pour la session active courante. Le bot demande une confirmation avant le push.</td>
   </tr>
