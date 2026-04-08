@@ -233,16 +233,66 @@ def changed_files(project_path: Path) -> list[str]:
     ]
 
 
-def _collect_diff_for_file(project_path: Path, path: str) -> str:
-    return _git(project_path, ["diff", "--", path]).strip()
+def split_changed_files(project_path: Path) -> tuple[list[str], list[str]]:
+    output = _git(project_path, ["status", "--short", "--untracked-files=all"])
+    tracked: list[str] = []
+    untracked: list[str] = []
+    for line in output.splitlines():
+        if len(line) < 4:
+            continue
+        status = line[:2]
+        path = line[3:].strip()
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip()
+        if (
+            not path
+            or path.startswith(f"{INTERNAL_APP_DIR}/")
+            or is_snapshot_excluded_path(path)
+        ):
+            continue
+        if status == "??":
+            untracked.append(path)
+        else:
+            tracked.append(path)
+    return tracked, untracked
 
 
-def collect_diffs(project_path: Path, files: list[str]) -> list[FileDiff]:
+def _collect_diff_for_file(
+    project_path: Path,
+    path: str,
+    *,
+    against_ref: str | None = None,
+    cached: bool = False,
+) -> str:
+    args = ["diff"]
+    if cached:
+        args.append("--cached")
+    if against_ref:
+        args.append(against_ref)
+    args.extend(["--", path])
+    return _git(project_path, args).strip()
+
+
+def collect_diffs(
+    project_path: Path,
+    files: list[str],
+    *,
+    against_ref: str | None = None,
+    include_cached: bool = False,
+) -> list[FileDiff]:
     results: list[FileDiff] = []
     for path in files:
         if is_snapshot_excluded_path(path):
             continue
-        diff = _collect_diff_for_file(project_path, path)
+        parts: list[str] = []
+        diff = _collect_diff_for_file(project_path, path, against_ref=against_ref)
+        if diff:
+            parts.append(diff)
+        if include_cached:
+            cached_diff = _collect_diff_for_file(project_path, path, cached=True)
+            if cached_diff and cached_diff not in parts:
+                parts.append(cached_diff)
+        diff = "\n\n".join(parts).strip()
         results.append(FileDiff(path=path, diff=diff.strip()))
     return results
 

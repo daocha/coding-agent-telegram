@@ -253,6 +253,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>アクティブなセッション の project 内で、検証済みの <code>git commit</code> 関連コマンドを実行します。<code>ENABLE_COMMIT_COMMAND=true</code> のときだけ利用できます。変更を伴う Git コマンドには trusted project が必要です。</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>アクティブなセッションの project で変更されたファイル名を、追跡済みファイルと未追跡ファイルに分けて表示します。追跡済みファイルには各ファイルの diff を開く inline ボタンが付きます。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>確認後に、アクティブなセッションのブランチで <code>origin</code> から pull します。必要に応じてデフォルト ブランチも更新します。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td>現在の アクティブなセッション に対して <code>origin &lt;branch&gt;</code> を push します。push 前に bot が確認します。</td>
   </tr>

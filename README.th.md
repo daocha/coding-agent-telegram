@@ -250,7 +250,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/commit &lt;git commands&gt;</code></td>
-    <td>รันคำสั่งที่เกี่ยวข้องกับ <code>git commit</code> ซึ่งผ่านการตรวจสอบแล้วภายใน project ของ เซสชันที่ใช้งานอยู่ ใช้ได้เมื่อ <code>ENABLE_COMMIT_COMMAND=true</code> เท่านั้น คำสั่ง Git ที่มีการแก้ไขต้องใช้ project ที่ trusted</td>
+    <td>รันคำสั่งที่เกี่ยวข้องกับ <code>git commit</code> ซึ่งผ่านการตรวจสอบแล้วภายใน project ของเซสชันที่ใช้งานอยู่ ใช้ได้เมื่อ <code>ENABLE_COMMIT_COMMAND=true</code> เท่านั้น คำสั่ง Git ที่มีการแก้ไขต้องใช้ project ที่ trusted</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>แสดงรายชื่อไฟล์ที่เปลี่ยนใน project ของเซสชันที่ใช้งานอยู่ โดยแยกไฟล์ที่ติดตามอยู่กับไฟล์ที่ยังไม่ได้ติดตามออกจากกัน ไฟล์ที่ติดตามอยู่จะมีปุ่ม inline สำหรับเปิด diff ของแต่ละไฟล์</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>ดึงจาก <code>origin</code> สำหรับ branch ของเซสชันที่ใช้งานอยู่หลังจากยืนยันแล้ว และ bot จะรีเฟรช default branch ให้ด้วยเมื่อเกี่ยวข้อง</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>

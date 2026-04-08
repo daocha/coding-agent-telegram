@@ -264,6 +264,14 @@ The bot currently accepts:
     <td>Run validated git commit-related commands inside the active session project. Available only when <code>ENABLE_COMMIT_COMMAND=true</code>. Mutating git commands require a trusted project.</td>
   </tr>
   <tr>
+    <td><code>/diff</code></td>
+    <td>Show changed filenames for the active session project, separated into tracked and untracked files. Tracked files include inline buttons to open per-file diffs.</td>
+  </tr>
+  <tr>
+    <td><code>/pull</code></td>
+    <td>Pull from <code>origin</code> for the active session branch after confirmation. The bot also refreshes the default branch when applicable.</td>
+  </tr>
+  <tr>
     <td><code>/push</code></td>
     <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
   </tr>

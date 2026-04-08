@@ -253,6 +253,14 @@ Der Bot akzeptiert derzeit:
     <td>Geprüfte <code>git commit</code>-bezogene Befehle im Projekt der aktiven Session ausführen. Nur verfügbar, wenn <code>ENABLE_COMMIT_COMMAND=true</code>. Schreibende Git-Befehle erfordern ein vertrauenswürdiges Projekt.</td>
   </tr>
   <tr>
+    <td width="332"><code>/diff</code></td>
+    <td>Geänderte Dateinamen im Projekt der aktiven Session anzeigen, getrennt nach versionierten und nicht versionierten Dateien. Für versionierte Dateien gibt es Inline-Buttons zum Öffnen des jeweiligen Diffs.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/pull</code></td>
+    <td>Nach Bestätigung <code>origin</code> in den Branch der aktiven Session pullen. Wenn zutreffend, aktualisiert der Bot zusätzlich den Standard-Branch.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/push</code></td>
     <td><code>origin &lt;branch&gt;</code> für die aktuelle aktive Session pushen. Der Bot fragt vor dem Push nach einer Bestätigung.</td>
   </tr>
