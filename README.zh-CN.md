@@ -109,6 +109,65 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 ## 🦞 如果我已经有 Openclaw，为什么还需要它？
 Openclaw 功能非常完整，也内置了名为 Pi-Agent 的 agent loop，适合更丰富、更广泛的使用场景。我自己也很喜欢 Openclaw，以前也用它来写代码。不过对纯 coding 来说，它并不总是最佳选择，因为内置的大型 system prompt 和额外 context 有时会让模型更容易分心。Claude Code / Codex / Copilot 在 coding 场景下通常仍然更高效、更准确、更不容易跑偏，也更直接。这个项目刻意保持简单，只集成 Codex / Copilot / Claude Code CLI，所以你是在直接把任务交给 Codex / Copilot / Claude Code。
 
+## 🆚 如果我已经有 Claude Code + Telegram Plugin，为什么还需要它？
+
+| 功能 | Claude Code + 官方 Telegram Plugin | coding-agent-telegram（支持 Claude） |
+|------|------------------------------------|--------------------------------------|
+| 通过 Telegram 与 AI 对话 | ✅ | ✅ |
+| 编辑本地代码并执行命令 | ✅ | ✅ |
+| 需要预先启动一个 CLI 会话 | **是** | **否**（自动启动或恢复会话） |
+| 支持多个 AI 提供商 | ❌ 仅支持 Claude | ✅ Claude Code、Codex CLI、GitHub Copilot CLI |
+| 通过 Telegram 管理项目 | ❌ | ✅ `/project` |
+| 通过 Telegram 管理分支 | 手动执行 Git 命令 | ✅ `/branch` 工作流 |
+| 创建和切换会话 | 仅限当前活动的 Claude 会话 | ✅ `/new`、`/switch`、`/current`、`/compact` |
+| 恢复已有的本地 CLI 会话 | ❌ | ✅ |
+| 跨设备持续使用同一个会话 | 有限制 | ✅ |
+| 防止多个 Agent 同时修改同一工作区 | ❌ | ✅ 防止多个 Agent 同时修改同一个项目 |
+| Agent 忙碌时的任务队列 | ❌ | ✅ |
+| 独立的文件系统快照与 Diff | ❌ | ✅ |
+| 在 Telegram 中查看结构化文件 Diff | ❌ | ✅ |
+| Secret 和敏感 Diff 过滤 | ❌ | ✅ |
+| 内置 Git 工作流（pull / push / commit） | 手动操作 | ✅ |
+| 支持多个 Bot | 需要运行多个实例 | ✅ 由单个服务器统一管理 |
+| 项目级状态管理 | ❌ | ✅ |
+| 与 AI 提供商无关的架构 | ❌ | ✅ |
+
+> **核心区别**
+>
+> 官方 Claude Code Telegram Plugin 会将 Telegram 连接到**一个已经运行中的 Claude Code 会话**。
+>
+> **coding-agent-telegram** 则充当一个 **Telegram Control Plane（控制平面）**，通过统一的界面管理项目、分支、会话、Git 工作流以及多个 Coding Agent（Claude Code、Codex CLI、GitHub Copilot CLI）。
+
+### 🏛️ 架构
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+一个正在运行的 Claude Code 会话
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+项目 • 分支 • 会话 • 队列 • Git • Diff • Secret 过滤
+```
+
 ## 🚀 快速开始
 
 ### 方案 A：一行启动脚本
