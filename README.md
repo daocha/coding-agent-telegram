@@ -107,6 +107,65 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 ## 🦞 Why do I need it if I have Openclaw already?
 Openclaw offers you full capabilities and has integrated agent loop called Pi-Agent. It's quite comprehensive and designed for more diversified use cases. I am also Openclaw lover and I used to code with Openclaw. However, that is not the best choice for coding due to the built in large system prompt and context. Using Claude Code / Codex / Copilot for coding is still more effecient, accurate, less distracted, and straightforward. This project is quite simple, purely integrating with Codex / Copilot / Claude Code CLI. So you are directly delegating Codex / Copilot / Claude Code to work for you.
 
+## 🆚 Why do I need it if I have Claude Code + Telegram Plugin already?
+
+| Capability | Claude Code + Official Telegram Plugin | coding-agent-telegram (with Claude support) |
+|------------|-----------------------------------------|---------------------------------------------|
+| Telegram chat with AI | ✅ | ✅ |
+| Edit local code and run commands | ✅ | ✅ |
+| Requires an already-running CLI session | **Yes** | **No** (automatically starts or resumes sessions) |
+| Multiple AI providers | ❌ Claude only | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| Project management from Telegram | ❌ | ✅ `/project` |
+| Branch management from Telegram | Manual Git commands | ✅ `/branch` workflow |
+| Create and switch sessions | Limited to active Claude session | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| Resume existing local CLI sessions | ❌ | ✅ |
+| Cross-device session continuity | Limited | ✅ |
+| Workspace concurrency protection | ❌ | ✅ Prevents multiple agents from editing the same project simultaneously |
+| Task queue while an agent is busy | ❌ | ✅ |
+| Independent filesystem snapshot & diff | ❌ | ✅ |
+| View structured file diffs in Telegram | ❌ | ✅ |
+| Secret / sensitive diff filtering | ❌ | ✅ |
+| Built-in Git workflow (pull / push / commit) | Manual | ✅ |
+| Multi-bot support | Multiple instances required | ✅ Managed by a single server |
+| Project-level state management | ❌ | ✅ |
+| Provider-agnostic architecture | ❌ | ✅ |
+
+> **Key difference**
+>
+> The official Claude Code Telegram plugin connects Telegram to **one already-running Claude Code session**.
+>
+> **coding-agent-telegram** acts as a **Telegram control plane** that manages projects, branches, sessions, Git workflows, and multiple coding agents (Claude Code, Codex CLI, GitHub Copilot CLI) from a single interface.
+
+### 🏛️ Architecture
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+One running Claude Code session
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+Project • Branch • Session • Queue • Git • Diff • Secret Filter
+```
+
 ## 🚀 Quick Start
 
 ### Option A: Start with a one-line bootstrap script
