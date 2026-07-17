@@ -109,6 +109,65 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 ## 🦞 이미 Openclaw 가 있는데 왜 이것이 필요한가요?
 Openclaw 는 매우 다양한 기능을 제공하고 Pi-Agent 라는 통합 agent loop 도 갖추고 있습니다. 더 폭넓은 use case 를 위한 상당히 종합적인 도구입니다. 저도 Openclaw 를 좋아하고 예전에는 Openclaw 로 coding 했습니다. 하지만 coding 에 한정하면, 내장된 큰 system prompt 와 추가 context 때문에 항상 최선의 선택은 아닙니다. Claude Code / Codex / Copilot 는 coding 에서 더 효율적이고, 더 정확하며, 덜 산만하고, 더 직접적입니다. 이 project 는 의도적으로 단순하며 Codex / Copilot / Claude Code CLI 만 통합합니다. 즉, Codex / Copilot / Claude Code 에 직접 일을 맡길 수 있습니다.
 
+## 🆚 이미 Claude Code + Telegram Plugin이 있는데, 왜 coding-agent-telegram이 필요한가요?
+
+| 기능 | Claude Code + 공식 Telegram Plugin | coding-agent-telegram (Claude 지원) |
+|------|------------------------------------|--------------------------------------|
+| Telegram에서 AI와 채팅 | ✅ | ✅ |
+| 로컬 코드 편집 및 명령 실행 | ✅ | ✅ |
+| 이미 실행 중인 CLI 세션 필요 | **예** | **아니요** (세션을 자동으로 시작하거나 이어서 사용) |
+| 여러 AI 제공업체 지원 | ❌ Claude만 지원 | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| Telegram에서 프로젝트 관리 | ❌ | ✅ `/project` |
+| Telegram에서 브랜치 관리 | Git 명령을 수동으로 실행 | ✅ `/branch` 워크플로 |
+| 세션 생성 및 전환 | 현재 활성화된 Claude 세션으로 제한 | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| 기존 로컬 CLI 세션 이어서 사용 | ❌ | ✅ |
+| 여러 기기에서 세션 연속성 | 제한적 | ✅ |
+| 동일한 워크스페이스에 대한 동시 작업 방지 | ❌ | ✅ 여러 에이전트가 동일한 프로젝트를 동시에 수정하지 못하도록 방지 |
+| 에이전트가 작업 중일 때 작업 대기열 | ❌ | ✅ |
+| 독립적인 파일 시스템 스냅샷 및 Diff | ❌ | ✅ |
+| Telegram에서 구조화된 파일 Diff 보기 | ❌ | ✅ |
+| Secret 및 민감한 Diff 필터링 | ❌ | ✅ |
+| 내장 Git 워크플로 (pull / push / commit) | 수동 | ✅ |
+| 여러 Bot 지원 | 여러 인스턴스 필요 | ✅ 단일 서버에서 관리 |
+| 프로젝트 단위 상태 관리 | ❌ | ✅ |
+| Provider에 독립적인 아키텍처 | ❌ | ✅ |
+
+> **핵심 차이점**
+>
+> 공식 Claude Code Telegram Plugin은 Telegram을 **이미 실행 중인 하나의 Claude Code 세션**에 연결합니다.
+>
+> **coding-agent-telegram**은 **Telegram 제어 플랫폼(Control Plane)** 역할을 하며, 하나의 인터페이스에서 프로젝트, 브랜치, 세션, Git 워크플로 및 여러 코딩 에이전트(Claude Code, Codex CLI, GitHub Copilot CLI)를 관리할 수 있습니다.
+
+### 🏛️ 아키텍처
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+실행 중인 Claude Code 세션
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+프로젝트 • 브랜치 • 세션 • 대기열 • Git • Diff • Secret 필터
+```
+
 ## 🚀 빠른 시작
 
 ### 방법 A: 한 줄 부트스트랩 스크립트
