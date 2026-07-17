@@ -107,6 +107,65 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 ## 🦞 すでに Openclaw があるのに、なぜこれが必要ですか？
 Openclaw は非常に多機能で、Pi-Agent という統合 agent loop も備えています。用途の幅も広く、とても包括的です。私自身も Openclaw が好きで、以前は Openclaw で coding していました。ですが、coding に限ると、組み込みの大きな system prompt や追加 context のせいで、必ずしも最適とは限りません。Claude Code / Codex / Copilot のほうが、coding ではより効率的で、精度が高く、気が散りにくく、まっすぐです。この project は意図的にシンプルで、Codex / Copilot / Claude Code CLI だけを統合します。つまり、Codex / Copilot / Claude Code に直接作業を委ねられます。
 
+## 🆚 Claude Code + Telegram Plugin があるのに、なぜ coding-agent-telegram が必要なのですか？
+
+| 機能 | Claude Code + 公式 Telegram Plugin | coding-agent-telegram（Claude 対応） |
+|------|------------------------------------|--------------------------------------|
+| Telegram で AI とチャット | ✅ | ✅ |
+| ローカルコードの編集とコマンド実行 | ✅ | ✅ |
+| あらかじめ起動済みの CLI セッションが必要 | **はい** | **いいえ**（セッションを自動的に開始または再開） |
+| 複数の AI プロバイダーをサポート | ❌ Claude のみ | ✅ Claude Code、Codex CLI、GitHub Copilot CLI |
+| Telegram からプロジェクトを管理 | ❌ | ✅ `/project` |
+| Telegram からブランチを管理 | Git コマンドを手動で実行 | ✅ `/branch` ワークフロー |
+| セッションの作成・切り替え | アクティブな Claude セッションのみ | ✅ `/new`、`/switch`、`/current`、`/compact` |
+| 既存のローカル CLI セッションを再開 | ❌ | ✅ |
+| デバイス間でセッションを継続 | 制限あり | ✅ |
+| ワークスペースの同時編集を防止 | ❌ | ✅ 複数のエージェントが同じプロジェクトを同時に編集することを防止 |
+| エージェントがビジー時のタスクキュー | ❌ | ✅ |
+| 独立したファイルシステムスナップショットと差分取得 | ❌ | ✅ |
+| 構造化されたファイル差分を Telegram 上で表示 | ❌ | ✅ |
+| シークレットや機密情報を含む差分のフィルタリング | ❌ | ✅ |
+| Git ワークフロー内蔵（pull / push / commit） | 手動 | ✅ |
+| 複数 Bot のサポート | 複数インスタンスが必要 | ✅ 1 台のサーバーで一元管理 |
+| プロジェクト単位の状態管理 | ❌ | ✅ |
+| プロバイダーに依存しないアーキテクチャ | ❌ | ✅ |
+
+> **主な違い**
+>
+> 公式の Claude Code Telegram Plugin は、Telegram を **すでに実行中の 1 つの Claude Code セッション** に接続します。
+>
+> **coding-agent-telegram** は **Telegram コントロールプレーン** として機能し、単一のインターフェースからプロジェクト、ブランチ、セッション、Git ワークフロー、さらに複数のコーディングエージェント（Claude Code、Codex CLI、GitHub Copilot CLI）を管理できます。
+
+### 🏛️ アーキテクチャ
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+実行中の Claude Code セッション
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+プロジェクト • ブランチ • セッション • キュー • Git • 差分 • シークレットフィルター
+```
+
 ## 🚀 クイックスタート
 
 ### 方法A: ワンライナーのブートストラップスクリプト
