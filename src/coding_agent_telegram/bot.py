@@ -8,6 +8,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 
 from coding_agent_telegram.command_router import CommandRouter
 from coding_agent_telegram.i18n import DEFAULT_LOCALE, translate
+from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
 from coding_agent_telegram.session_store import SessionStoreError
 
 
@@ -103,6 +104,11 @@ def build_error_handler(locale: str):
 async def handle_error(update, context) -> None:
     await build_error_handler(DEFAULT_LOCALE)(update, context)
 
+
+def provider_callback_pattern() -> str:
+    return rf"^provider:set:({'|'.join(SUPPORTED_PROVIDERS)})$"
+
+
 def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: set[int]) -> Application:
     request = HTTPXRequest(
         connect_timeout=TELEGRAM_CONNECT_TIMEOUT_SECONDS,
@@ -155,7 +161,13 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CommandHandler("pull", router.handle_pull, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
     app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
-    app.add_handler(CallbackQueryHandler(router.handle_provider_callback, pattern=r"^provider:set:(codex|copilot)$", block=False))
+    app.add_handler(
+        CallbackQueryHandler(
+            router.handle_provider_callback,
+            pattern=provider_callback_pattern(),
+            block=False,
+        )
+    )
     app.add_handler(CallbackQueryHandler(router.handle_queue_batch_callback, pattern=r"^queuebatch:(group|single|cancel)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_continue_callback, pattern=r"^queuecontinue:(yes|no)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_source_callback, pattern=r"^branchsource:[0-9a-f]{12}$", block=False))

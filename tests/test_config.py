@@ -31,8 +31,10 @@ def _isolate_env(monkeypatch, tmp_path):
         "LOG_DIR",
         "CODEX_BIN",
         "COPILOT_BIN",
+        "CLAUDE_BIN",
         "CODEX_MODEL",
         "COPILOT_MODEL",
+        "CLAUDE_MODEL",
         "COPILOT_AUTOPILOT",
         "COPILOT_NO_ASK_USER",
         "COPILOT_ALLOW_ALL",
@@ -40,6 +42,9 @@ def _isolate_env(monkeypatch, tmp_path):
         "COPILOT_ALLOW_TOOLS",
         "COPILOT_DENY_TOOLS",
         "COPILOT_AVAILABLE_TOOLS",
+        "CLAUDE_PERMISSION_MODE",
+        "CLAUDE_ALLOWED_TOOLS",
+        "CLAUDE_DISALLOWED_TOOLS",
         "CODEX_APPROVAL_POLICY",
         "CODEX_SANDBOX_MODE",
         "CODEX_SKIP_GIT_REPO_CHECK",
@@ -102,6 +107,7 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
     assert cfg.copilot_model == ""
+    assert cfg.claude_model == ""
     assert cfg.copilot_autopilot is True
     assert cfg.copilot_no_ask_user is True
     assert cfg.copilot_allow_all is True
@@ -109,6 +115,10 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.copilot_allow_tools == ()
     assert cfg.copilot_deny_tools == ()
     assert cfg.copilot_available_tools == ()
+    assert cfg.claude_bin == "claude"
+    assert cfg.claude_permission_mode == "bypassPermissions"
+    assert cfg.claude_allowed_tools == ()
+    assert cfg.claude_disallowed_tools == ()
     assert cfg.state_file == home / ".coding-agent-telegram" / "state.json"
     assert cfg.state_backup_file == home / ".coding-agent-telegram" / "state.json.bak"
 
@@ -118,6 +128,49 @@ def test_load_config_missing(monkeypatch, tmp_path):
 
     with pytest.raises(ValueError):
         load_config()
+
+
+def test_load_config_accepts_claude_as_default_provider(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("DEFAULT_AGENT_PROVIDER", "claude")
+
+    cfg = load_config()
+
+    assert cfg.default_agent_provider == "claude"
+
+
+def test_load_config_rejects_unknown_default_provider(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("DEFAULT_AGENT_PROVIDER", "gemini")
+
+    with pytest.raises(ValueError, match="DEFAULT_AGENT_PROVIDER"):
+        load_config()
+
+
+def test_load_config_claude_overrides(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("CLAUDE_BIN", "/opt/bin/claude")
+    monkeypatch.setenv("CLAUDE_MODEL", "opus")
+    monkeypatch.setenv("CLAUDE_PERMISSION_MODE", "acceptEdits")
+    monkeypatch.setenv("CLAUDE_ALLOWED_TOOLS", "Read,Edit,Bash(git *)")
+    monkeypatch.setenv("CLAUDE_DISALLOWED_TOOLS", "Bash(rm *)")
+
+    cfg = load_config()
+
+    assert cfg.claude_bin == "/opt/bin/claude"
+    assert cfg.claude_model == "opus"
+    assert cfg.claude_permission_mode == "acceptEdits"
+    assert cfg.claude_allowed_tools == ("Read", "Edit", "Bash(git *)")
+    assert cfg.claude_disallowed_tools == ("Bash(rm *)",)
 
 
 def test_load_config_commit_command_enabled(monkeypatch, tmp_path):

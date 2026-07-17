@@ -29,6 +29,7 @@ from coding_agent_telegram.diff_utils import (
 from coding_agent_telegram.filters import is_sensitive_path, resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager
 from coding_agent_telegram.i18n import locale_from_update, translate
+from coding_agent_telegram.providers import provider_label as provider_display_label
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
     markdownish_to_html,
@@ -699,7 +700,7 @@ class SessionRuntime:
                 )
                 continue
 
-            provider_label = "Copilot" if provider == "copilot" else "Codex"
+            provider_label = provider_display_label(provider) or "Codex"
             title_prefix = (
                 self._t(update, "runtime.provider_output_single", provider=provider_label)
                 if total == 1

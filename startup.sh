@@ -176,13 +176,14 @@ fi
 DEFAULT_AGENT_PROVIDER="${DEFAULT_AGENT_PROVIDER:-codex}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 COPILOT_BIN="${COPILOT_BIN:-copilot}"
+CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 
 case "$DEFAULT_AGENT_PROVIDER" in
   codex)
     if ! command -v "$CODEX_BIN" >/dev/null 2>&1; then
       echo "Error: Codex CLI not found: $CODEX_BIN" >&2
       echo "Check DEFAULT_AGENT_PROVIDER and CODEX_BIN in $ENV_FILE." >&2
-      echo "If this machine only has Copilot, set DEFAULT_AGENT_PROVIDER=copilot." >&2
+      echo "If this machine only has Copilot or Claude Code, set DEFAULT_AGENT_PROVIDER=copilot or claude." >&2
       exit 1
     fi
     ;;
@@ -190,12 +191,20 @@ case "$DEFAULT_AGENT_PROVIDER" in
     if ! command -v "$COPILOT_BIN" >/dev/null 2>&1; then
       echo "Error: Copilot CLI not found: $COPILOT_BIN" >&2
       echo "Check DEFAULT_AGENT_PROVIDER and COPILOT_BIN in $ENV_FILE." >&2
-      echo "If this machine only has Codex, set DEFAULT_AGENT_PROVIDER=codex." >&2
+      echo "If this machine only has Codex or Claude Code, set DEFAULT_AGENT_PROVIDER=codex or claude." >&2
+      exit 1
+    fi
+    ;;
+  claude)
+    if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
+      echo "Error: Claude Code CLI not found: $CLAUDE_BIN" >&2
+      echo "Check DEFAULT_AGENT_PROVIDER and CLAUDE_BIN in $ENV_FILE." >&2
+      echo "If this machine only has Codex or Copilot, set DEFAULT_AGENT_PROVIDER=codex or copilot." >&2
       exit 1
     fi
     ;;
   *)
-    echo "Error: DEFAULT_AGENT_PROVIDER must be codex or copilot." >&2
+    echo "Error: DEFAULT_AGENT_PROVIDER must be codex, copilot, or claude." >&2
     exit 1
     ;;
 esac

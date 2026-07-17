@@ -95,7 +95,7 @@ class MessageCommandMixin:
         if session is None or project_path is None:
             return
 
-        if session.get("provider", "codex") != "codex":
+        if session.get("provider", "codex") not in ("codex", "claude"):
             await send_text(update, context, self._t(update, "message.photo_only_codex"))
             return
 

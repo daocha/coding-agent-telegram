@@ -167,6 +167,11 @@ def main() -> None:
         copilot_allow_tools=cfg.copilot_allow_tools,
         copilot_deny_tools=cfg.copilot_deny_tools,
         copilot_available_tools=cfg.copilot_available_tools,
+        claude_bin=cfg.claude_bin,
+        claude_model=cfg.claude_model,
+        claude_permission_mode=cfg.claude_permission_mode,
+        claude_allowed_tools=cfg.claude_allowed_tools,
+        claude_disallowed_tools=cfg.claude_disallowed_tools,
         hard_timeout_seconds=cfg.agent_hard_timeout_seconds,
     )
     try:

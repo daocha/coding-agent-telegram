@@ -184,3 +184,20 @@ def test_initialize_bot_commands_empty_allowed_chat_ids():
     )
 
     assert len(set_calls) >= 1
+
+
+# ---------------------------------------------------------------------------
+# provider_callback_pattern
+# ---------------------------------------------------------------------------
+
+
+def test_provider_callback_pattern_matches_all_supported_providers():
+    import re
+
+    from coding_agent_telegram.bot import provider_callback_pattern
+
+    pattern = re.compile(provider_callback_pattern())
+    assert pattern.match("provider:set:codex")
+    assert pattern.match("provider:set:copilot")
+    assert pattern.match("provider:set:claude")
+    assert pattern.match("provider:set:gemini") is None

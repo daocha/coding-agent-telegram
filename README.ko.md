@@ -35,14 +35,14 @@
    ## ✨ 왜 써야 하나요
   - ✅ 가벼움: 무거운 프레임워크 없이 투명한 동작
   - ✅ 멀티 봇: 여러 채팅, 여러 세션 지원
-  - ✅ Telegram 으로 Codex / Copilot CLI 를 제어
+  - ✅ Telegram 으로 Codex / Copilot / Claude Code CLI 를 제어
   - ✅ 에이전트 응답과 변경 파일을 코드 블록으로 쉽게 검토
   - ✅ 에이전트가 작업 중일 때도 후속 질문을 큐에 저장
   - ✅ ✏️ 텍스트, 🌄 이미지, 🎙️ 음성 메시지 지원
 
    ## 🔁 기기/세션 간 자연스러운 전환
 
-  Telegram에서 시작한 세션을 나중에 컴퓨터에서 같은 Codex/Copilot CLI 세션으로 이어서 작업할 수 있습니다. `/switch`만으로 Telegram과 터미널 사이를 자연스럽게 오갈 수 있습니다.
+  Telegram에서 시작한 세션을 나중에 컴퓨터에서 같은 Codex/Copilot/Claude Code CLI 세션으로 이어서 작업할 수 있습니다. `/switch`만으로 Telegram과 터미널 사이를 자연스럽게 오갈 수 있습니다.
   
   - `/switch`로 로컬 세션 이어서 작업
   - 이전 세션도 지원
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - 기존 폴더는 변경성 Git operation 전에 trust 확인을 요구할 수 있음
 - 서버는 숨겨진 외부 호출을 하지 않습니다. 모든 제어권은 사용자에게 있습니다.
 - Codex Sandbox mode 와 잘 동작하며 `danger-full-access` 를 허용할 필요가 없습니다
+- Claude Code 통합은 설정 가능한 permission mode 와 tool allow/deny 목록을 지원합니다
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,76 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Python 3.9 이상
 - _@BotFather_ 에서 만든 Telegram bot token
 - 자신의 Telegram chat ID
-- 로컬에 설치된 Codex CLI 및/또는 Copilot CLI
+- 로컬에 설치된 Codex CLI 및/또는 Copilot CLI 및/또는 Claude Code CLI
 - [Codex CLI 설치](https://developers.openai.com/codex/cli)
 - [Copilot CLI 설치](https://github.com/features/copilot/cli)
+- [Claude Code CLI 설치](https://code.claude.com/docs/en/quickstart)
 - [선택 사항] Whisper, ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 이미 Openclaw 가 있는데 왜 이것이 필요한가요?
-Openclaw 는 매우 다양한 기능을 제공하고 Pi-Agent 라는 통합 agent loop 도 갖추고 있습니다. 더 폭넓은 use case 를 위한 상당히 종합적인 도구입니다. 저도 Openclaw 를 좋아하고 예전에는 Openclaw 로 coding 했습니다. 하지만 coding 에 한정하면, 내장된 큰 system prompt 와 추가 context 때문에 항상 최선의 선택은 아닙니다. Claude Code / Codex / Copilot 는 coding 에서 더 효율적이고, 더 정확하며, 덜 산만하고, 더 직접적입니다. 이 project 는 의도적으로 단순하며 Codex / Copilot CLI 만 통합합니다. 즉, Codex / Copilot 에 직접 일을 맡길 수 있습니다.
+Openclaw 는 매우 다양한 기능을 제공하고 Pi-Agent 라는 통합 agent loop 도 갖추고 있습니다. 더 폭넓은 use case 를 위한 상당히 종합적인 도구입니다. 저도 Openclaw 를 좋아하고 예전에는 Openclaw 로 coding 했습니다. 하지만 coding 에 한정하면, 내장된 큰 system prompt 와 추가 context 때문에 항상 최선의 선택은 아닙니다. Claude Code / Codex / Copilot 는 coding 에서 더 효율적이고, 더 정확하며, 덜 산만하고, 더 직접적입니다. 이 project 는 의도적으로 단순하며 Codex / Copilot / Claude Code CLI 만 통합합니다. 즉, Codex / Copilot / Claude Code 에 직접 일을 맡길 수 있습니다.
+
+## 🆚 이미 Claude Code + Telegram Plugin이 있는데, 왜 coding-agent-telegram이 필요한가요?
+
+| 기능 | Claude Code + 공식 Telegram Plugin | coding-agent-telegram (Claude 지원) |
+|------|------------------------------------|--------------------------------------|
+| Telegram에서 AI와 채팅 | ✅ | ✅ |
+| 로컬 코드 편집 및 명령 실행 | ✅ | ✅ |
+| 이미 실행 중인 CLI 세션 필요 | **예** | **아니요** (세션을 자동으로 시작하거나 이어서 사용) |
+| 여러 AI 제공업체 지원 | ❌ Claude만 지원 | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| Telegram에서 프로젝트 관리 | ❌ | ✅ `/project` |
+| Telegram에서 브랜치 관리 | Git 명령을 수동으로 실행 | ✅ `/branch` 워크플로 |
+| 세션 생성 및 전환 | 현재 활성화된 Claude 세션으로 제한 | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| 기존 로컬 CLI 세션 이어서 사용 | ❌ | ✅ |
+| 여러 기기에서 세션 연속성 | 제한적 | ✅ |
+| 동일한 워크스페이스에 대한 동시 작업 방지 | ❌ | ✅ 여러 에이전트가 동일한 프로젝트를 동시에 수정하지 못하도록 방지 |
+| 에이전트가 작업 중일 때 작업 대기열 | ❌ | ✅ |
+| 독립적인 파일 시스템 스냅샷 및 Diff | ❌ | ✅ |
+| Telegram에서 구조화된 파일 Diff 보기 | ❌ | ✅ |
+| Secret 및 민감한 Diff 필터링 | ❌ | ✅ |
+| 내장 Git 워크플로 (pull / push / commit) | 수동 | ✅ |
+| 여러 Bot 지원 | 여러 인스턴스 필요 | ✅ 단일 서버에서 관리 |
+| 프로젝트 단위 상태 관리 | ❌ | ✅ |
+| Provider에 독립적인 아키텍처 | ❌ | ✅ |
+
+> **핵심 차이점**
+>
+> 공식 Claude Code Telegram Plugin은 Telegram을 **이미 실행 중인 하나의 Claude Code 세션**에 연결합니다.
+>
+> **coding-agent-telegram**은 **Telegram 제어 플랫폼(Control Plane)** 역할을 하며, 하나의 인터페이스에서 프로젝트, 브랜치, 세션, Git 워크플로 및 여러 코딩 에이전트(Claude Code, Codex CLI, GitHub Copilot CLI)를 관리할 수 있습니다.
+
+### 🏛️ 아키텍처
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+실행 중인 Claude Code 세션
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+프로젝트 • 브랜치 • 세션 • 대기열 • Git • Diff • Secret 필터
+```
 
 ## 🚀 빠른 시작
 
@@ -203,7 +264,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - 텍스트 메시지
 - 사진
 - `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 로 설정되어 있고 로컬 Whisper 전제 조건이 설치된 경우의 음성 메시지와 오디오 파일
-- Codex 와 Copilot 은 현재 텍스트와 이미지만 지원하며, 비디오는 지원하지 않습니다
+- Codex 와 Claude Code 세션은 텍스트와 이미지를 지원하며, Copilot 세션은 현재 텍스트만 지원합니다. 어떤 제공자도 비디오는 지원하지 않습니다
 
 ## 🤖 Telegram 명령어
 
@@ -234,7 +295,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>가장 최근 세션을 최신순으로 보여줍니다. 현재 프로젝트의 bot 관리 세션과 로컬 Codex/Copilot CLI 세션이 함께 표시됩니다.</td>
+    <td>가장 최근 세션을 최신순으로 보여줍니다. 현재 프로젝트의 bot 관리 세션과 로컬 Codex/Copilot/Claude Code CLI 세션이 함께 표시됩니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,6 +375,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>공용 bot 메시지와 명령 설명에 사용할 UI locale 입니다. 지원 값: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>새 세션의 기본 제공자입니다: <code>codex</code>, <code>copilot</code>, 또는 <code>claude</code>. 기본값: <code>codex</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
     <td>Codex CLI 를 실행할 명령입니다. 기본값: <code>codex</code>.</td>
   </tr>
@@ -322,12 +387,20 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>Copilot CLI 를 실행할 명령입니다. 기본값: <code>copilot</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>CLAUDE_BIN</code></td>
+    <td>Claude Code CLI 를 실행할 명령입니다. 기본값: <code>~/.local/bin/claude</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
     <td>선택적 Codex model override 입니다. 비워 두면 Codex CLI 기본 model 을 사용합니다. 예: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>선택적 Copilot model override 입니다. 비워 두면 Copilot CLI 기본 model 을 사용합니다. 예: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL</code></td>
+    <td>선택적 Claude Code model override 입니다. 비워 두면 Claude Code CLI 기본 model 을 사용합니다. 예: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +413,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>활성화하면 Codex trusted-repo check 를 항상 건너뜁니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>Claude Code 에 전달할 permission mode 입니다. 다음 중 하나: <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>auto</code>, <code>dontAsk</code>, <code>bypassPermissions</code>, <code>manual</code>. 기본값: <code>bypassPermissions</code> (대화형 터미널이 없어 prompt 를 승인할 수 없으므로 완전 자동 실행됩니다).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>Claude Code 의 permission rule 문법을 사용하는, 쉼표로 구분된 tool allowlist 입니다. 예: <code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>쉼표로 구분된 Claude Code tool denylist 입니다. 예: <code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -420,8 +505,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -485,7 +572,7 @@ lock 은 디스크가 아니라 메모리에만 유지되므로 agent 가 끝나
 
 ## ⚠️ Diff (파일 변경)
 
-_각 에이전트 실행 동안 bot 은 project 의 가벼운 실행 전후 스냅샷 도 만들어 변경 파일 요약과 diff 를 Telegram 으로 보낼 수 있게 합니다. 이 스냅샷 은 Codex 나 Copilot 이 아니라 bot 앱 자체가 만듭니다._
+_각 에이전트 실행 동안 bot 은 project 의 가벼운 실행 전후 스냅샷 도 만들어 변경 파일 요약과 diff 를 Telegram 으로 보낼 수 있게 합니다. 이 스냅샷 은 Codex, Copilot, Claude Code 가 아니라 bot 앱 자체가 만듭니다._
 
 **Snapshot 참고 사항:**
 
