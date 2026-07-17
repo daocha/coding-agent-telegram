@@ -107,6 +107,65 @@ Voordat je de server start, zorg dat je hebt:
 ## 🦞 Waarom heb ik dit nodig als ik Openclaw al heb?
 Openclaw biedt zeer uitgebreide mogelijkheden en heeft al een geïntegreerde agent-loop genaamd Pi-Agent. Het is behoorlijk compleet en bedoeld voor bredere use cases. Ik ben zelf ook fan van Openclaw en heb er eerder mee gecodeerd. Voor coding is het echter niet altijd de beste keuze, door de ingebouwde grote system prompt en extra context. Claude Code / Codex / Copilot zijn voor coding vaak efficiënter, nauwkeuriger, minder afleidend en directer. Dit project blijft bewust eenvoudig en integreert alleen Codex / Copilot / Claude Code CLI. Je delegeert het werk dus rechtstreeks aan Codex / Copilot / Claude Code.
 
+## 🆚 Waarom heb ik coding-agent-telegram nodig als ik Claude Code + Telegram Plugin al heb?
+
+| Mogelijkheid | Claude Code + officiële Telegram Plugin | coding-agent-telegram (met Claude-ondersteuning) |
+|--------------|------------------------------------------|--------------------------------------------------|
+| Chatten met AI via Telegram | ✅ | ✅ |
+| Lokale code bewerken en opdrachten uitvoeren | ✅ | ✅ |
+| Vereist een reeds actieve CLI-sessie | **Ja** | **Nee** (start of hervat sessies automatisch) |
+| Ondersteuning voor meerdere AI-providers | ❌ Alleen Claude | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| Projectbeheer via Telegram | ❌ | ✅ `/project` |
+| Branchbeheer via Telegram | Handmatige Git-opdrachten | ✅ `/branch`-workflow |
+| Sessies aanmaken en wisselen | Beperkt tot de actieve Claude-sessie | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| Bestaande lokale CLI-sessies hervatten | ❌ | ✅ |
+| Sessies naadloos voortzetten tussen apparaten | Beperkt | ✅ |
+| Bescherming tegen gelijktijdige wijzigingen in dezelfde workspace | ❌ | ✅ Voorkomt dat meerdere agents tegelijkertijd hetzelfde project wijzigen |
+| Taakwachtrij wanneer een agent bezig is | ❌ | ✅ |
+| Onafhankelijke bestandssnapshots en diffs | ❌ | ✅ |
+| Gestructureerde bestandsdiffs bekijken in Telegram | ❌ | ✅ |
+| Filteren van secrets en gevoelige diffs | ❌ | ✅ |
+| Ingebouwde Git-workflow (pull / push / commit) | Handmatig | ✅ |
+| Ondersteuning voor meerdere bots | Meerdere instanties vereist | ✅ Beheerd door één server |
+| Statusbeheer op projectniveau | ❌ | ✅ |
+| Provider-onafhankelijke architectuur | ❌ | ✅ |
+
+> **Belangrijkste verschil**
+>
+> De officiële Claude Code Telegram Plugin verbindt Telegram met **één reeds actieve Claude Code-sessie**.
+>
+> **coding-agent-telegram** fungeert als een **Telegram control plane** waarmee je projecten, branches, sessies, Git-workflows en meerdere coding agents (Claude Code, Codex CLI en GitHub Copilot CLI) vanuit één enkele interface kunt beheren.
+
+### 🏛️ Architectuur
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+Eén actieve Claude Code-sessie
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+Project • Branch • Sessie • Wachtrij • Git • Diff • Secretfilter
+```
+
 ## 🚀 Snel starten
 
 ### Optie A: Bootstrapscript in één regel
