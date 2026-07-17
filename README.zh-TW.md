@@ -109,6 +109,65 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 ## 🦞 如果我已經有 Openclaw，為什麼還需要它？
 Openclaw 提供非常完整的能力，也內建了名為 Pi-Agent 的 agent loop，適合更多元的 use case。我自己也很喜歡 Openclaw，過去也曾用它來寫 code。不過對純 coding 來說，它未必永遠是最佳選擇，因為內建的大型 system prompt 和額外 context 有時會讓模型更容易分心。Claude Code / Codex / Copilot 在 coding 場景下通常仍然更有效率、更準確、更不容易跑偏，也更直接。這個 project 刻意保持簡單，只整合 Codex / Copilot / Claude Code CLI，所以你其實是在直接把工作交給 Codex / Copilot / Claude Code。
 
+## 🆚 如果我已經有 Claude Code + Telegram Plugin，為什麼還需要它？
+
+| 功能 | Claude Code + 官方 Telegram Plugin | coding-agent-telegram（支援 Claude） |
+|------|------------------------------------|--------------------------------------|
+| 透過 Telegram 與 AI 對話 | ✅ | ✅ |
+| 編輯本機程式碼並執行指令 | ✅ | ✅ |
+| 需要預先啟動一個 CLI 工作階段 | **是** | **否**（自動啟動或恢復工作階段） |
+| 支援多個 AI 提供商 | ❌ 僅支援 Claude | ✅ Claude Code、Codex CLI、GitHub Copilot CLI |
+| 透過 Telegram 管理專案 | ❌ | ✅ `/project` |
+| 透過 Telegram 管理分支 | 手動執行 Git 指令 | ✅ `/branch` 工作流程 |
+| 建立與切換工作階段 | 僅限目前啟用的 Claude 工作階段 | ✅ `/new`、`/switch`、`/current`、`/compact` |
+| 恢復既有的本機 CLI 工作階段 | ❌ | ✅ |
+| 跨裝置延續同一個工作階段 | 有限制 | ✅ |
+| 防止多個 Agent 同時修改同一個工作區 | ❌ | ✅ 防止多個 Agent 同時修改同一個專案 |
+| Agent 忙碌時的工作佇列 | ❌ | ✅ |
+| 獨立的檔案系統快照與 Diff | ❌ | ✅ |
+| 在 Telegram 中檢視結構化檔案 Diff | ❌ | ✅ |
+| Secret 與敏感 Diff 過濾 | ❌ | ✅ |
+| 內建 Git 工作流程（pull / push / commit） | 手動操作 | ✅ |
+| 支援多個 Bot | 需要執行多個實例 | ✅ 由單一伺服器統一管理 |
+| 專案層級狀態管理 | ❌ | ✅ |
+| 與 AI 提供商無關的架構 | ❌ | ✅ |
+
+> **核心差異**
+>
+> 官方 Claude Code Telegram Plugin 會將 Telegram 連接到**一個已經執行中的 Claude Code 工作階段**。
+>
+> **coding-agent-telegram** 則充當一個 **Telegram Control Plane（控制平面）**，透過單一介面管理專案、分支、工作階段、Git 工作流程，以及多個 Coding Agent（Claude Code、Codex CLI、GitHub Copilot CLI）。
+
+### 🏛️ 架構
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+一個正在執行中的 Claude Code 工作階段
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+專案 • 分支 • 工作階段 • 佇列 • Git • Diff • Secret 過濾
+```
+
 ## 🚀 快速開始
 
 ### 方案 A：一行啟動腳本
