@@ -518,8 +518,10 @@ def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
         allowed_chat_ids={123},
         codex_bin=sys.executable,
         copilot_bin=sys.executable,
+        claude_bin=sys.executable,
         codex_model="",
         copilot_model="",
+        claude_model="",
         copilot_autopilot=True,
         copilot_no_ask_user=True,
         copilot_allow_all=True,
@@ -527,6 +529,9 @@ def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
         copilot_allow_tools=(),
         copilot_deny_tools=(),
         copilot_available_tools=(),
+        claude_permission_mode="bypassPermissions",
+        claude_allowed_tools=(),
+        claude_disallowed_tools=(),
         codex_approval_policy="never",
         codex_sandbox_mode="workspace-write",
         codex_skip_git_repo_check=False,
@@ -1621,10 +1626,13 @@ def test_provider_command_sends_inline_buttons(tmp_path: Path):
     buttons = keyboard.inline_keyboard[0]
     assert buttons[0].callback_data == "provider:set:codex"
     assert buttons[1].callback_data == "provider:set:copilot"
+    assert buttons[2].callback_data == "provider:set:claude"
     assert "missing" in buttons[0].text
     assert "current" in buttons[1].text
+    assert "missing" in buttons[2].text
     assert buttons[0].api_kwargs == {"style": "success"}
     assert buttons[1].api_kwargs == {"style": "success"}
+    assert buttons[2].api_kwargs == {"style": "success"}
 
 
 def test_provider_callback_updates_current_provider(tmp_path: Path):
@@ -1661,6 +1669,71 @@ def test_provider_callback_updates_current_provider(tmp_path: Path):
     assert answers == ["answered"]
     assert edited == ["Current provider set to: copilot"]
     assert store.get_chat_state("bot-a", 123)["current_provider"] == "copilot"
+
+
+def test_provider_callback_updates_current_provider_to_claude(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    answers = []
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:claude",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        answers.append("answered")
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    assert answers == ["answered"]
+    assert edited == ["Current provider set to: claude"]
+    assert store.get_chat_state("bot-a", 123)["current_provider"] == "claude"
+
+
+def test_provider_callback_rejects_unknown_provider(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+
+    answers = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="provider:set:gemini",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        answers.append("answered")
+
+    update.callback_query.answer = fake_answer
+
+    asyncio.run(router.handle_provider_callback(update, context))
+
+    assert store.get_chat_state("bot-a", 123).get("current_provider") is None
 
 
 def test_provider_callback_continues_pending_new_session(tmp_path: Path):
@@ -2325,6 +2398,32 @@ def test_photo_message_is_saved_and_forwarded_to_codex(tmp_path: Path):
     assert "what is shown here?" in runner.resume_calls[-1]["user_message"]
 
 
+def test_photo_message_is_saved_and_forwarded_to_claude(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="what is shown here?"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    assert runner.resume_calls
+    image_paths = runner.resume_calls[-1]["image_paths"]
+    assert len(image_paths) == 1
+    assert image_paths[0].is_file()
+
+
 def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -2345,7 +2444,7 @@ def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
     asyncio.run(router.handle_photo(update, context))
 
     assert runner.resume_calls == []
-    assert "Photo attachments are currently supported only for codex sessions." in bot.messages[-1][1]
+    assert "Photo attachments are currently supported only for Codex and Claude sessions." in bot.messages[-1][1]
 
 
 def test_voice_message_sends_transcript_preview_before_running_agent(tmp_path: Path):

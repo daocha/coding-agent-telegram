@@ -6,6 +6,7 @@ import time
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.providers import SUPPORTED_PROVIDERS, provider_label
 from coding_agent_telegram.telegram_sender import send_text
 
 from .base import require_allowed_chat
@@ -16,7 +17,11 @@ class SessionProviderCommandMixin:
     PROVIDER_BIN_MISSING_CACHE_TTL_SECONDS = 5 * 60
 
     def _provider_bin(self, provider: str) -> str:
-        return self.deps.cfg.codex_bin if provider == "codex" else self.deps.cfg.copilot_bin
+        if provider == "codex":
+            return self.deps.cfg.codex_bin
+        if provider == "claude":
+            return self.deps.cfg.claude_bin
+        return self.deps.cfg.copilot_bin
 
     def _provider_available(self, provider: str) -> bool:
         bin_name = self._provider_bin(provider)
@@ -46,34 +51,33 @@ class SessionProviderCommandMixin:
     ) -> bool:
         if self._provider_available(provider):
             return True
-        provider_label = "Codex" if provider == "codex" else "Copilot"
         await send_text(
             update,
             context,
-            self._t(update, "provider.cli_not_found", provider_label=provider_label, bin_name=self._provider_bin(provider)),
+            self._t(
+                update,
+                "provider.cli_not_found",
+                provider_label=provider_label(provider),
+                bin_name=self._provider_bin(provider),
+            ),
         )
         return False
 
     def _build_provider_keyboard(self, current_provider: str) -> InlineKeyboardMarkup:
         def button_label(provider: str) -> str:
-            provider_label = "Codex" if provider == "codex" else "Copilot"
             status = self._t(None, "provider.status_available") if self._provider_available(provider) else self._t(None, "provider.status_missing")
             marker = self._t(None, "provider.status_current") if provider == current_provider else status
-            return f"{provider_label} ({marker})"
+            return f"{provider_label(provider)} ({marker})"
 
         return InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        button_label("codex"),
-                        callback_data="provider:set:codex",
+                        button_label(provider),
+                        callback_data=f"provider:set:{provider}",
                         api_kwargs={"style": "success"},
-                    ),
-                    InlineKeyboardButton(
-                        button_label("copilot"),
-                        callback_data="provider:set:copilot",
-                        api_kwargs={"style": "success"},
-                    ),
+                    )
+                    for provider in SUPPORTED_PROVIDERS
                 ]
             ]
         )
@@ -110,15 +114,19 @@ class SessionProviderCommandMixin:
         if await self._notify_if_current_project_busy(update, context):
             return
         _, _, provider = query.data.partition("provider:set:")
-        if provider not in {"codex", "copilot"}:
+        if provider not in SUPPORTED_PROVIDERS:
             return
 
         chat_id = update.effective_chat.id
         previous_provider = self._selected_provider(self.deps.store.get_chat_state(self.deps.bot_id, chat_id))
         if not self._provider_available(provider):
-            provider_label = "Codex" if provider == "codex" else "Copilot"
             await query.edit_message_text(
-                self._t(update, "provider.cli_not_found_install_first", provider_label=provider_label, bin_name=self._provider_bin(provider))
+                self._t(
+                    update,
+                    "provider.cli_not_found_install_first",
+                    provider_label=provider_label(provider),
+                    bin_name=self._provider_bin(provider),
+                )
             )
             return
 

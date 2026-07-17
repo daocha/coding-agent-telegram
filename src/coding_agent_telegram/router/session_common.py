@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
+
 
 class SessionCommonMixin:
     def _next_available_session_name(self, chat_id: int, base_name: str) -> str:
@@ -21,7 +23,7 @@ class SessionCommonMixin:
 
     def _selected_provider(self, chat_state: dict[str, object]) -> str:
         provider = str(chat_state.get("current_provider") or "").strip().lower()
-        return provider if provider in {"codex", "copilot"} else ""
+        return provider if provider in SUPPORTED_PROVIDERS else ""
 
     def _active_session_matches_current_context(self, chat_state: dict[str, object]) -> bool:
         active_session_id = chat_state.get("active_session_id")

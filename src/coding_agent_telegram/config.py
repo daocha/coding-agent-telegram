@@ -13,6 +13,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from coding_agent_telegram.i18n import DEFAULT_LOCALE, normalize_locale
+from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
 
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
 DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
@@ -36,8 +37,10 @@ class AppConfig:
     allowed_chat_ids: set[int]
     codex_bin: str
     copilot_bin: str
+    claude_bin: str
     codex_model: str
     copilot_model: str
+    claude_model: str
     copilot_autopilot: bool
     copilot_no_ask_user: bool
     copilot_allow_all: bool
@@ -45,6 +48,9 @@ class AppConfig:
     copilot_allow_tools: tuple[str, ...]
     copilot_deny_tools: tuple[str, ...]
     copilot_available_tools: tuple[str, ...]
+    claude_permission_mode: str
+    claude_allowed_tools: tuple[str, ...]
+    claude_disallowed_tools: tuple[str, ...]
     codex_approval_policy: str
     codex_sandbox_mode: str
     codex_skip_git_repo_check: bool
@@ -199,8 +205,8 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         raise ValueError("Missing required config: TELEGRAM_BOT_TOKENS")
     if not allowed_ids:
         raise ValueError("Missing required config: ALLOWED_CHAT_IDS")
-    if provider not in {"codex", "copilot"}:
-        raise ValueError("DEFAULT_AGENT_PROVIDER must be either codex or copilot")
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"DEFAULT_AGENT_PROVIDER must be one of: {', '.join(SUPPORTED_PROVIDERS)}")
     workspace_root = Path(workspace_root_raw).expanduser().resolve()
     app_internal_root = resolve_app_internal_root(workspace_root)
 
@@ -214,8 +220,10 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),
         copilot_bin=os.getenv("COPILOT_BIN", "copilot"),
+        claude_bin=os.getenv("CLAUDE_BIN", "claude"),
         codex_model=os.getenv("CODEX_MODEL", "").strip(),
         copilot_model=os.getenv("COPILOT_MODEL", "").strip(),
+        claude_model=os.getenv("CLAUDE_MODEL", "").strip(),
         copilot_autopilot=_parse_bool(os.getenv("COPILOT_AUTOPILOT", "true"), default=True),
         copilot_no_ask_user=_parse_bool(os.getenv("COPILOT_NO_ASK_USER", "true"), default=True),
         copilot_allow_all=_parse_bool(os.getenv("COPILOT_ALLOW_ALL", "true"), default=True),
@@ -223,6 +231,9 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         copilot_allow_tools=tuple(_parse_csv_env("COPILOT_ALLOW_TOOLS")),
         copilot_deny_tools=tuple(_parse_csv_env("COPILOT_DENY_TOOLS")),
         copilot_available_tools=tuple(_parse_csv_env("COPILOT_AVAILABLE_TOOLS")),
+        claude_permission_mode=os.getenv("CLAUDE_PERMISSION_MODE", "bypassPermissions").strip(),
+        claude_allowed_tools=tuple(_parse_csv_env("CLAUDE_ALLOWED_TOOLS")),
+        claude_disallowed_tools=tuple(_parse_csv_env("CLAUDE_DISALLOWED_TOOLS")),
         codex_approval_policy=os.getenv("CODEX_APPROVAL_POLICY", "never"),
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),

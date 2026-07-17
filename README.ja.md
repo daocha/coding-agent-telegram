@@ -35,14 +35,14 @@
    ## ✨ このプロジェクトを使う理由
   - ✅ 軽量: 重いフレームワーク不要、挙動が見えやすい
   - ✅ マルチBot: 複数チャット、複数セッションに対応
-  - ✅ Telegram で Codex / Copilot CLI を操作できる
+  - ✅ Telegram で Codex / Copilot / Claude Code CLI を操作できる
   - ✅ エージェントの回答や変更ファイルをコードブロックで確認しやすい
   - ✅ エージェント実行中でも追加入力をキューに積める
   - ✅ ✏️ テキスト、🌄 画像、🎙️ 音声メッセージに対応
 
    ## 🔁 デバイス/セッションをシームレスに切り替え
 
-  Telegram で始めたセッションを、あとで同じ Codex/Copilot CLI セッションとして PC 上でそのまま続けられます。`/switch` を使えば Telegram とコマンドラインの行き来も簡単です。
+  Telegram で始めたセッションを、あとで同じ Codex/Copilot/Claude Code CLI セッションとして PC 上でそのまま続けられます。`/switch` を使えば Telegram とコマンドラインの行き来も簡単です。
   
   - `/switch` でローカルセッションを再開
   - 過去のセッションも利用可能
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - 既存フォルダでは、変更を伴う Git operation の前に trust 確認を求める場合あり
 - サーバーは隠れた外部呼び出しを行いません。すべて自分で管理できます。
 - Codex Sandbox mode と相性がよく、`danger-full-access` を許可する必要はありません
+- Claude Code の統合は、設定可能な permission mode と tool の許可/拒否リストに対応しています
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,15 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Python 3.9 以上
 - _@BotFather_ で作成した Telegram Bot Token
 - 自分の Telegram Chat ID
-- ローカルにインストール済みの Codex CLI または Copilot CLI
-- [Codex CLI インストール](https://developers.openai.com/codex/cli)
-- [Copilot CLI インストール](https://github.com/features/copilot/cli)
+- ローカルにインストール済みの Codex CLI または Copilot CLI または Claude Code CLI
+- [Codex CLI インストール](https://developers.openai.com/codex/cli) / [Copilot CLI インストール](https://github.com/features/copilot/cli) / [Claude Code CLI インストール](https://code.claude.com/docs/en/quickstart)
 - [任意] Whisper、ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 すでに Openclaw があるのに、なぜこれが必要ですか？
-Openclaw は非常に多機能で、Pi-Agent という統合 agent loop も備えています。用途の幅も広く、とても包括的です。私自身も Openclaw が好きで、以前は Openclaw で coding していました。ですが、coding に限ると、組み込みの大きな system prompt や追加 context のせいで、必ずしも最適とは限りません。Claude Code / Codex / Copilot のほうが、coding ではより効率的で、精度が高く、気が散りにくく、まっすぐです。この project は意図的にシンプルで、Codex / Copilot CLI だけを統合します。つまり、Codex / Copilot に直接作業を委ねられます。
+Openclaw は非常に多機能で、Pi-Agent という統合 agent loop も備えています。用途の幅も広く、とても包括的です。私自身も Openclaw が好きで、以前は Openclaw で coding していました。ですが、coding に限ると、組み込みの大きな system prompt や追加 context のせいで、必ずしも最適とは限りません。Claude Code / Codex / Copilot のほうが、coding ではより効率的で、精度が高く、気が散りにくく、まっすぐです。この project は意図的にシンプルで、Codex / Copilot / Claude Code CLI だけを統合します。つまり、Codex / Copilot / Claude Code に直接作業を委ねられます。
 
 ## 🚀 クイックスタート
 
@@ -203,7 +203,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - テキストメッセージ
 - 写真
 - `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` が設定され、ローカル Whisper の前提条件がインストールされている場合の音声メッセージと音声ファイル
-- Codex と Copilot は現在、テキストと画像のみをサポートしており、動画はサポートしていません
+- Codex と Claude Code のセッションはテキストと画像に対応していますが、Copilot のセッションは現在テキストのみに対応しています。動画はどのプロバイダーもサポートしていません
 
 ## 🤖 Telegram コマンド
 
@@ -234,7 +234,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>最新のセッションを新しい順で表示します。現在のプロジェクトに対する bot 管理セッションとローカルの Codex/Copilot CLI セッションの両方を含みます。</td>
+    <td>最新のセッションを新しい順で表示します。現在のプロジェクトに対する bot 管理セッションとローカルの Codex/Copilot/Claude Code CLI セッションの両方を含みます。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,6 +314,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>共有 bot メッセージとコマンド説明の UI 言語です。対応値: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
+    <td><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>新しいセッションの既定プロバイダーです: <code>codex</code>, <code>copilot</code>, <code>claude</code> のいずれか。既定値: <code>codex</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
     <td>Codex CLI を起動するコマンドです。既定値: <code>codex</code>.</td>
   </tr>
@@ -322,12 +326,24 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>Copilot CLI を起動するコマンドです。既定値: <code>copilot</code>.</td>
   </tr>
   <tr>
+    <td><code>CLAUDE_BIN</code></td>
+    <td>Claude Code CLI を起動するコマンドです。既定値: <code>~/.local/bin/claude</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
     <td>Codex モデルの任意上書きです。空欄なら Codex CLI の既定モデルを使います。例: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Copilot モデルの任意上書きです。空欄なら Copilot CLI の既定モデルを使います。例: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL</code></td>
+    <td>Claude Code モデルの任意上書きです。
+    空欄なら Claude Code CLI の既定モデルを使います。
+    例: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
+    <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a>
+    </td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +356,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>有効にすると Codex の trusted-repo check を常にスキップします。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>Claude Code に渡す permission mode です。次のいずれか: <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>auto</code>, <code>dontAsk</code>, <code>bypassPermissions</code>, <code>manual</code>。既定値: <code>bypassPermissions</code>（対話的な terminal で prompt を承認できないため、完全に自律動作します）。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>Claude Code の permission rule 構文を使った、カンマ区切りの tool 許可リストです。例: <code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>カンマ区切りの Claude Code tool 拒否リストです。例: <code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -420,8 +448,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -485,7 +515,7 @@ lock はディスクではなくメモリ上に保持されるため、agent 完
 
 ## ⚠️ Diff（ファイル変更）
 
-_各 エージェント実行 のたびに、bot はプロジェクトの軽量な 実行前後のスナップショット も取得し、変更ファイルの要約と diff を Telegram に送ります。この スナップショット は Codex や Copilot ではなく、bot 自身が作成します。_
+_各 エージェント実行 のたびに、bot はプロジェクトの軽量な 実行前後のスナップショット も取得し、変更ファイルの要約と diff を Telegram に送ります。この スナップショット は Codex や Copilot、Claude Code ではなく、bot 自身が作成します。_
 
 **Snapshot のポイント:**
 

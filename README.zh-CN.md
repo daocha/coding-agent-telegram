@@ -35,14 +35,14 @@
    ## ✨ 为什么使用它
   - ✅ 轻量：没有重型框架，行为清晰可见
   - ✅ 多 Bot：支持多个聊天、多个会话
-  - ✅ 使用 Telegram 控制 Codex / Copilot CLI
+  - ✅ 使用 Telegram 控制 Codex / Copilot / Claude Code CLI
   - ✅ 可以在代码块中轻松查看 agent 回复和改动文件
   - ✅ agent 工作时也能继续排队后续问题
   - ✅ 支持 ✏️ 文本、🌄 图片和 🎙️ 语音消息
 
    ## 🔁 设备与会话无缝切换
 
-  你可以先在 Telegram 中开启一个会话，之后在电脑上继续同一个 Codex/Copilot CLI 会话，不需要折腾。使用 `/switch` 也可以在 Telegram 和命令行之间无缝切换。
+  你可以先在 Telegram 中开启一个会话，之后在电脑上继续同一个 Codex/Copilot/Claude Code CLI 会话，不需要折腾。使用 `/switch` 也可以在 Telegram 和命令行之间无缝切换。
   
   - 使用 `/switch` 继续本地会话
   - 也支持历史会话
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - 现有文件夹在执行会修改内容的 Git 操作前，可能需要先确认 trust
 - 服务器不会发出隐藏的外部请求，一切都由你掌控。
 - 与 Codex Sandbox mode 配合良好，你不需要授予 `danger-full-access`
+- Claude Code 集成支持可配置的权限模式以及工具允许/拒绝列表
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,17 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Python 3.9 或更高版本
 - 通过 _@BotFather_ 创建的 Telegram bot token
 - 你的 Telegram chat ID
-- 已在本地安装 Codex CLI 和/或 Copilot CLI
+- 已在本地安装 Codex CLI 和/或 Copilot CLI 和/或 Claude Code CLI
 - [安装 Codex CLI](https://developers.openai.com/codex/cli)
 - [安装 Copilot CLI](https://github.com/features/copilot/cli)
+- [安装 Claude Code CLI](https://code.claude.com/docs/en/quickstart)
 - [可选] Whisper、ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 如果我已经有 Openclaw，为什么还需要它？
-Openclaw 功能非常完整，也内置了名为 Pi-Agent 的 agent loop，适合更丰富、更广泛的使用场景。我自己也很喜欢 Openclaw，以前也用它来写代码。不过对纯 coding 来说，它并不总是最佳选择，因为内置的大型 system prompt 和额外 context 有时会让模型更容易分心。Claude Code / Codex / Copilot 在 coding 场景下通常仍然更高效、更准确、更不容易跑偏，也更直接。这个项目刻意保持简单，只集成 Codex / Copilot CLI，所以你是在直接把任务交给 Codex / Copilot。
+Openclaw 功能非常完整，也内置了名为 Pi-Agent 的 agent loop，适合更丰富、更广泛的使用场景。我自己也很喜欢 Openclaw，以前也用它来写代码。不过对纯 coding 来说，它并不总是最佳选择，因为内置的大型 system prompt 和额外 context 有时会让模型更容易分心。Claude Code / Codex / Copilot 在 coding 场景下通常仍然更高效、更准确、更不容易跑偏，也更直接。这个项目刻意保持简单，只集成 Codex / Copilot / Claude Code CLI，所以你是在直接把任务交给 Codex / Copilot / Claude Code。
 
 ## 🚀 快速开始
 
@@ -203,7 +205,7 @@ bot 当前接受：
 - 文本消息
 - 图片
 - 当 `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` 且已安装本地 Whisper 依赖时的语音消息和音频文件
-- Codex 和 Copilot 当前只支持文本和图片，不支持视频
+- Codex 和 Claude Code 会话支持文本和图片；Copilot 会话目前只支持文本。所有提供方均不支持视频
 
 ## 🤖 Telegram 命令
 
@@ -234,7 +236,7 @@ bot 当前接受：
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>显示最新的会话，按从新到旧排序。列表同时包含 bot 管理的会话和当前项目的本地 Codex/Copilot CLI 会话。</td>
+    <td>显示最新的会话，按从新到旧排序。列表同时包含 bot 管理的会话和当前项目的本地 Codex/Copilot/Claude Code CLI 会话。</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,6 +316,10 @@ bot 当前接受：
     <td>共享 bot 消息和命令说明所使用的 UI 语言。支持值：<code>en</code>、<code>de</code>、<code>fr</code>、<code>ja</code>、<code>ko</code>、<code>nl</code>、<code>th</code>、<code>vi</code>、<code>zh-CN</code>、<code>zh-HK</code>、<code>zh-TW</code>。</td>
   </tr>
   <tr>
+    <td><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>新会话的默认提供方：<code>codex</code>、<code>copilot</code> 或 <code>claude</code>。默认：<code>codex</code>。</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
     <td>用于启动 Codex CLI 的命令。默认：<code>codex</code>。</td>
   </tr>
@@ -322,12 +328,24 @@ bot 当前接受：
     <td>用于启动 Copilot CLI 的命令。默认：<code>copilot</code>。</td>
   </tr>
   <tr>
+    <td><code>CLAUDE_BIN</code></td>
+    <td>用于启动 Claude Code CLI 的命令。默认：<code>~/.local/bin/claude</code>。</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
     <td>可选的 Codex model 覆盖。留空则使用 Codex CLI 默认 model。示例：<code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>可选的 Copilot model 覆盖。留空则使用 Copilot CLI 默认 model。示例：<code>gpt-5.4</code>、<code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL</code></td>
+    <td>可选的 Claude Code model 覆盖。
+    留空则使用 Claude Code CLI 默认 model。
+    示例：<code>sonnet</code>、<code>opus</code>、<code>haiku</code>
+    <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a>
+    </td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +358,18 @@ bot 当前接受：
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>如果启用，将始终跳过 Codex 的 trusted-repo 检查。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>传递给 Claude Code 的 permission mode。可选值：<code>default</code>、<code>acceptEdits</code>、<code>plan</code>、<code>auto</code>、<code>dontAsk</code>、<code>bypassPermissions</code>、<code>manual</code>。默认：<code>bypassPermissions</code>（完全自主运行，因为没有交互式终端来确认提示）。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>以逗号分隔的 Claude Code 工具允许列表，使用 Claude Code 的 permission rule 语法。示例：<code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>以逗号分隔的 Claude Code 工具拒绝列表。示例：<code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -420,8 +450,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -485,7 +517,7 @@ bot 会强制这个限制，避免两个 agent 同时写入同一个 workspace�
 
 ## ⚠️ Diff（文件变更）
 
-_在每次 代理运行 期间，bot 也会为项目生成轻量的 前后快照，用来汇总改动文件并把 diff 发回 Telegram。这个 快照 由 bot 应用自己生成，而不是由 Codex 或 Copilot 生成。_
+_在每次 代理运行 期间，bot 也会为项目生成轻量的 前后快照，用来汇总改动文件并把 diff 发回 Telegram。这个 快照 由 bot 应用自己生成，而不是由 Codex、Copilot 或 Claude Code 生成。_
 
 **快照说明：**
 

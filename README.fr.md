@@ -35,14 +35,14 @@
    ## ✨ Pourquoi l’utiliser
   - ✅ Léger : pas de framework lourd, transparence totale
   - ✅ Multi-bot : plusieurs chats, plusieurs sessions
-  - ✅ Utiliser Telegram pour piloter Codex / Copilot CLI
+  - ✅ Utiliser Telegram pour piloter Codex / Copilot / Claude Code CLI
   - ✅ Révision facile des réponses et des fichiers modifiés dans des blocs de code
   - ✅ Les messages de suivi peuvent être mis en file d’attente pendant qu’un agent travaille
   - ✅ Accepte les messages ✏️ texte, 🌄 image et 🎙️ vocaux
 
    ## 🔁 Changement fluide entre appareils et sessions
 
-  Démarrez une session dans Telegram, puis reprenez la même session Codex/Copilot CLI plus tard sur votre ordinateur sans friction. Avec `/switch`, vous pouvez aussi repasser simplement de Telegram à la ligne de commande.
+  Démarrez une session dans Telegram, puis reprenez la même session Codex/Copilot/Claude Code CLI plus tard sur votre ordinateur sans friction. Avec `/switch`, vous pouvez aussi repasser simplement de Telegram à la ligne de commande.
   
   - Utilisez `/switch` pour reprendre une session locale
   - Les sessions historiques sont également prises en charge
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Les dossiers existants peuvent exiger une confirmation de confiance avant les opérations Git modifiantes
 - Le serveur n’effectue aucun appel externe caché. Vous gardez le contrôle.
 - Fonctionne bien avec le mode sandbox de Codex, sans devoir accorder `danger-full-access`
+- L’intégration Claude Code prend en charge des modes de permission configurables ainsi que des listes d’autorisation/interdiction d’outils
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,15 @@ Avant de démarrer le serveur, assurez-vous d’avoir :
 - Python 3.9 ou plus récent
 - Un token de bot Telegram créé via _@BotFather_
 - Votre identifiant de chat Telegram
-- Codex CLI et/ou Copilot CLI installés localement
-- [Installation Codex CLI](https://developers.openai.com/codex/cli)
-- [Installation Copilot CLI](https://github.com/features/copilot/cli)
+- Codex CLI et/ou Copilot CLI et/ou Claude Code CLI installés localement
+- [Installation Codex CLI](https://developers.openai.com/codex/cli) / [Installation Copilot CLI](https://github.com/features/copilot/cli) / [Installation Claude Code CLI](https://code.claude.com/docs/en/quickstart)
 - [Optionnel] Whisper, ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 Pourquoi en ai-je besoin si j’ai déjà Openclaw ?
-Openclaw offre des capacités très complètes et intègre déjà une boucle d’agent appelée Pi-Agent. C’est un outil riche, pensé pour des cas d’usage plus variés. J’aime aussi Openclaw et j’ai déjà codé avec lui. Mais pour le coding pur, ce n’est pas toujours le meilleur choix à cause du gros system prompt intégré et du contexte supplémentaire. Pour coder, Claude Code / Codex / Copilot restent souvent plus efficaces, plus précis, moins distraits et plus directs. Ce projet reste volontairement simple et se contente d’intégrer Codex / Copilot CLI. Vous déléguez donc directement le travail à Codex / Copilot.
+Openclaw offre des capacités très complètes et intègre déjà une boucle d’agent appelée Pi-Agent. C’est un outil riche, pensé pour des cas d’usage plus variés. J’aime aussi Openclaw et j’ai déjà codé avec lui. Mais pour le coding pur, ce n’est pas toujours le meilleur choix à cause du gros system prompt intégré et du contexte supplémentaire. Pour coder, Claude Code / Codex / Copilot restent souvent plus efficaces, plus précis, moins distraits et plus directs. Ce projet reste volontairement simple et se contente d’intégrer Codex / Copilot / Claude Code CLI. Vous déléguez donc directement le travail à Codex / Copilot / Claude Code.
 
 ## 🚀 Démarrage rapide
 
@@ -203,7 +203,7 @@ Le bot accepte actuellement :
 - les messages texte
 - les photos
 - les messages vocaux et les fichiers audio quand `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` et que les prérequis locaux de Whisper sont installés
-- Codex et Copilot prennent actuellement en charge uniquement le texte et les images, pas la vidéo
+- Codex et Claude Code prennent en charge le texte et les images ; Copilot ne prend actuellement en charge que le texte. Aucun fournisseur ne prend en charge la vidéo.
 
 ## 🤖 Commandes Telegram
 
@@ -234,7 +234,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>Afficher les sessions les plus récentes, de la plus récente à la plus ancienne. La liste inclut les sessions gérées par le bot et les sessions locales Codex/Copilot CLI du projet courant.</td>
+    <td>Afficher les sessions les plus récentes, de la plus récente à la plus ancienne. La liste inclut les sessions gérées par le bot et les sessions locales Codex/Copilot/Claude Code CLI du projet courant.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,6 +314,10 @@ Le bot accepte actuellement :
     <td>Langue de l’interface pour les messages partagés du bot et les descriptions de commandes. Valeurs prises en charge : <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>Fournisseur par défaut pour les nouvelles sessions : <code>codex</code>, <code>copilot</code>, ou <code>claude</code>. Valeur par défaut : <code>codex</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
     <td>Commande utilisée pour lancer Codex CLI. Valeur par défaut : <code>codex</code>.</td>
   </tr>
@@ -322,12 +326,24 @@ Le bot accepte actuellement :
     <td>Commande utilisée pour lancer Copilot CLI. Valeur par défaut : <code>copilot</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>CLAUDE_BIN</code></td>
+    <td>Commande utilisée pour lancer Claude Code CLI. Valeur par défaut : <code>~/.local/bin/claude</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
     <td>Remplacement optionnel du modèle Codex. Laissez vide pour utiliser le modèle par défaut de Codex CLI. Exemple : <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">Modèles OpenAI Codex/OpenAI</a></td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Remplacement optionnel du modèle Copilot. Laissez vide pour utiliser le modèle par défaut de Copilot CLI. Exemples : <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">Modèles pris en charge par GitHub Copilot</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL</code></td>
+    <td>Remplacement optionnel du modèle Claude Code.
+    Laissez vide pour utiliser le modèle par défaut de Claude Code CLI.
+    Exemples : <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
+    <a href="https://code.claude.com/docs/en/model-config" target="_blank">Configuration des modèles Claude Code</a>
+    </td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +356,18 @@ Le bot accepte actuellement :
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Si activé, contourne toujours les vérifications de dépôt trusted de Codex.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>Mode de permission transmis à Claude Code. Un parmi <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>auto</code>, <code>dontAsk</code>, <code>bypassPermissions</code>, <code>manual</code>. Défaut : <code>bypassPermissions</code> (entièrement autonome, puisqu’il n’y a pas de terminal interactif pour approuver les invites).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>Liste blanche d’outils Claude Code séparés par des virgules, utilisant la syntaxe des règles de permission de Claude Code. Exemple : <code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>Liste noire d’outils Claude Code séparés par des virgules. Exemple : <code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -422,8 +450,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -487,7 +517,7 @@ Si l'exécution en cours est annulée et que des questions attendent encore, le 
 
 ## ⚠️ Diff (modifications de fichiers)
 
-_Pendant chaque exécution d'agent, le bot prend aussi un léger instantané avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce instantané est produit par le bot lui-même, pas par Codex ou Copilot._
+_Pendant chaque exécution d'agent, le bot prend aussi un léger instantané avant/après du projet afin de résumer les fichiers modifiés et d'envoyer des diffs vers Telegram. Ce instantané est produit par le bot lui-même, pas par Codex, Copilot ou Claude Code._
 
 **À savoir sur le instantané :**
 

@@ -35,14 +35,14 @@
    ## ✨ Vì sao nên dùng
   - ✅ Nhẹ: không cần framework nặng, minh bạch hoàn toàn
   - ✅ Nhiều bot: nhiều cuộc chat, nhiều phiên
-  - ✅ Dùng Telegram để điều khiển Codex / Copilot CLI
+  - ✅ Dùng Telegram để điều khiển Codex / Copilot / Claude Code CLI
   - ✅ Dễ xem câu trả lời và các tệp đã thay đổi trong code block
   - ✅ Có thể xếp hàng câu hỏi tiếp theo khi agent đang làm việc
   - ✅ Chấp nhận tin nhắn ✏️ văn bản, 🌄 hình ảnh và 🎙️ thoại
 
    ## 🔁 Chuyển thiết bị/phiên liền mạch
 
-  Bắt đầu một phiên trên Telegram rồi tiếp tục đúng phiên Codex/Copilot CLI đó trên máy tính sau mà không cần thao tác rườm rà. Với `/switch`, bạn cũng có thể chuyển qua lại mượt mà giữa Telegram và command line.
+  Bắt đầu một phiên trên Telegram rồi tiếp tục đúng phiên Codex/Copilot/Claude Code CLI đó trên máy tính sau mà không cần thao tác rườm rà. Với `/switch`, bạn cũng có thể chuyển qua lại mượt mà giữa Telegram và command line.
   
   - Dùng `/switch` để tiếp tục một phiên cục bộ
   - Hỗ trợ cả các phiên lịch sử
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Các thư mục có sẵn có thể yêu cầu xác nhận trust trước khi chạy Git operation có thay đổi
 - Máy chủ không thực hiện các lời gọi ra ngoài một cách ẩn. Bạn giữ toàn quyền kiểm soát.
 - Hoạt động tốt với Codex Sandbox mode, bạn không cần cấp `danger-full-access`
+- Tích hợp Claude Code hỗ trợ các chế độ phân quyền có thể cấu hình và danh sách tool allow/deny
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,15 @@ Trước khi khởi động server, hãy chuẩn bị:
 - Python 3.9 trở lên
 - Telegram bot token tạo từ _@BotFather_
 - Telegram chat ID của bạn
-- Codex CLI và/hoặc Copilot CLI đã được cài cục bộ
-- [Cài Codex CLI](https://developers.openai.com/codex/cli)
-- [Cài Copilot CLI](https://github.com/features/copilot/cli)
+- Codex CLI và/hoặc Copilot CLI và/hoặc Claude Code CLI đã được cài cục bộ
+- [Cài Codex CLI](https://developers.openai.com/codex/cli) / [Cài Copilot CLI](https://github.com/features/copilot/cli) / [Cài Claude Code CLI](https://code.claude.com/docs/en/quickstart)
 - [Tùy chọn] Whisper, ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 Vì sao tôi cần cái này nếu đã có Openclaw?
-Openclaw cung cấp bộ tính năng rất đầy đủ và đã có sẵn agent loop tích hợp tên là Pi-Agent. Nó khá toàn diện và phù hợp với nhiều use case đa dạng hơn. Tôi cũng là người thích Openclaw và từng code với Openclaw. Tuy vậy, riêng cho coding thì đây không phải lúc nào cũng là lựa chọn tốt nhất vì system prompt tích hợp khá lớn và context đi kèm nhiều hơn. Claude Code / Codex / Copilot vẫn thường hiệu quả hơn, chính xác hơn, ít bị phân tán hơn và trực tiếp hơn cho việc coding. Dự án này được giữ rất đơn giản, chỉ tích hợp Codex / Copilot CLI. Nghĩa là bạn giao việc trực tiếp cho Codex / Copilot.
+Openclaw cung cấp bộ tính năng rất đầy đủ và đã có sẵn agent loop tích hợp tên là Pi-Agent. Nó khá toàn diện và phù hợp với nhiều use case đa dạng hơn. Tôi cũng là người thích Openclaw và từng code với Openclaw. Tuy vậy, riêng cho coding thì đây không phải lúc nào cũng là lựa chọn tốt nhất vì system prompt tích hợp khá lớn và context đi kèm nhiều hơn. Claude Code / Codex / Copilot vẫn thường hiệu quả hơn, chính xác hơn, ít bị phân tán hơn và trực tiếp hơn cho việc coding. Dự án này được giữ rất đơn giản, chỉ tích hợp Codex / Copilot / Claude Code CLI. Nghĩa là bạn giao việc trực tiếp cho Codex / Copilot / Claude Code.
 
 ## 🚀 Bắt đầu nhanh
 
@@ -203,7 +203,7 @@ Hiện tại bot chấp nhận:
 - tin nhắn văn bản
 - ảnh
 - tin nhắn thoại và tệp âm thanh khi `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` và các điều kiện cần cục bộ của Whisper đã được cài đặt
-- hiện tại Codex và Copilot chỉ hỗ trợ văn bản và hình ảnh, chưa hỗ trợ video
+- Codex và Claude Code hỗ trợ văn bản và hình ảnh; Copilot hiện chỉ hỗ trợ văn bản. Video chưa được hỗ trợ bởi bất kỳ nhà cung cấp nào.
 
 ## 🤖 Lệnh Telegram
 
@@ -234,7 +234,7 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>Hiển thị các phiên mới nhất, mới nhất trước. Danh sách bao gồm cả phiên do bot quản lý và phiên CLI Codex/Copilot cục bộ của project hiện tại.</td>
+    <td>Hiển thị các phiên mới nhất, mới nhất trước. Danh sách bao gồm cả phiên do bot quản lý và phiên CLI Codex/Copilot/Claude Code cục bộ của project hiện tại.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,6 +314,10 @@ Hiện tại bot chấp nhận:
     <td>Ngôn ngữ UI cho các thông điệp bot dùng chung và mô tả lệnh. Giá trị hỗ trợ: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>Nhà cung cấp mặc định cho các phiên mới: <code>codex</code>, <code>copilot</code>, hoặc <code>claude</code>. Mặc định: <code>codex</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
     <td>Lệnh dùng để chạy Codex CLI. Mặc định: <code>codex</code>.</td>
   </tr>
@@ -322,12 +326,20 @@ Hiện tại bot chấp nhận:
     <td>Lệnh dùng để chạy Copilot CLI. Mặc định: <code>copilot</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>CLAUDE_BIN</code></td>
+    <td>Lệnh dùng để chạy Claude Code CLI. Mặc định: <code>~/.local/bin/claude</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
     <td>Ghi đè model Codex nếu cần. Để trống để dùng model mặc định của Codex CLI. Ví dụ: <code>gpt-5.4</code> <a href="https://developers.openai.com/codex/models" target="_blank">OpenAI Codex/OpenAI models</a></td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Ghi đè model Copilot nếu cần. Để trống để dùng model mặc định của Copilot CLI. Ví dụ: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL</code></td>
+    <td>Ghi đè model Claude Code nếu cần. Để trống để dùng model mặc định của Claude Code CLI. Ví dụ: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +352,18 @@ Hiện tại bot chấp nhận:
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Nếu bật, luôn bỏ qua trusted-repo check của Codex.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>Chế độ phân quyền truyền cho Claude Code. Một trong các giá trị <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>auto</code>, <code>dontAsk</code>, <code>bypassPermissions</code>, <code>manual</code>. Mặc định: <code>bypassPermissions</code> (hoàn toàn tự động, vì không có terminal tương tác để xác nhận yêu cầu).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>Danh sách allowlist các tool của Claude Code, ngăn cách bằng dấu phẩy, dùng cú pháp permission rule của Claude Code. Ví dụ: <code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>Danh sách denylist các tool của Claude Code, ngăn cách bằng dấu phẩy. Ví dụ: <code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -420,8 +444,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -485,7 +511,7 @@ Nếu run hiện tại bị abort và vẫn còn các câu hỏi trong hàng đ�
 
 ## ⚠️ Diff (thay đổi tệp)
 
-_Trong mỗi lần chạy tác nhân, bot cũng tạo một ảnh chụp nhanh trước/sau nhẹ của project để có thể tóm tắt các tệp thay đổi và gửi diff về Telegram. Bản chụp nhanh này do chính bot app tạo ra, không phải bởi Codex hay Copilot._
+_Trong mỗi lần chạy tác nhân, bot cũng tạo một ảnh chụp nhanh trước/sau nhẹ của project để có thể tóm tắt các tệp thay đổi và gửi diff về Telegram. Bản chụp nhanh này do chính bot app tạo ra, không phải bởi Codex, Copilot, hay Claude Code._
 
 **Ghi chú về ảnh chụp nhanh:**
 
