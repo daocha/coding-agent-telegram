@@ -107,6 +107,65 @@ Trước khi khởi động server, hãy chuẩn bị:
 ## 🦞 Vì sao tôi cần cái này nếu đã có Openclaw?
 Openclaw cung cấp bộ tính năng rất đầy đủ và đã có sẵn agent loop tích hợp tên là Pi-Agent. Nó khá toàn diện và phù hợp với nhiều use case đa dạng hơn. Tôi cũng là người thích Openclaw và từng code với Openclaw. Tuy vậy, riêng cho coding thì đây không phải lúc nào cũng là lựa chọn tốt nhất vì system prompt tích hợp khá lớn và context đi kèm nhiều hơn. Claude Code / Codex / Copilot vẫn thường hiệu quả hơn, chính xác hơn, ít bị phân tán hơn và trực tiếp hơn cho việc coding. Dự án này được giữ rất đơn giản, chỉ tích hợp Codex / Copilot / Claude Code CLI. Nghĩa là bạn giao việc trực tiếp cho Codex / Copilot / Claude Code.
 
+## 🆚 Tại sao tôi cần coding-agent-telegram nếu đã có Claude Code + Telegram Plugin?
+
+| Tính năng | Claude Code + Telegram Plugin chính thức | coding-agent-telegram (hỗ trợ Claude) |
+|-----------|------------------------------------------|---------------------------------------|
+| Trò chuyện với AI qua Telegram | ✅ | ✅ |
+| Chỉnh sửa mã nguồn cục bộ và chạy lệnh | ✅ | ✅ |
+| Yêu cầu một phiên CLI đang chạy sẵn | **Có** | **Không** (tự động khởi động hoặc tiếp tục phiên làm việc) |
+| Hỗ trợ nhiều nhà cung cấp AI | ❌ Chỉ Claude | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| Quản lý dự án từ Telegram | ❌ | ✅ `/project` |
+| Quản lý nhánh (branch) từ Telegram | Thực hiện bằng lệnh Git thủ công | ✅ Quy trình `/branch` |
+| Tạo và chuyển đổi giữa các phiên | Chỉ giới hạn ở phiên Claude đang hoạt động | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| Tiếp tục các phiên CLI cục bộ đã có | ❌ | ✅ |
+| Duy trì phiên làm việc trên nhiều thiết bị | Hạn chế | ✅ |
+| Ngăn nhiều tác nhân chỉnh sửa cùng một workspace | ❌ | ✅ Ngăn nhiều agent chỉnh sửa cùng một dự án đồng thời |
+| Hàng đợi tác vụ khi agent đang bận | ❌ | ✅ |
+| Snapshot và diff hệ thống tệp độc lập | ❌ | ✅ |
+| Xem diff tệp có cấu trúc ngay trên Telegram | ❌ | ✅ |
+| Lọc secrets và diff chứa dữ liệu nhạy cảm | ❌ | ✅ |
+| Quy trình Git tích hợp (pull / push / commit) | Thủ công | ✅ |
+| Hỗ trợ nhiều bot | Cần chạy nhiều instance | ✅ Được quản lý bởi một máy chủ duy nhất |
+| Quản lý trạng thái theo từng dự án | ❌ | ✅ |
+| Kiến trúc độc lập với nhà cung cấp | ❌ | ✅ |
+
+> **Điểm khác biệt chính**
+>
+> Telegram Plugin chính thức của Claude Code kết nối Telegram với **một phiên Claude Code đang chạy**.
+>
+> **coding-agent-telegram** hoạt động như một **Telegram Control Plane**, cho phép quản lý dự án, nhánh, phiên làm việc, quy trình Git và nhiều coding agent (Claude Code, Codex CLI, GitHub Copilot CLI) thông qua một giao diện duy nhất.
+
+### 🏛️ Kiến trúc
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+Một phiên Claude Code đang chạy
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+Dự án • Nhánh • Phiên • Hàng đợi • Git • Diff • Bộ lọc Secrets
+```
+
 ## 🚀 Bắt đầu nhanh
 
 ### Cách A: Script bootstrap một dòng
