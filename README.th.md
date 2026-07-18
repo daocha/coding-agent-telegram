@@ -378,15 +378,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>คำสั่งที่ใช้เรียก Codex CLI ค่าเริ่มต้น: <code>codex</code></td>
+    <td>คำสั่งที่ใช้เรียก Codex CLI. แอปจะพยายามตรวจหาเส้นทางของ Codex ที่ติดตั้งอยู่ในเครื่องโดยอัตโนมัติระหว่างการเริ่มต้น <code>.env_coding_agent_telegram</code> หรือสามารถใช้ <code>which codex</code> เพื่อดูเส้นทางได้</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>คำสั่งที่ใช้เรียก Copilot CLI ค่าเริ่มต้น: <code>copilot</code></td>
+    <td>คำสั่งที่ใช้เรียก Copilot CLI. แอปจะพยายามตรวจหาเส้นทางของ Copilot ที่ติดตั้งอยู่ในเครื่องโดยอัตโนมัติระหว่างการเริ่มต้น <code>.env_coding_agent_telegram</code> หรือสามารถใช้ <code>which copilot</code> เพื่อดูเส้นทางได้</td>
   </tr>
   <tr>
     <td><code>CLAUDE_BIN</code></td>
-    <td>คำสั่งที่ใช้เรียก Claude Code CLI ค่าเริ่มต้น: <code>~/.local/bin/claude</code></td>
+    <td>คำสั่งที่ใช้เรียก Claude Code CLI. แอปจะพยายามตรวจหาเส้นทางของ Claude ที่ติดตั้งอยู่ในเครื่องโดยอัตโนมัติระหว่างการเริ่มต้น <code>.env_coding_agent_telegram</code> หรือสามารถใช้ <code>which claude</code> เพื่อดูเส้นทางได้</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
