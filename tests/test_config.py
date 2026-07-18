@@ -31,8 +31,10 @@ def _isolate_env(monkeypatch, tmp_path):
         "LOG_DIR",
         "CODEX_BIN",
         "COPILOT_BIN",
+        "CLAUDE_BIN",
         "CODEX_MODEL",
         "COPILOT_MODEL",
+        "CLAUDE_MODEL",
         "COPILOT_AUTOPILOT",
         "COPILOT_NO_ASK_USER",
         "COPILOT_ALLOW_ALL",
@@ -40,6 +42,9 @@ def _isolate_env(monkeypatch, tmp_path):
         "COPILOT_ALLOW_TOOLS",
         "COPILOT_DENY_TOOLS",
         "COPILOT_AVAILABLE_TOOLS",
+        "CLAUDE_PERMISSION_MODE",
+        "CLAUDE_ALLOWED_TOOLS",
+        "CLAUDE_DISALLOWED_TOOLS",
         "CODEX_APPROVAL_POLICY",
         "CODEX_SANDBOX_MODE",
         "CODEX_SKIP_GIT_REPO_CHECK",
@@ -102,6 +107,7 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.log_dir.name == "logs"
     assert cfg.codex_model == ""
     assert cfg.copilot_model == ""
+    assert cfg.claude_model == ""
     assert cfg.copilot_autopilot is True
     assert cfg.copilot_no_ask_user is True
     assert cfg.copilot_allow_all is True
@@ -109,6 +115,10 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.copilot_allow_tools == ()
     assert cfg.copilot_deny_tools == ()
     assert cfg.copilot_available_tools == ()
+    assert cfg.claude_bin == "claude"
+    assert cfg.claude_permission_mode == "bypassPermissions"
+    assert cfg.claude_allowed_tools == ()
+    assert cfg.claude_disallowed_tools == ()
     assert cfg.state_file == home / ".coding-agent-telegram" / "state.json"
     assert cfg.state_backup_file == home / ".coding-agent-telegram" / "state.json.bak"
 
@@ -118,6 +128,49 @@ def test_load_config_missing(monkeypatch, tmp_path):
 
     with pytest.raises(ValueError):
         load_config()
+
+
+def test_load_config_accepts_claude_as_default_provider(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("DEFAULT_AGENT_PROVIDER", "claude")
+
+    cfg = load_config()
+
+    assert cfg.default_agent_provider == "claude"
+
+
+def test_load_config_rejects_unknown_default_provider(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("DEFAULT_AGENT_PROVIDER", "gemini")
+
+    with pytest.raises(ValueError, match="DEFAULT_AGENT_PROVIDER"):
+        load_config()
+
+
+def test_load_config_claude_overrides(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("CLAUDE_BIN", "/opt/bin/claude")
+    monkeypatch.setenv("CLAUDE_MODEL", "opus")
+    monkeypatch.setenv("CLAUDE_PERMISSION_MODE", "acceptEdits")
+    monkeypatch.setenv("CLAUDE_ALLOWED_TOOLS", "Read,Edit,Bash(git *)")
+    monkeypatch.setenv("CLAUDE_DISALLOWED_TOOLS", "Bash(rm *)")
+
+    cfg = load_config()
+
+    assert cfg.claude_bin == "/opt/bin/claude"
+    assert cfg.claude_model == "opus"
+    assert cfg.claude_permission_mode == "acceptEdits"
+    assert cfg.claude_allowed_tools == ("Read", "Edit", "Bash(git *)")
+    assert cfg.claude_disallowed_tools == ("Bash(rm *)",)
 
 
 def test_load_config_commit_command_enabled(monkeypatch, tmp_path):
@@ -422,6 +475,69 @@ def test_create_initial_env_file_initializes_app_locale_from_system_language(tmp
 
     assert app_locale == "ja"
     assert "APP_LOCALE=ja" in env_path.read_text(encoding="utf-8")
+
+
+def test_create_initial_env_file_fills_in_detected_provider_bin_paths(tmp_path, monkeypatch):
+    env_path = tmp_path / ".env_coding_agent_telegram"
+    template_path = tmp_path / ".env.example"
+    template_path.write_text(
+        "APP_LOCALE=en\nCODEX_BIN=codex\nCOPILOT_BIN=copilot\nCLAUDE_BIN=~/.local/bin/claude\n",
+        encoding="utf-8",
+    )
+
+    detected = {
+        "codex": "/opt/homebrew/bin/codex",
+        "claude": "/usr/local/bin/claude",
+    }
+    monkeypatch.setattr(config_module, "detect_installed_bin", lambda bin_name: detected.get(bin_name))
+
+    create_initial_env_file(env_path, template_path)
+
+    written = env_path.read_text(encoding="utf-8")
+    assert "CODEX_BIN=/opt/homebrew/bin/codex" in written
+    assert "CLAUDE_BIN=/usr/local/bin/claude" in written
+    # copilot wasn't detected, so the template value is left untouched.
+    assert "COPILOT_BIN=copilot" in written
+
+
+def test_detect_installed_bin_prefers_path_then_falls_back_to_candidate_dirs(tmp_path, monkeypatch):
+    from coding_agent_telegram.config import detect_installed_bin
+
+    monkeypatch.setattr(config_module.shutil, "which", lambda name: None)
+    fake_home = tmp_path / "home"
+    local_bin = fake_home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    claude_bin = local_bin / "claude"
+    claude_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    claude_bin.chmod(0o755)
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    assert detect_installed_bin("claude") == str(claude_bin.absolute())
+    assert detect_installed_bin("nonexistent-bin-xyz") is None
+
+
+def test_detect_installed_bin_preserves_symlink_instead_of_resolving_target(tmp_path, monkeypatch):
+    from coding_agent_telegram.config import detect_installed_bin
+
+    # Mirrors real installs where a version manager symlinks a stable path
+    # (e.g. ~/.local/bin/claude) to a versioned target that changes on upgrade.
+    versions_dir = tmp_path / "versions"
+    versions_dir.mkdir()
+    real_bin = versions_dir / "2.1.214"
+    real_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    real_bin.chmod(0o755)
+
+    path_dir = tmp_path / "path_bin"
+    path_dir.mkdir()
+    symlink_bin = path_dir / "claude"
+    symlink_bin.symlink_to(real_bin)
+
+    monkeypatch.setattr(config_module.shutil, "which", lambda name: str(symlink_bin))
+
+    detected = detect_installed_bin("claude")
+
+    assert detected == str(symlink_bin.absolute())
+    assert detected != str(real_bin)
 
 
 # ---------------------------------------------------------------------------

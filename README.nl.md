@@ -35,14 +35,14 @@
    ## ✨ Waarom dit project
   - ✅ Lichtgewicht: geen zware frameworks, volledig transparant
   - ✅ Multi-bot: meerdere chats, meerdere sessies
-  - ✅ Gebruik Telegram om Codex / Copilot CLI te bedienen
+  - ✅ Gebruik Telegram om Codex / Copilot / Claude Code CLI te bedienen
   - ✅ Antwoorden en gewijzigde bestanden eenvoudig beoordelen in codeblokken
   - ✅ Vervolgvragen kunnen in de wachtrij terwijl de agent werkt
   - ✅ Accepteert ✏️ tekst-, 🌄 afbeelding- en 🎙️ spraakberichten
 
    ## 🔁 Naadloos wisselen tussen apparaten en sessies
 
-  Start een sessie in Telegram en ga later verder met dezelfde Codex/Copilot CLI-sessie op je computer, zonder gedoe. Met `/switch` kun je ook eenvoudig van Telegram terug naar de command line schakelen.
+  Start een sessie in Telegram en ga later verder met dezelfde Codex/Copilot/Claude Code CLI-sessie op je computer, zonder gedoe. Met `/switch` kun je ook eenvoudig van Telegram terug naar de command line schakelen.
   
   - Gebruik `/switch` om een lokale sessie voort te zetten
   - Historische sessies worden ook ondersteund
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Bestaande mappen kunnen een trust-bevestiging vereisen vóór muterende Git-bewerkingen
 - De server doet geen verborgen externe calls. Jij houdt de controle.
 - Werkt goed met de Codex Sandbox mode; je hoeft `danger-full-access` niet toe te staan
+- De Claude Code-integratie ondersteunt configureerbare permission modes en allow/deny-lijsten voor tools
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,74 @@ Voordat je de server start, zorg dat je hebt:
 - Python 3.9 of nieuwer
 - Een Telegram bot token van _@BotFather_
 - Je Telegram chat ID
-- Codex CLI en/of Copilot CLI lokaal geïnstalleerd
-- [Codex CLI installatie](https://developers.openai.com/codex/cli)
-- [Copilot CLI installatie](https://github.com/features/copilot/cli)
+- Codex CLI en/of Copilot CLI en/of Claude Code CLI lokaal geïnstalleerd
+- [Codex CLI installatie](https://developers.openai.com/codex/cli) / [Copilot CLI installatie](https://github.com/features/copilot/cli) / [Claude Code CLI installatie](https://code.claude.com/docs/en/quickstart)
 - [Optioneel] Whisper, ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 Waarom heb ik dit nodig als ik Openclaw al heb?
-Openclaw biedt zeer uitgebreide mogelijkheden en heeft al een geïntegreerde agent-loop genaamd Pi-Agent. Het is behoorlijk compleet en bedoeld voor bredere use cases. Ik ben zelf ook fan van Openclaw en heb er eerder mee gecodeerd. Voor coding is het echter niet altijd de beste keuze, door de ingebouwde grote system prompt en extra context. Claude Code / Codex / Copilot zijn voor coding vaak efficiënter, nauwkeuriger, minder afleidend en directer. Dit project blijft bewust eenvoudig en integreert alleen Codex / Copilot CLI. Je delegeert het werk dus rechtstreeks aan Codex / Copilot.
+Openclaw biedt zeer uitgebreide mogelijkheden en heeft al een geïntegreerde agent-loop genaamd Pi-Agent. Het is behoorlijk compleet en bedoeld voor bredere use cases. Ik ben zelf ook fan van Openclaw en heb er eerder mee gecodeerd. Voor coding is het echter niet altijd de beste keuze, door de ingebouwde grote system prompt en extra context. Claude Code / Codex / Copilot zijn voor coding vaak efficiënter, nauwkeuriger, minder afleidend en directer. Dit project blijft bewust eenvoudig en integreert alleen Codex / Copilot / Claude Code CLI. Je delegeert het werk dus rechtstreeks aan Codex / Copilot / Claude Code.
+
+## 🆚 Waarom heb ik coding-agent-telegram nodig als ik Claude Code + Telegram Plugin al heb?
+
+| Mogelijkheid | Claude Code + officiële Telegram Plugin | coding-agent-telegram (met Claude-ondersteuning) |
+|--------------|------------------------------------------|--------------------------------------------------|
+| Chatten met AI via Telegram | ✅ | ✅ |
+| Lokale code bewerken en opdrachten uitvoeren | ✅ | ✅ |
+| Vereist een reeds actieve CLI-sessie | **Ja** | **Nee** (start of hervat sessies automatisch) |
+| Ondersteuning voor meerdere AI-providers | ❌ Alleen Claude | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| Projectbeheer via Telegram | ❌ | ✅ `/project` |
+| Branchbeheer via Telegram | Handmatige Git-opdrachten | ✅ `/branch`-workflow |
+| Sessies aanmaken en wisselen | Beperkt tot de actieve Claude-sessie | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| Bestaande lokale CLI-sessies hervatten | ❌ | ✅ |
+| Sessies naadloos voortzetten tussen apparaten | Beperkt | ✅ |
+| Bescherming tegen gelijktijdige wijzigingen in dezelfde workspace | ❌ | ✅ Voorkomt dat meerdere agents tegelijkertijd hetzelfde project wijzigen |
+| Taakwachtrij wanneer een agent bezig is | ❌ | ✅ |
+| Onafhankelijke bestandssnapshots en diffs | ❌ | ✅ |
+| Gestructureerde bestandsdiffs bekijken in Telegram | ❌ | ✅ |
+| Filteren van secrets en gevoelige diffs | ❌ | ✅ |
+| Ingebouwde Git-workflow (pull / push / commit) | Handmatig | ✅ |
+| Ondersteuning voor meerdere bots | Meerdere instanties vereist | ✅ Beheerd door één server |
+| Statusbeheer op projectniveau | ❌ | ✅ |
+| Provider-onafhankelijke architectuur | ❌ | ✅ |
+
+> **Belangrijkste verschil**
+>
+> De officiële Claude Code Telegram Plugin verbindt Telegram met **één reeds actieve Claude Code-sessie**.
+>
+> **coding-agent-telegram** fungeert als een **Telegram control plane** waarmee je projecten, branches, sessies, Git-workflows en meerdere coding agents (Claude Code, Codex CLI en GitHub Copilot CLI) vanuit één enkele interface kunt beheren.
+
+### 🏛️ Architectuur
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+Eén actieve Claude Code-sessie
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+Project • Branch • Sessie • Wachtrij • Git • Diff • Secretfilter
+```
 
 ## 🚀 Snel starten
 
@@ -203,7 +262,7 @@ De bot accepteert momenteel:
 - tekstberichten
 - foto’s
 - spraakberichten en audiobestanden wanneer `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` is ingesteld en de lokale Whisper-vereisten zijn geïnstalleerd
-- Codex en Copilot ondersteunen momenteel alleen tekst en afbeeldingen, geen video
+- Codex- en Claude Code-sessies ondersteunen tekst en afbeeldingen; Copilot-sessies ondersteunen momenteel alleen tekst. Video wordt door geen enkele aanbieder ondersteund
 
 ## 🤖 Telegram-commando's
 
@@ -234,7 +293,7 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>Toon de nieuwste sessies, nieuwste eerst. De lijst bevat zowel bot-managed sessies als lokale Codex/Copilot CLI-sessies voor het huidige project.</td>
+    <td>Toon de nieuwste sessies, nieuwste eerst. De lijst bevat zowel bot-managed sessies als lokale Codex/Copilot/Claude Code CLI-sessies voor het huidige project.</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,12 +373,20 @@ De bot accepteert momenteel:
     <td>UI-locale voor gedeelde botmeldingen en commandobeschrijvingen. Ondersteunde waarden: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code>.</td>
   </tr>
   <tr>
+    <td width="332"><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>Standaardaanbieder voor nieuwe sessies: <code>codex</code>, <code>copilot</code> of <code>claude</code>. Standaard: <code>codex</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>Commando om Codex CLI te starten. Standaard: <code>codex</code>.</td>
+    <td>Commando om Codex CLI te starten. De applicatie probeert tijdens het initialiseren van <code>.env_coding_agent_telegram</code> automatisch het lokaal geïnstalleerde Codex-pad te detecteren. U kunt ook <code>which codex</code> gebruiken om het pad weer te geven.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>Commando om Copilot CLI te starten. Standaard: <code>copilot</code>.</td>
+    <td>Commando om Copilot CLI te starten. De applicatie probeert tijdens het initialiseren van <code>.env_coding_agent_telegram</code> automatisch het lokaal geïnstalleerde Copilot-pad te detecteren. U kunt ook <code>which copilot</code> gebruiken om het pad weer te geven.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_BIN</code></td>
+    <td>Commando om Claude Code CLI te starten. De applicatie probeert tijdens het initialiseren van <code>.env_coding_agent_telegram</code> automatisch het lokaal geïnstalleerde Claude-pad te detecteren. U kunt ook <code>which claude</code> gebruiken om het pad weer te geven.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
@@ -328,6 +395,14 @@ De bot accepteert momenteel:
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>Optionele Copilot-modeloverride. Laat leeg om het standaardmodel van Copilot CLI te gebruiken. Voorbeelden: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">Ondersteunde GitHub Copilot-modellen</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL</code></td>
+    <td>Optionele Claude Code-modeloverride.
+    Laat leeg om het standaardmodel van Claude Code CLI te gebruiken.
+    Voorbeelden: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
+    <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code-modelconfiguratie</a>
+    </td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +415,18 @@ De bot accepteert momenteel:
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>Als dit is ingeschakeld, worden trusted-repo-checks van Codex altijd overgeslagen.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>Permission mode die aan Claude Code wordt doorgegeven. Een van <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>auto</code>, <code>dontAsk</code>, <code>bypassPermissions</code>, <code>manual</code>. Standaard: <code>bypassPermissions</code> (volledig autonoom, omdat er geen interactieve terminal is om prompts goed te keuren).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>Door komma's gescheiden allowlist van Claude Code-tools, volgens de permission rule syntax van Claude Code. Voorbeeld: <code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>Door komma's gescheiden denylist van Claude Code-tools. Voorbeeld: <code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -422,8 +509,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -487,7 +576,7 @@ Wordt de huidige run afgebroken terwijl er nog vragen wachten, dan gaat de bot n
 
 ## ⚠️ Diff (bestandswijzigingen)
 
-_Tijdens elke agent-run maakt de bot ook een lichte voor/na-momentopname van het project, zodat gewijzigde bestanden kunnen worden samengevat en diffs naar Telegram kunnen worden gestuurd. Deze momentopname wordt door de bot-app zelf gemaakt, niet door Codex of Copilot._
+_Tijdens elke agent-run maakt de bot ook een lichte voor/na-momentopname van het project, zodat gewijzigde bestanden kunnen worden samengevat en diffs naar Telegram kunnen worden gestuurd. Deze momentopname wordt door de bot-app zelf gemaakt, niet door Codex, Copilot of Claude Code._
 
 **Snapshot-opmerkingen:**
 

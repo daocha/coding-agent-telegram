@@ -6,6 +6,7 @@ import importlib.resources
 import os
 import pwd
 import re
+import shutil
 import locale as system_locale
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from coding_agent_telegram.i18n import DEFAULT_LOCALE, normalize_locale
+from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
 
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
 DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH = 3_000
@@ -36,8 +38,10 @@ class AppConfig:
     allowed_chat_ids: set[int]
     codex_bin: str
     copilot_bin: str
+    claude_bin: str
     codex_model: str
     copilot_model: str
+    claude_model: str
     copilot_autopilot: bool
     copilot_no_ask_user: bool
     copilot_allow_all: bool
@@ -45,6 +49,9 @@ class AppConfig:
     copilot_allow_tools: tuple[str, ...]
     copilot_deny_tools: tuple[str, ...]
     copilot_available_tools: tuple[str, ...]
+    claude_permission_mode: str
+    claude_allowed_tools: tuple[str, ...]
+    claude_disallowed_tools: tuple[str, ...]
     codex_approval_policy: str
     codex_sandbox_mode: str
     codex_skip_git_repo_check: bool
@@ -128,6 +135,59 @@ def _apply_initial_app_locale(template_text: str, app_locale: str) -> str:
     return f"{replacement}\n{template_text}"
 
 
+# Fallback install locations checked when a CLI isn't on PATH, e.g. because the
+# process runs under a service manager or a shell profile that startup.sh
+# doesn't source. Order matters: earlier entries win when a bin exists in
+# more than one of them.
+_BIN_CANDIDATE_DIRS = (
+    "~/.local/bin",
+    "~/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "~/.npm-global/bin",
+    "~/.volta/bin",
+)
+
+
+def detect_installed_bin(bin_name: str) -> Optional[str]:
+    """Return the absolute path of a locally installed CLI, or None if not found.
+
+    Deliberately does not resolve symlinks to their final target (e.g. a
+    version manager's ``.local/bin/claude`` -> ``.local/share/claude/versions/x.y.z``):
+    keeping the symlink path lets in-place CLI upgrades keep working without
+    editing the env file again.
+    """
+    found = shutil.which(bin_name)
+    if found:
+        return str(Path(found).absolute())
+    for candidate_dir in _BIN_CANDIDATE_DIRS:
+        candidate = Path(candidate_dir).expanduser() / bin_name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate.absolute())
+    return None
+
+
+# Maps each provider's env var name to the CLI executable it looks for.
+_PROVIDER_BIN_ENV_VARS = (
+    ("CODEX_BIN", "codex"),
+    ("COPILOT_BIN", "copilot"),
+    ("CLAUDE_BIN", "claude"),
+)
+
+
+def _apply_detected_provider_bins(template_text: str) -> str:
+    text = template_text
+    for env_var, bin_name in _PROVIDER_BIN_ENV_VARS:
+        detected_path = detect_installed_bin(bin_name)
+        if not detected_path:
+            continue
+        pattern = rf"(?m)^{env_var}=.*$"
+        if re.search(pattern, text):
+            text = re.sub(pattern, f"{env_var}={detected_path}", text, count=1)
+    return text
+
+
 def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None) -> str:
     if template_path is None:
         template_text = importlib.resources.files("coding_agent_telegram").joinpath("resources/.env.example").read_text(
@@ -137,7 +197,9 @@ def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None
         template_text = template_path.read_text(encoding="utf-8")
     app_locale = detect_system_locale()
     env_path.parent.mkdir(parents=True, exist_ok=True)
-    env_path.write_text(_apply_initial_app_locale(template_text, app_locale), encoding="utf-8")
+    template_text = _apply_initial_app_locale(template_text, app_locale)
+    template_text = _apply_detected_provider_bins(template_text)
+    env_path.write_text(template_text, encoding="utf-8")
     return app_locale
 
 
@@ -199,8 +261,8 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         raise ValueError("Missing required config: TELEGRAM_BOT_TOKENS")
     if not allowed_ids:
         raise ValueError("Missing required config: ALLOWED_CHAT_IDS")
-    if provider not in {"codex", "copilot"}:
-        raise ValueError("DEFAULT_AGENT_PROVIDER must be either codex or copilot")
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"DEFAULT_AGENT_PROVIDER must be one of: {', '.join(SUPPORTED_PROVIDERS)}")
     workspace_root = Path(workspace_root_raw).expanduser().resolve()
     app_internal_root = resolve_app_internal_root(workspace_root)
 
@@ -214,8 +276,10 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         allowed_chat_ids=allowed_ids,
         codex_bin=os.getenv("CODEX_BIN", "codex"),
         copilot_bin=os.getenv("COPILOT_BIN", "copilot"),
+        claude_bin=os.getenv("CLAUDE_BIN", "claude"),
         codex_model=os.getenv("CODEX_MODEL", "").strip(),
         copilot_model=os.getenv("COPILOT_MODEL", "").strip(),
+        claude_model=os.getenv("CLAUDE_MODEL", "").strip(),
         copilot_autopilot=_parse_bool(os.getenv("COPILOT_AUTOPILOT", "true"), default=True),
         copilot_no_ask_user=_parse_bool(os.getenv("COPILOT_NO_ASK_USER", "true"), default=True),
         copilot_allow_all=_parse_bool(os.getenv("COPILOT_ALLOW_ALL", "true"), default=True),
@@ -223,6 +287,9 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         copilot_allow_tools=tuple(_parse_csv_env("COPILOT_ALLOW_TOOLS")),
         copilot_deny_tools=tuple(_parse_csv_env("COPILOT_DENY_TOOLS")),
         copilot_available_tools=tuple(_parse_csv_env("COPILOT_AVAILABLE_TOOLS")),
+        claude_permission_mode=os.getenv("CLAUDE_PERMISSION_MODE", "bypassPermissions").strip(),
+        claude_allowed_tools=tuple(_parse_csv_env("CLAUDE_ALLOWED_TOOLS")),
+        claude_disallowed_tools=tuple(_parse_csv_env("CLAUDE_DISALLOWED_TOOLS")),
         codex_approval_policy=os.getenv("CODEX_APPROVAL_POLICY", "never"),
         codex_sandbox_mode=os.getenv("CODEX_SANDBOX_MODE", "workspace-write"),
         codex_skip_git_repo_check=_parse_bool(os.getenv("CODEX_SKIP_GIT_REPO_CHECK", "false")),

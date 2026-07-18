@@ -35,14 +35,14 @@
    ## ✨ ทำไมถึงควรใช้
   - ✅ เบา: ไม่ต้องใช้เฟรมเวิร์กหนัก ๆ และตรวจสอบการทำงานได้ง่าย
   - ✅ หลายบอต: รองรับหลายแชต หลายเซสชัน
-  - ✅ ใช้ Telegram เพื่อควบคุม Codex / Copilot CLI
+  - ✅ ใช้ Telegram เพื่อควบคุม Codex / Copilot / Claude Code CLI
   - ✅ ตรวจคำตอบและไฟล์ที่ถูกแก้ได้ง่ายใน code block
   - ✅ ส่งคำถามต่อคิวไว้ได้ระหว่างที่ agent กำลังทำงาน
   - ✅ รองรับ ✏️ ข้อความ, 🌄 รูปภาพ และ 🎙️ ข้อความเสียง
 
    ## 🔁 สลับอุปกรณ์และเซสชันได้ลื่นไหล
 
-  เริ่มเซสชันจาก Telegram แล้วค่อยกลับไปทำต่อบนคอมพิวเตอร์ด้วยเซสชัน Codex/Copilot CLI เดิมได้ทันที และใช้ `/switch` เพื่อสลับกลับไปมาระหว่าง Telegram กับ command line ได้อย่างง่ายดาย
+  เริ่มเซสชันจาก Telegram แล้วค่อยกลับไปทำต่อบนคอมพิวเตอร์ด้วยเซสชัน Codex/Copilot/Claude Code CLI เดิมได้ทันที และใช้ `/switch` เพื่อสลับกลับไปมาระหว่าง Telegram กับ command line ได้อย่างง่ายดาย
   
   - ใช้ `/switch` เพื่อทำงานต่อจากเซสชันในเครื่อง
   - รองรับเซสชันย้อนหลัง
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - โฟลเดอร์ที่มีอยู่เดิมอาจต้องยืนยัน trust ก่อนทำ Git operation ที่มีการแก้ไข
 - เซิร์ฟเวอร์ไม่มีการเรียกใช้งานภายนอกแบบซ่อน ทุกอย่างยังอยู่ในการควบคุมของคุณ
 - ทำงานร่วมกับ Codex Sandbox mode ได้ดี โดยไม่ต้องให้สิทธิ์ `danger-full-access`
+- การเชื่อมต่อกับ Claude Code รองรับการกำหนด permission mode และรายการ allow/deny ของ tools ได้
    </td>
    <td width="35%" valign="top">
 
@@ -96,16 +97,74 @@ curl -fsSL https://raw.githubusercontent.com/daocha/coding-agent-telegram/main/i
 - Python 3.9 ขึ้นไป
 - Telegram bot token จาก _@BotFather_
 - Telegram chat ID ของคุณ
-- ติดตั้ง Codex CLI และ/หรือ Copilot CLI ไว้ในเครื่องแล้ว
-- [ติดตั้ง Codex CLI](https://developers.openai.com/codex/cli)
-- [ติดตั้ง Copilot CLI](https://github.com/features/copilot/cli)
+- ติดตั้ง Codex CLI และ/หรือ Copilot CLI และ/หรือ Claude Code CLI ไว้ในเครื่องแล้ว
+- [ติดตั้ง Codex CLI](https://developers.openai.com/codex/cli) / [ติดตั้ง Copilot CLI](https://github.com/features/copilot/cli) / [ติดตั้ง Claude Code CLI](https://code.claude.com/docs/en/quickstart)
 - [ทางเลือก] Whisper, ffmpeg
    </td>
    </tr>
 </table>
 
 ## 🦞 ถ้ามี Openclaw อยู่แล้ว ทำไมยังต้องใช้ตัวนี้?
-Openclaw มีความสามารถครบมาก และมี agent loop แบบรวมมาให้แล้วชื่อ Pi-Agent เหมาะกับ use case ที่หลากหลายกว่า ผมเองก็ชอบ Openclaw และเคยใช้มันเขียนโค้ดเหมือนกัน แต่สำหรับ coding โดยตรง มันไม่ใช่ตัวเลือกที่ดีที่สุดเสมอไป เพราะมี system prompt ขนาดใหญ่และ context ที่ติดมาด้วยมากกว่า Claude Code / Codex / Copilot จึงมักทำงานด้าน coding ได้มีประสิทธิภาพกว่า แม่นยำกว่า ตรงประเด็นกว่า และเสียสมาธิน้อยกว่า โปรเจ็กต์นี้ตั้งใจให้เรียบง่ายมาก โดยเชื่อมต่อกับ Codex / Copilot CLI เท่านั้น ดังนั้นคุณจึงมอบหมายงานให้ Codex / Copilot ทำได้โดยตรง
+Openclaw มีความสามารถครบมาก และมี agent loop แบบรวมมาให้แล้วชื่อ Pi-Agent เหมาะกับ use case ที่หลากหลายกว่า ผมเองก็ชอบ Openclaw และเคยใช้มันเขียนโค้ดเหมือนกัน แต่สำหรับ coding โดยตรง มันไม่ใช่ตัวเลือกที่ดีที่สุดเสมอไป เพราะมี system prompt ขนาดใหญ่และ context ที่ติดมาด้วยมากกว่า Claude Code / Codex / Copilot จึงมักทำงานด้าน coding ได้มีประสิทธิภาพกว่า แม่นยำกว่า ตรงประเด็นกว่า และเสียสมาธิน้อยกว่า โปรเจ็กต์นี้ตั้งใจให้เรียบง่ายมาก โดยเชื่อมต่อกับ Codex / Copilot / Claude Code CLI เท่านั้น ดังนั้นคุณจึงมอบหมายงานให้ Codex / Copilot / Claude Code ทำได้โดยตรง
+
+## 🆚 ทำไมฉันจึงต้องใช้ coding-agent-telegram หากมี Claude Code + Telegram Plugin อยู่แล้ว?
+
+| ความสามารถ | Claude Code + Telegram Plugin อย่างเป็นทางการ | coding-agent-telegram (รองรับ Claude) |
+|------------|-------------------------------------------------|----------------------------------------|
+| แชทกับ AI ผ่าน Telegram | ✅ | ✅ |
+| แก้ไขโค้ดในเครื่องและรันคำสั่ง | ✅ | ✅ |
+| ต้องมี CLI session ที่กำลังทำงานอยู่ก่อน | **ใช่** | **ไม่ใช่** (เริ่มต้นหรือกลับมาใช้ session เดิมโดยอัตโนมัติ) |
+| รองรับผู้ให้บริการ AI หลายราย | ❌ รองรับเฉพาะ Claude | ✅ Claude Code, Codex CLI, GitHub Copilot CLI |
+| จัดการโปรเจกต์ผ่าน Telegram | ❌ | ✅ `/project` |
+| จัดการ Branch ผ่าน Telegram | ใช้คำสั่ง Git ด้วยตนเอง | ✅ เวิร์กโฟลว์ `/branch` |
+| สร้างและสลับ Session | จำกัดเฉพาะ Claude session ที่กำลังใช้งาน | ✅ `/new`, `/switch`, `/current`, `/compact` |
+| กลับมาใช้ Local CLI session ที่มีอยู่ | ❌ | ✅ |
+| ใช้งาน Session ต่อเนื่องข้ามอุปกรณ์ | มีข้อจำกัด | ✅ |
+| ป้องกันการแก้ไข Workspace พร้อมกัน | ❌ | ✅ ป้องกันไม่ให้หลาย Agent แก้ไขโปรเจกต์เดียวกันพร้อมกัน |
+| คิวงานเมื่อ Agent กำลังทำงาน | ❌ | ✅ |
+| Snapshot และ Diff ของระบบไฟล์แบบอิสระ | ❌ | ✅ |
+| ดู Diff ของไฟล์แบบมีโครงสร้างใน Telegram | ❌ | ✅ |
+| กรอง Secrets และ Diff ที่มีข้อมูลสำคัญ | ❌ | ✅ |
+| เวิร์กโฟลว์ Git ในตัว (pull / push / commit) | ทำด้วยตนเอง | ✅ |
+| รองรับหลาย Bot | ต้องรันหลายอินสแตนซ์ | ✅ จัดการด้วยเซิร์ฟเวอร์เดียว |
+| การจัดการสถานะในระดับโปรเจกต์ | ❌ | ✅ |
+| สถาปัตยกรรมที่ไม่ผูกกับผู้ให้บริการรายใด | ❌ | ✅ |
+
+> **ความแตกต่างที่สำคัญ**
+>
+> Telegram Plugin อย่างเป็นทางการของ Claude Code เชื่อม Telegram เข้ากับ **Claude Code session ที่กำลังทำงานอยู่เพียงหนึ่ง session**
+>
+> **coding-agent-telegram** ทำหน้าที่เป็น **Telegram Control Plane** สำหรับจัดการโปรเจกต์, Branch, Session, เวิร์กโฟลว์ Git และ Coding Agent หลายตัว (Claude Code, Codex CLI และ GitHub Copilot CLI) ผ่านอินเทอร์เฟซเดียว
+
+### 🏛️ สถาปัตยกรรม
+
+#### Claude Code + Telegram Plugin
+
+```text
+Telegram
+    │
+    ▼
+Claude Code Channel
+    │
+    ▼
+Claude Code Session ที่กำลังทำงานอยู่
+```
+
+#### coding-agent-telegram
+
+```text
+Telegram
+    │
+    ▼
+coding-agent-telegram
+    │
+    ├── Claude Code
+    ├── Codex CLI
+    └── GitHub Copilot CLI
+           │
+           ▼
+โปรเจกต์ • Branch • Session • คิวงาน • Git • Diff • ตัวกรอง Secrets
+```
 
 ## 🚀 เริ่มต้นอย่างรวดเร็ว
 
@@ -203,7 +262,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 - ข้อความตัวอักษร
 - รูปภาพ
 - ข้อความเสียงและไฟล์เสียง เมื่อกำหนด `ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true` และติดตั้งส่วนที่ Whisper ต้องใช้ในเครื่องแล้ว
-- ปัจจุบัน Codex และ Copilot รองรับเฉพาะข้อความและรูปภาพ ยังไม่รองรับวิดีโอ
+- Codex และ Claude Code รองรับทั้งข้อความและรูปภาพ ส่วน Copilot ในปัจจุบันรองรับเฉพาะข้อความเท่านั้น ยังไม่มีผู้ให้บริการรายใดรองรับวิดีโอ
 
 ## 🤖 คำสั่ง Telegram
 
@@ -234,7 +293,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/switch</code></td>
-    <td>แสดงเซสชันล่าสุด โดยเรียงจากใหม่ไปเก่า รายการนี้รวมทั้งเซสชันที่ bot ดูแลและ local Codex/Copilot CLI เซสชันของ project ปัจจุบัน</td>
+    <td>แสดงเซสชันล่าสุด โดยเรียงจากใหม่ไปเก่า รายการนี้รวมทั้งเซสชันที่ bot ดูแลและ local Codex/Copilot/Claude Code CLI เซสชันของ project ปัจจุบัน</td>
   </tr>
   <tr>
     <td width="332"><code>/switch page &lt;number&gt;</code></td>
@@ -314,12 +373,20 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>ภาษา UI สำหรับข้อความของบอตและคำอธิบายคำสั่งที่ใช้ร่วมกัน ค่าที่รองรับ: <code>en</code>, <code>de</code>, <code>fr</code>, <code>ja</code>, <code>ko</code>, <code>nl</code>, <code>th</code>, <code>vi</code>, <code>zh-CN</code>, <code>zh-HK</code>, <code>zh-TW</code></td>
   </tr>
   <tr>
+    <td><code>DEFAULT_AGENT_PROVIDER</code></td>
+    <td>ผู้ให้บริการเริ่มต้นสำหรับเซสชันใหม่: <code>codex</code>, <code>copilot</code> หรือ <code>claude</code> ค่าเริ่มต้น: <code>codex</code></td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>คำสั่งที่ใช้เรียก Codex CLI ค่าเริ่มต้น: <code>codex</code></td>
+    <td>คำสั่งที่ใช้เรียก Codex CLI. แอปจะพยายามตรวจหาเส้นทางของ Codex ที่ติดตั้งอยู่ในเครื่องโดยอัตโนมัติระหว่างการเริ่มต้น <code>.env_coding_agent_telegram</code> หรือสามารถใช้ <code>which codex</code> เพื่อดูเส้นทางได้</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>คำสั่งที่ใช้เรียก Copilot CLI ค่าเริ่มต้น: <code>copilot</code></td>
+    <td>คำสั่งที่ใช้เรียก Copilot CLI. แอปจะพยายามตรวจหาเส้นทางของ Copilot ที่ติดตั้งอยู่ในเครื่องโดยอัตโนมัติระหว่างการเริ่มต้น <code>.env_coding_agent_telegram</code> หรือสามารถใช้ <code>which copilot</code> เพื่อดูเส้นทางได้</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_BIN</code></td>
+    <td>คำสั่งที่ใช้เรียก Claude Code CLI. แอปจะพยายามตรวจหาเส้นทางของ Claude ที่ติดตั้งอยู่ในเครื่องโดยอัตโนมัติระหว่างการเริ่มต้น <code>.env_coding_agent_telegram</code> หรือสามารถใช้ <code>which claude</code> เพื่อดูเส้นทางได้</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
@@ -328,6 +395,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>COPILOT_MODEL</code></td>
     <td>กำหนด model ของ Copilot เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Copilot CLI ตัวอย่าง: <code>gpt-5.4</code>, <code>claude-sonnet-4.6</code> <a href="https://docs.github.com/en/copilot/reference/ai-models/supported-models" target="_blank">GitHub Copilot supported models</a></td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL</code></td>
+    <td>กำหนด model ของ Claude Code เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Claude Code CLI ตัวอย่าง: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
@@ -340,6 +411,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>CODEX_SKIP_GIT_REPO_CHECK</code></td>
     <td>หากเปิดไว้ จะข้ามการตรวจ trusted-repo ของ Codex เสมอ</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_PERMISSION_MODE</code></td>
+    <td>Permission mode ที่ส่งให้ Claude Code เลือกได้จาก <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>auto</code>, <code>dontAsk</code>, <code>bypassPermissions</code>, <code>manual</code> ค่าเริ่มต้น: <code>bypassPermissions</code> (ทำงานอัตโนมัติเต็มรูปแบบ เนื่องจากไม่มี terminal แบบ interactive ให้ยืนยัน prompt)</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_ALLOWED_TOOLS</code></td>
+    <td>allowlist ของ tools สำหรับ Claude Code แบบคั่นด้วย comma โดยใช้ syntax กฎ permission ของ Claude Code ตัวอย่าง: <code>Read,Edit,Bash(git *)</code></td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_DISALLOWED_TOOLS</code></td>
+    <td>denylist ของ tools สำหรับ Claude Code แบบคั่นด้วย comma ตัวอย่าง: <code>Bash(rm *)</code></td>
   </tr>
   <tr>
     <td width="332"><code>ENABLE_COMMIT_COMMAND</code></td>
@@ -426,8 +509,10 @@ ALLOWED_CHAT_IDS=123456789
 DEFAULT_AGENT_PROVIDER=codex
 CODEX_BIN=codex
 COPILOT_BIN=copilot
+CLAUDE_BIN=claude
 CODEX_APPROVAL_POLICY=never
 CODEX_SANDBOX_MODE=workspace-write
+CLAUDE_PERMISSION_MODE=bypassPermissions
 ENABLE_SENSITIVE_DIFF_FILTER=true
 ENABLE_SECRET_SCRUB_FILTER=true
 ```
@@ -491,7 +576,7 @@ lock นี้อยู่ในหน่วยความจำ ไม่ไ�
 
 ## ⚠️ Diff (การเปลี่ยนไฟล์)
 
-_ในแต่ละ การรันของเอเจนต์ บอตจะสร้าง สแนปช็อตก่อนและหลังการรัน แบบเบาของโปรเจกต์ด้วย เพื่อสรุปไฟล์ที่เปลี่ยนและส่ง diff กลับไปยัง Telegram ได้ สแนปช็อต นี้ถูกสร้างโดยตัวบอตเอง ไม่ใช่โดย Codex หรือ Copilot._
+_ในแต่ละ การรันของเอเจนต์ บอตจะสร้าง สแนปช็อตก่อนและหลังการรัน แบบเบาของโปรเจกต์ด้วย เพื่อสรุปไฟล์ที่เปลี่ยนและส่ง diff กลับไปยัง Telegram ได้ สแนปช็อต นี้ถูกสร้างโดยตัวบอตเอง ไม่ใช่โดย Codex, Copilot หรือ Claude Code._
 
 **สิ่งที่ควรรู้เกี่ยวกับ สแนปช็อต:**
 

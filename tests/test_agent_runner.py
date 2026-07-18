@@ -516,6 +516,253 @@ def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Claude provider
+# ---------------------------------------------------------------------------
+
+
+def test_claude_runner_uses_print_mode_shape(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"result","subtype":"success","is_error":false,"result":"Done.","session_id":"sess_claude"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.create_session("claude", Path("/tmp/project"), "hello")
+
+    assert calls[0][0] == [
+        "claude",
+        "--permission-mode",
+        "bypassPermissions",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "-p",
+        runner.PROMPT_PREFIX + "hello",
+    ]
+    assert calls[0][1] == Path("/tmp/project")
+    assert result.success is True
+    assert result.session_id == "sess_claude"
+    assert result.assistant_text == "Done."
+
+
+def test_claude_runner_resume_uses_resume_flag(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"result","subtype":"success","is_error":false,"result":"Done again.","session_id":"sess_claude"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_1", Path("/tmp/project"), "hello again")
+
+    assert calls[0][0][:3] == ["claude", "--resume", "sess_1"]
+    assert result.session_id == "sess_claude"
+    assert result.assistant_text == "Done again."
+
+
+def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_model="opus",
+        claude_permission_mode="dontAsk",
+        claude_allowed_tools=("Read", "Edit"),
+        claude_disallowed_tools=("Bash(rm *)",),
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "hello")
+
+    assert calls[0][0] == [
+        "claude",
+        "--model",
+        "opus",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Read,Edit",
+        "--disallowedTools",
+        "Bash(rm *)",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "-p",
+        runner.PROMPT_PREFIX + "hello",
+    ]
+
+
+def test_claude_runner_reports_failure_from_result_event(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"result","subtype":"error_max_turns","is_error":true,"result":"","session_id":"sess_claude"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.create_session("claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "error_max_turns"
+    assert result.session_id == "sess_claude"
+
+
+def test_claude_runner_extracts_assistant_message_text_as_progress(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Looking at the code now."}]},'
+                '"session_id":"sess_claude"}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("claude", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == "Looking at the code now."
+
+
+def test_claude_runner_summarizes_tool_use_as_progress(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]},'
+                '"session_id":"sess_claude"}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("claude", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == "Using Bash"
+
+
+def test_claude_runner_progress_surfaces_api_retry(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":3,"retry_delay_ms":500,'
+                '"error_status":429,"error":"rate_limit","uuid":"u1","session_id":"sess_claude"}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+    runner.PROGRESS_UPDATE_INTERVAL_SECONDS = 0
+    captured = []
+
+    runner.create_session("claude", Path("/tmp/project"), "hello", on_progress=captured.append)
+
+    assert captured
+    assert captured[0].text == "Retrying after rate_limit (attempt 1/3)"
+
+
+def test_claude_runner_rejects_flag_like_session_id(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"result","is_error":false,"result":"ok","session_id":"--malicious"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.create_session("claude", Path("/tmp/project"), "hello")
+
+    assert result.session_id is None
+
+
+def test_claude_runner_ignores_image_paths_without_error(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    image_path = Path("/tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg")
+    result = runner.create_session("claude", Path("/tmp/project"), "hello", image_paths=(image_path,))
+
+    assert "--image" not in calls[0][0]
+    assert result.success is True
+
+
+# ---------------------------------------------------------------------------
 # _validate_session_id
 # ---------------------------------------------------------------------------
 

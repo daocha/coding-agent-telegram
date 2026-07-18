@@ -206,6 +206,28 @@ class SessionStore:
 
         self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
+    def clear_all_pending_actions(self) -> int:
+        """Drop any persisted `pending_action` left over from a previous process.
+
+        `pending_action` marks a message as "currently being run through an agent
+        subprocess", which only ever makes sense within the process that started
+        it — in-memory locks and running-process handles never survive a restart.
+        If the process is killed or crashes mid-run, the flag stays set in the
+        state file forever, and every future incoming message gets silently
+        queued (never drained) because `_should_queue_incoming_message` treats a
+        stale pending_action the same as a real in-flight run. Call this once at
+        startup so a crash never permanently wedges a chat.
+        """
+
+        def mutate(state: dict[str, Any]) -> int:
+            cleared = 0
+            for chat_data in state.get("chats", {}).values():
+                if isinstance(chat_data, dict) and chat_data.pop("pending_action", None) is not None:
+                    cleared += 1
+            return cleared
+
+        return self._mutate_state(mutate)
+
     def create_session(
         self,
         bot_id: str,

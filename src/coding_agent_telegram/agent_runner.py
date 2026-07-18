@@ -90,6 +90,11 @@ class MultiAgentRunner:
         copilot_allow_tools: tuple[str, ...] = (),
         copilot_deny_tools: tuple[str, ...] = (),
         copilot_available_tools: tuple[str, ...] = (),
+        claude_bin: str = "claude",
+        claude_model: str = "",
+        claude_permission_mode: str = "bypassPermissions",
+        claude_allowed_tools: tuple[str, ...] = (),
+        claude_disallowed_tools: tuple[str, ...] = (),
         hard_timeout_seconds: int = 0,
     ) -> None:
         self.codex_bin = codex_bin
@@ -105,6 +110,11 @@ class MultiAgentRunner:
         self.copilot_allow_tools = tuple(tool.strip() for tool in copilot_allow_tools if tool.strip())
         self.copilot_deny_tools = tuple(tool.strip() for tool in copilot_deny_tools if tool.strip())
         self.copilot_available_tools = tuple(tool.strip() for tool in copilot_available_tools if tool.strip())
+        self.claude_bin = claude_bin
+        self.claude_model = claude_model.strip()
+        self.claude_permission_mode = claude_permission_mode.strip()
+        self.claude_allowed_tools = tuple(tool.strip() for tool in claude_allowed_tools if tool.strip())
+        self.claude_disallowed_tools = tuple(tool.strip() for tool in claude_disallowed_tools if tool.strip())
         # 0 = disabled. When > 0, the agent subprocess is killed after this many seconds.
         self.hard_timeout_seconds = max(0, int(hard_timeout_seconds))
         self._running_processes: dict[str, subprocess.Popen] = {}
@@ -210,12 +220,7 @@ class MultiAgentRunner:
             return ""
         return "\n".join(self._unique_text_fragments(self._collect_text_fragments(event)))
 
-    def _parse_jsonl(
-        self,
-        stdout: str,
-        *,
-        assistant_text_extractor: Callable[[AssistantEvent], str],
-    ) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
+    def _parse_json_lines(self, stdout: str) -> list[dict]:
         events: list[dict] = []
         for line in stdout.splitlines():
             line = line.strip()
@@ -225,6 +230,15 @@ class MultiAgentRunner:
                 events.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
+        return events
+
+    def _parse_jsonl(
+        self,
+        stdout: str,
+        *,
+        assistant_text_extractor: Callable[[AssistantEvent], str],
+    ) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
+        events = self._parse_json_lines(stdout)
 
         session_id = None
         success = True
@@ -254,6 +268,51 @@ class MultiAgentRunner:
 
     def _parse_copilot_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
         return self._parse_jsonl(stdout, assistant_text_extractor=self._extract_copilot_assistant_text)
+
+    def _extract_claude_assistant_text(self, event: AssistantEvent) -> str:
+        if isinstance(event, str):
+            return event
+        if isinstance(event, list):
+            return "\n".join(filter(None, [self._extract_claude_assistant_text(item) for item in event]))
+        if not isinstance(event, dict):
+            return ""
+        if event.get("type") == "result":
+            result_text = event.get("result")
+            return result_text if isinstance(result_text, str) else ""
+        return "\n".join(self._unique_text_fragments(self._collect_text_fragments(event)))
+
+    def _parse_claude_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
+        events = self._parse_json_lines(stdout)
+
+        session_id = None
+        success = True
+        assistant_text = ""
+        error_message = None
+
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            if isinstance(ev.get("session_id"), str):
+                validated = _validate_session_id(ev["session_id"])
+                if validated:
+                    session_id = validated
+            if ev.get("type") == "result":
+                is_error = bool(ev.get("is_error"))
+                success = not is_error
+                result_text = ev.get("result")
+                if isinstance(result_text, str) and result_text:
+                    assistant_text = result_text
+                if is_error:
+                    subtype = str(ev.get("subtype") or "").strip()
+                    error_message = (
+                        result_text if isinstance(result_text, str) and result_text else (subtype or "Claude run failed.")
+                    )
+            else:
+                extracted_text = self._extract_claude_assistant_text(ev)
+                if extracted_text:
+                    assistant_text = extracted_text
+
+        return session_id, success, assistant_text, error_message, events
 
     def _extract_codex_progress_text(self, chunk: str, *, is_stderr: bool) -> str:
         stripped = chunk.strip()
@@ -320,6 +379,67 @@ class MultiAgentRunner:
         if isinstance(event, list):
             return json.dumps(event, ensure_ascii=False)
         return str(event)
+
+    def _extract_claude_progress_text(self, chunk: str, *, is_stderr: bool) -> str:
+        stripped = chunk.strip()
+        if not stripped:
+            return ""
+        if is_stderr:
+            return stripped
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            return stripped
+        return self._extract_claude_progress_event_text(event)
+
+    def _extract_claude_progress_event_text(self, event: AssistantEvent) -> str:
+        if isinstance(event, list):
+            return json.dumps(event, ensure_ascii=False)
+        if not isinstance(event, dict):
+            return str(event)
+
+        event_type = str(event.get("type") or "")
+
+        if event_type == "result":
+            result_text = event.get("result")
+            if isinstance(result_text, str) and result_text:
+                return result_text
+            return self._summarize_structured_event(event)
+
+        if event_type == "system":
+            if str(event.get("subtype") or "") == "api_retry":
+                error_category = str(event.get("error") or "").strip() or "an error"
+                attempt = event.get("attempt")
+                max_retries = event.get("max_retries")
+                if attempt and max_retries:
+                    return f"Retrying after {error_category} (attempt {attempt}/{max_retries})"
+                return f"Retrying after {error_category}"
+            return ""
+
+        if event_type in {"assistant", "user"}:
+            message = event.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if isinstance(content, list):
+                text_fragments: list[str] = []
+                tool_summaries: list[str] = []
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    block_type = block.get("type")
+                    if block_type == "text" and isinstance(block.get("text"), str):
+                        text_fragments.append(block["text"])
+                    elif block_type == "tool_use":
+                        tool_summaries.append(f"Using {block.get('name') or 'tool'}")
+                    elif block_type == "tool_result":
+                        tool_summaries.append("Tool result received")
+                unique_text = self._unique_text_fragments(text_fragments)
+                if unique_text:
+                    return "\n".join(unique_text)
+                if tool_summaries:
+                    return "; ".join(tool_summaries)
+            return self._summarize_structured_event(event)
+
+        return self._summarize_structured_event(event)
 
     def _summarize_progress_item(self, event: dict[str, Any]) -> str:
         event_type = str(event.get("type") or "")
@@ -398,6 +518,8 @@ class MultiAgentRunner:
                     last_stderr = chunk.strip()
                 if provider == "codex":
                     progress_text = self._extract_codex_progress_text(chunk, is_stderr=is_stderr)
+                elif provider == "claude":
+                    progress_text = self._extract_claude_progress_text(chunk, is_stderr=is_stderr)
                 else:
                     progress_text = self._extract_copilot_progress_text(chunk, is_stderr=is_stderr)
                 should_report_progress = bool(
@@ -505,6 +627,8 @@ class MultiAgentRunner:
         stderr = "".join(stderr_chunks)
         if provider == "codex":
             session_id, parsed_success, assistant_text, error_message, events = self._parse_codex_jsonl(stdout)
+        elif provider == "claude":
+            session_id, parsed_success, assistant_text, error_message, events = self._parse_claude_jsonl(stdout)
         else:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_copilot_jsonl(stdout)
 
@@ -711,6 +835,27 @@ class MultiAgentRunner:
         )
         return args
 
+    def _claude_base(self, user_message: str) -> list[str]:
+        args = []
+        if self.claude_model:
+            args.extend(["--model", self.claude_model])
+        if self.claude_permission_mode:
+            args.extend(["--permission-mode", self.claude_permission_mode])
+        if self.claude_allowed_tools:
+            args.extend(["--allowedTools", ",".join(self.claude_allowed_tools)])
+        if self.claude_disallowed_tools:
+            args.extend(["--disallowedTools", ",".join(self.claude_disallowed_tools)])
+        args.extend(
+            [
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "-p",
+                f"{self.PROMPT_PREFIX}{user_message}",
+            ]
+        )
+        return args
+
     def create_session(
         self,
         provider: str,
@@ -745,6 +890,15 @@ class MultiAgentRunner:
                 provider="copilot",
                 cwd=project_path,
                 env=self._copilot_env(project_path, skip_git_repo_check),
+                on_stall=on_stall,
+                on_progress=on_progress,
+            )
+        elif provider == "claude":
+            args = [self.claude_bin, *self._claude_base(user_message)]
+            return self._run(
+                args,
+                provider="claude",
+                cwd=project_path,
                 on_stall=on_stall,
                 on_progress=on_progress,
             )
@@ -787,6 +941,15 @@ class MultiAgentRunner:
                 provider="copilot",
                 cwd=project_path,
                 env=self._copilot_env(project_path, skip_git_repo_check),
+                on_stall=on_stall,
+                on_progress=on_progress,
+            )
+        elif provider == "claude":
+            args = [self.claude_bin, "--resume", session_id, *self._claude_base(user_message)]
+            return self._run(
+                args,
+                provider="claude",
+                cwd=project_path,
                 on_stall=on_stall,
                 on_progress=on_progress,
             )
