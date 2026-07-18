@@ -51,6 +51,32 @@ def test_set_pending_action_persists_and_clears(tmp_path: Path):
     assert "pending_action" not in store.get_chat_state("bot-a", 123)
 
 
+def test_clear_all_pending_actions_removes_stale_entries_across_chats(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.set_pending_action("bot-a", 123, {"kind": "message", "user_message": "stuck"})
+    store.set_pending_action("bot-a", 456, {"kind": "message", "user_message": "also stuck"})
+    store.set_current_provider("bot-a", 789, "codex")  # chat with no pending_action
+
+    cleared = store.clear_all_pending_actions()
+
+    assert cleared == 2
+    assert "pending_action" not in store.get_chat_state("bot-a", 123)
+    assert "pending_action" not in store.get_chat_state("bot-a", 456)
+
+
+def test_clear_all_pending_actions_returns_zero_when_none_present(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.set_current_provider("bot-a", 123, "codex")
+
+    assert store.clear_all_pending_actions() == 0
+
+
 def test_load_empty_state_file_returns_default_state(tmp_path: Path):
     state = tmp_path / "state.json"
     backup = tmp_path / "state.json.bak"

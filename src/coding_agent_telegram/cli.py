@@ -153,6 +153,14 @@ def main() -> None:
         raise
 
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    cleared_pending_actions = store.clear_all_pending_actions()
+    if cleared_pending_actions:
+        logger.warning(
+            "Cleared %d stale pending_action entr%s left over from a previous run "
+            "(likely an unclean shutdown mid-message); affected chats can send messages again.",
+            cleared_pending_actions,
+            "y" if cleared_pending_actions == 1 else "ies",
+        )
     runner = MultiAgentRunner(
         codex_bin=cfg.codex_bin,
         copilot_bin=cfg.copilot_bin,

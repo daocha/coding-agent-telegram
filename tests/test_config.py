@@ -477,6 +477,69 @@ def test_create_initial_env_file_initializes_app_locale_from_system_language(tmp
     assert "APP_LOCALE=ja" in env_path.read_text(encoding="utf-8")
 
 
+def test_create_initial_env_file_fills_in_detected_provider_bin_paths(tmp_path, monkeypatch):
+    env_path = tmp_path / ".env_coding_agent_telegram"
+    template_path = tmp_path / ".env.example"
+    template_path.write_text(
+        "APP_LOCALE=en\nCODEX_BIN=codex\nCOPILOT_BIN=copilot\nCLAUDE_BIN=~/.local/bin/claude\n",
+        encoding="utf-8",
+    )
+
+    detected = {
+        "codex": "/opt/homebrew/bin/codex",
+        "claude": "/usr/local/bin/claude",
+    }
+    monkeypatch.setattr(config_module, "detect_installed_bin", lambda bin_name: detected.get(bin_name))
+
+    create_initial_env_file(env_path, template_path)
+
+    written = env_path.read_text(encoding="utf-8")
+    assert "CODEX_BIN=/opt/homebrew/bin/codex" in written
+    assert "CLAUDE_BIN=/usr/local/bin/claude" in written
+    # copilot wasn't detected, so the template value is left untouched.
+    assert "COPILOT_BIN=copilot" in written
+
+
+def test_detect_installed_bin_prefers_path_then_falls_back_to_candidate_dirs(tmp_path, monkeypatch):
+    from coding_agent_telegram.config import detect_installed_bin
+
+    monkeypatch.setattr(config_module.shutil, "which", lambda name: None)
+    fake_home = tmp_path / "home"
+    local_bin = fake_home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    claude_bin = local_bin / "claude"
+    claude_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    claude_bin.chmod(0o755)
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    assert detect_installed_bin("claude") == str(claude_bin.absolute())
+    assert detect_installed_bin("nonexistent-bin-xyz") is None
+
+
+def test_detect_installed_bin_preserves_symlink_instead_of_resolving_target(tmp_path, monkeypatch):
+    from coding_agent_telegram.config import detect_installed_bin
+
+    # Mirrors real installs where a version manager symlinks a stable path
+    # (e.g. ~/.local/bin/claude) to a versioned target that changes on upgrade.
+    versions_dir = tmp_path / "versions"
+    versions_dir.mkdir()
+    real_bin = versions_dir / "2.1.214"
+    real_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    real_bin.chmod(0o755)
+
+    path_dir = tmp_path / "path_bin"
+    path_dir.mkdir()
+    symlink_bin = path_dir / "claude"
+    symlink_bin.symlink_to(real_bin)
+
+    monkeypatch.setattr(config_module.shutil, "which", lambda name: str(symlink_bin))
+
+    detected = detect_installed_bin("claude")
+
+    assert detected == str(symlink_bin.absolute())
+    assert detected != str(real_bin)
+
+
 # ---------------------------------------------------------------------------
 # _parse_allowed_chat_ids: malformed value raises clear ValueError
 # ---------------------------------------------------------------------------

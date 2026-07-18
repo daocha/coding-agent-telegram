@@ -6,6 +6,7 @@ import importlib.resources
 import os
 import pwd
 import re
+import shutil
 import locale as system_locale
 from dataclasses import dataclass
 from pathlib import Path
@@ -134,6 +135,59 @@ def _apply_initial_app_locale(template_text: str, app_locale: str) -> str:
     return f"{replacement}\n{template_text}"
 
 
+# Fallback install locations checked when a CLI isn't on PATH, e.g. because the
+# process runs under a service manager or a shell profile that startup.sh
+# doesn't source. Order matters: earlier entries win when a bin exists in
+# more than one of them.
+_BIN_CANDIDATE_DIRS = (
+    "~/.local/bin",
+    "~/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "~/.npm-global/bin",
+    "~/.volta/bin",
+)
+
+
+def detect_installed_bin(bin_name: str) -> Optional[str]:
+    """Return the absolute path of a locally installed CLI, or None if not found.
+
+    Deliberately does not resolve symlinks to their final target (e.g. a
+    version manager's ``.local/bin/claude`` -> ``.local/share/claude/versions/x.y.z``):
+    keeping the symlink path lets in-place CLI upgrades keep working without
+    editing the env file again.
+    """
+    found = shutil.which(bin_name)
+    if found:
+        return str(Path(found).absolute())
+    for candidate_dir in _BIN_CANDIDATE_DIRS:
+        candidate = Path(candidate_dir).expanduser() / bin_name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate.absolute())
+    return None
+
+
+# Maps each provider's env var name to the CLI executable it looks for.
+_PROVIDER_BIN_ENV_VARS = (
+    ("CODEX_BIN", "codex"),
+    ("COPILOT_BIN", "copilot"),
+    ("CLAUDE_BIN", "claude"),
+)
+
+
+def _apply_detected_provider_bins(template_text: str) -> str:
+    text = template_text
+    for env_var, bin_name in _PROVIDER_BIN_ENV_VARS:
+        detected_path = detect_installed_bin(bin_name)
+        if not detected_path:
+            continue
+        pattern = rf"(?m)^{env_var}=.*$"
+        if re.search(pattern, text):
+            text = re.sub(pattern, f"{env_var}={detected_path}", text, count=1)
+    return text
+
+
 def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None) -> str:
     if template_path is None:
         template_text = importlib.resources.files("coding_agent_telegram").joinpath("resources/.env.example").read_text(
@@ -143,7 +197,9 @@ def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None
         template_text = template_path.read_text(encoding="utf-8")
     app_locale = detect_system_locale()
     env_path.parent.mkdir(parents=True, exist_ok=True)
-    env_path.write_text(_apply_initial_app_locale(template_text, app_locale), encoding="utf-8")
+    template_text = _apply_initial_app_locale(template_text, app_locale)
+    template_text = _apply_detected_provider_bins(template_text)
+    env_path.write_text(template_text, encoding="utf-8")
     return app_locale
 
 

@@ -378,15 +378,15 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>Befehl zum Starten von Codex CLI. Standard: <code>codex</code>.</td>
+    <td>Befehl zum Starten von Codex CLI. Die Anwendung versucht beim Initialisieren der <code>.env_coding_agent_telegram</code>-Datei, den lokal installierten Codex-Pfad automatisch zu erkennen. Alternativ können Sie mit <code>which codex</code> den Pfad anzeigen.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>Befehl zum Starten von Copilot CLI. Standard: <code>copilot</code>.</td>
+    <td>Befehl zum Starten von Copilot CLI. Die Anwendung versucht beim Initialisieren der <code>.env_coding_agent_telegram</code>-Datei, den lokal installierten Copilot-Pfad automatisch zu erkennen. Alternativ können Sie mit <code>which copilot</code> den Pfad anzeigen.</td>
   </tr>
   <tr>
     <td><code>CLAUDE_BIN</code></td>
-    <td>Befehl zum Starten von Claude Code CLI. Standard: <code>~/.local/bin/claude</code>.</td>
+    <td>Befehl zum Starten von Claude Code CLI. Die Anwendung versucht beim Initialisieren der <code>.env_coding_agent_telegram</code>-Datei, den lokal installierten Claude-Pfad automatisch zu erkennen. Alternativ können Sie mit <code>which claude</code> den Pfad anzeigen.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>

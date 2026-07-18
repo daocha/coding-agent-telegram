@@ -378,15 +378,15 @@ bot 目前接受：
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>用來啟動 Codex CLI 的指令。預設：<code>codex</code>。</td>
+    <td>用來啟動 Codex CLI 的指令。應用程式會在初始化 <code>.env_coding_agent_telegram</code> 時嘗試自動偵測本機已安裝的 Codex 路徑。您亦可使用 <code>which codex</code> 查看該路徑。</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>用來啟動 Copilot CLI 的指令。預設：<code>copilot</code>。</td>
+    <td>用來啟動 Copilot CLI 的指令。應用程式會在初始化 <code>.env_coding_agent_telegram</code> 時嘗試自動偵測本機已安裝的 Copilot 路徑。您亦可使用 <code>which copilot</code> 查看該路徑。</td>
   </tr>
   <tr>
     <td><code>CLAUDE_BIN</code></td>
-    <td>用來啟動 Claude Code CLI 的指令。預設：<code>~/.local/bin/claude</code>。</td>
+    <td>用來啟動 Claude Code CLI 的指令。應用程式會在初始化 <code>.env_coding_agent_telegram</code> 時嘗試自動偵測本機已安裝的 Claude 路徑。您亦可使用 <code>which claude</code> 查看該路徑。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>

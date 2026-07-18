@@ -378,15 +378,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>Codex CLI を起動するコマンドです。既定値: <code>codex</code>.</td>
+    <td>Codex CLI を起動するコマンドです。アプリは <code>.env_coding_agent_telegram</code> の初期化時に、ローカルにインストールされている Codex のパスを自動的に検出します。別の方法として、<code>which codex</code> を使用してパスを確認できます。</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>Copilot CLI を起動するコマンドです。既定値: <code>copilot</code>.</td>
+    <td>Copilot CLI を起動するコマンドです。アプリは <code>.env_coding_agent_telegram</code> の初期化時に、ローカルにインストールされている Copilot のパスを自動的に検出します。別の方法として、<code>which copilot</code> を使用してパスを確認できます。</td>
   </tr>
   <tr>
     <td><code>CLAUDE_BIN</code></td>
-    <td>Claude Code CLI を起動するコマンドです。既定値: <code>~/.local/bin/claude</code>.</td>
+    <td>Claude Code CLI を起動するコマンドです。アプリは <code>.env_coding_agent_telegram</code> の初期化時に、ローカルにインストールされている Claude のパスを自動的に検出します。別の方法として、<code>which claude</code> を使用してパスを確認できます。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
