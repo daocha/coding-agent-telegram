@@ -21,7 +21,10 @@ class GitCommandMixin:
         'Only include files you intentionally modified for this task. '
         'Do not include unrelated changed files. '
         'Do not include untracked files unless they were created for this task and are clearly required. '
-        'Output only a single executable command in this format with \\ if there is line break: git add <files> && git commit -m "<message>".'
+        'Write the message as plain text: use one -m "<line>" flag per summary or bullet line (git joins multiple -m values into separate paragraphs automatically) instead of embedding literal newlines inside a single -m value. '
+        'Do not use $(...), backticks, heredocs (<<EOF), printf, or echo to build the command or message — every part must be plain, directly readable text. '
+        'Output only a single executable command in a fenced bash code block, in this exact form: git add <files> && git commit -m "<summary line>" -m "<detail line>" -m "<detail line>" ... '
+        'If the file list is long, you may wrap it across lines with a trailing \\ for readability, but keep every -m value on its own single line.'
     )
 
     @staticmethod
