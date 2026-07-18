@@ -378,15 +378,15 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>Commando om Codex CLI te starten. Standaard: <code>codex</code>.</td>
+    <td>Commando om Codex CLI te starten. De applicatie probeert tijdens het initialiseren van <code>.env_coding_agent_telegram</code> automatisch het lokaal geïnstalleerde Codex-pad te detecteren. U kunt ook <code>which codex</code> gebruiken om het pad weer te geven.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>Commando om Copilot CLI te starten. Standaard: <code>copilot</code>.</td>
+    <td>Commando om Copilot CLI te starten. De applicatie probeert tijdens het initialiseren van <code>.env_coding_agent_telegram</code> automatisch het lokaal geïnstalleerde Copilot-pad te detecteren. U kunt ook <code>which copilot</code> gebruiken om het pad weer te geven.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_BIN</code></td>
-    <td>Commando om Claude Code CLI te starten. Standaard: <code>~/.local/bin/claude</code>.</td>
+    <td>Commando om Claude Code CLI te starten. De applicatie probeert tijdens het initialiseren van <code>.env_coding_agent_telegram</code> automatisch het lokaal geïnstalleerde Claude-pad te detecteren. U kunt ook <code>which claude</code> gebruiken om het pad weer te geven.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
