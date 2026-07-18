@@ -378,15 +378,15 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>Lệnh dùng để chạy Codex CLI. Mặc định: <code>codex</code>.</td>
+    <td>Lệnh dùng để chạy Codex CLI. Ứng dụng sẽ cố gắng tự động phát hiện đường dẫn của Codex được cài đặt trên máy khi khởi tạo <code>.env_coding_agent_telegram</code>. Ngoài ra, bạn có thể sử dụng <code>which codex</code> để xem đường dẫn.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>Lệnh dùng để chạy Copilot CLI. Mặc định: <code>copilot</code>.</td>
+    <td>Lệnh dùng để chạy Copilot CLI. Ứng dụng sẽ cố gắng tự động phát hiện đường dẫn của Copilot được cài đặt trên máy khi khởi tạo <code>.env_coding_agent_telegram</code>. Ngoài ra, bạn có thể sử dụng <code>which copilot</code> để xem đường dẫn.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_BIN</code></td>
-    <td>Lệnh dùng để chạy Claude Code CLI. Mặc định: <code>~/.local/bin/claude</code>.</td>
+    <td>Lệnh dùng để chạy Claude Code CLI. Ứng dụng sẽ cố gắng tự động phát hiện đường dẫn của Claude được cài đặt trên máy khi khởi tạo <code>.env_coding_agent_telegram</code>. Ngoài ra, bạn có thể sử dụng <code>which claude</code> để xem đường dẫn.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
