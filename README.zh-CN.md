@@ -380,15 +380,15 @@ bot 当前接受：
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>用于启动 Codex CLI 的命令。默认：<code>codex</code>。</td>
+    <td>用于启动 Codex CLI 的命令。应用程序会在初始化 <code>.env_coding_agent_telegram</code> 时尝试自动检测本地安装的 Codex 路径。您也可以使用 <code>which codex</code> 查看该路径。</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>用于启动 Copilot CLI 的命令。默认：<code>copilot</code>。</td>
+    <td>用于启动 Copilot CLI 的命令。应用程序会在初始化 <code>.env_coding_agent_telegram</code> 时尝试自动检测本地安装的 Copilot 路径。您也可以使用 <code>which copilot</code> 查看该路径。</td>
   </tr>
   <tr>
     <td><code>CLAUDE_BIN</code></td>
-    <td>用于启动 Claude Code CLI 的命令。默认：<code>~/.local/bin/claude</code>。</td>
+    <td>用于启动 Claude Code CLI 的命令。应用程序会在初始化 <code>.env_coding_agent_telegram</code> 时尝试自动检测本地安装的 Claude 路径。您也可以使用 <code>which claude</code> 查看该路径。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
