@@ -380,15 +380,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>CODEX_BIN</code></td>
-    <td>Codex CLI 를 실행할 명령입니다. 기본값: <code>codex</code>.</td>
+    <td>Codex CLI 를 실행할 명령입니다. 앱은 <code>.env_coding_agent_telegram</code>를 초기화할 때 로컬에 설치된 Codex 경로를 자동으로 감지합니다. 또는 <code>which codex</code>를 사용하여 경로를 확인할 수 있습니다.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_BIN</code></td>
-    <td>Copilot CLI 를 실행할 명령입니다. 기본값: <code>copilot</code>.</td>
+    <td>Copilot CLI 를 실행할 명령입니다. 앱은 <code>.env_coding_agent_telegram</code>를 초기화할 때 로컬에 설치된 Copilot 경로를 자동으로 감지합니다. 또는 <code>which copilot</code>를 사용하여 경로를 확인할 수 있습니다.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_BIN</code></td>
-    <td>Claude Code CLI 를 실행할 명령입니다. 기본값: <code>~/.local/bin/claude</code>.</td>
+    <td>Claude Code CLI 를 실행할 명령입니다. 앱은 <code>.env_coding_agent_telegram</code>를 초기화할 때 로컬에 설치된 Claude 경로를 자동으로 감지합니다. 또는 <code>which claude</code>를 사용하여 경로를 확인할 수 있습니다.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL</code></td>
