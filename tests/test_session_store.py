@@ -39,6 +39,55 @@ def test_set_current_provider_persists_in_chat_state(tmp_path: Path):
     assert chat["current_provider"] == "copilot"
 
 
+def test_empty_provider_normalizes_to_codex_when_creating_session(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "")
+
+    chat = store.get_chat_state("bot-a", 123)
+    assert chat["current_provider"] == "codex"
+    assert chat["sessions"]["sess_1"]["provider"] == "codex"
+
+
+def test_empty_current_provider_normalizes_to_codex(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.set_current_provider("bot-a", 123, "")
+
+    assert store.get_chat_state("bot-a", 123)["current_provider"] == "codex"
+
+
+def test_switch_session_normalizes_empty_legacy_provider_to_codex(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    state.write_text(
+        json.dumps(
+            {
+                "chats": {
+                    "bot-a:123": {
+                        "sessions": {
+                            "sess_legacy": {
+                                "name": "legacy",
+                                "project_folder": "backend",
+                                "provider": "",
+                            }
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = SessionStore(state, backup)
+
+    assert store.switch_session("bot-a", 123, "sess_legacy")
+    assert store.get_chat_state("bot-a", 123)["current_provider"] == "codex"
+
+
 def test_set_pending_action_persists_and_clears(tmp_path: Path):
     state = tmp_path / "state.json"
     backup = tmp_path / "state.json.bak"

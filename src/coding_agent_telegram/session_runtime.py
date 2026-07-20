@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 from typing import Awaitable, Callable, Optional, Sequence
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
@@ -32,6 +32,7 @@ from coding_agent_telegram.i18n import locale_from_update, translate
 from coding_agent_telegram.providers import provider_label as provider_display_label
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
+    affirmative_inline_button_kwargs,
     markdownish_to_html,
     send_code_block,
     send_html_text,
@@ -57,6 +58,42 @@ COMPACT_BOOTSTRAP_TEMPLATE = (
 
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
+
+# Matches a numbered/lettered list line, e.g. "1. Do X" or "a) Do Y".
+_OPTION_LINE_RE = re.compile(r"^\s*(?:[0-9]{1,2}[.)]|[A-Za-z][.)])\s+(.{2,140}?)\s*$")
+# Requires an explicit "which one do you want" style cue near the option list,
+# so an ordinary numbered list in a reply doesn't get mistaken for a menu.
+_OPTION_QUESTION_CUE_RE = re.compile(
+    r"\b(which (one|option|approach|way)|let me know which|should i|shall i|"
+    r"would you like me to|which would you|go with|pick one|choose one|which do you want)\b",
+    re.IGNORECASE,
+)
+_MAX_REPLY_OPTIONS = 6
+_REPLY_OPTION_TAIL_LINES = 12
+
+
+def _detect_reply_options(text: str) -> tuple[str, ...]:
+    """Return option labels if the assistant's reply is asking the user to pick one."""
+    stripped = text.strip()
+    if not stripped:
+        return ()
+    tail_lines = stripped.splitlines()[-_REPLY_OPTION_TAIL_LINES:]
+    if not _OPTION_QUESTION_CUE_RE.search("\n".join(tail_lines)):
+        return ()
+
+    options: list[str] = []
+    for line in tail_lines:
+        match = _OPTION_LINE_RE.match(line)
+        if match:
+            options.append(match.group(1).strip())
+
+    if len(options) < 2:
+        return ()
+    return tuple(options[:_MAX_REPLY_OPTIONS])
+
+
+def _session_provider(session: dict[str, str]) -> str:
+    return str(session.get("provider") or "codex").strip().lower() or "codex"
 
 
 def _reply_to_message_id(update: Update) -> int | None:
@@ -163,6 +200,7 @@ class PhotoAttachmentStore:
 
 
 RunWithTyping = Callable[..., Awaitable[object]]
+RegisterReplyOptions = Callable[[int, tuple[str, ...]], str]
 
 
 class SessionRuntime:
@@ -175,6 +213,7 @@ class SessionRuntime:
         bot_id: str,
         git: GitWorkspaceManager,
         run_with_typing: RunWithTyping,
+        register_reply_options: RegisterReplyOptions,
     ) -> None:
         self.cfg = cfg
         self.store = store
@@ -182,6 +221,7 @@ class SessionRuntime:
         self.bot_id = bot_id
         self.git = git
         self.run_with_typing = run_with_typing
+        self.register_reply_options = register_reply_options
 
     def _locale(self, update: Update | None) -> str:
         return self.cfg.locale
@@ -253,7 +293,7 @@ class SessionRuntime:
             return None
 
         project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
+        provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
         logger.info(
             "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'. "
@@ -400,7 +440,7 @@ class SessionRuntime:
             return None
 
         project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
+        provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
         session_name = session["name"]
         logger.info(
@@ -688,6 +728,16 @@ class SessionRuntime:
             return
 
         total = len(segments)
+
+        # If the agent's final reply reads like it's asking the user to pick between a
+        # few options, detect them now so we can offer buttons after the reply is sent.
+        # Tapping one just sends the option text back as the next chat message — same
+        # as if the user had typed it — so this never needs to interrupt or hold open
+        # the CLI process.
+        reply_options: tuple[str, ...] = ()
+        if provider == "claude" and segments[-1].kind == "prose" and update.effective_chat is not None:
+            reply_options = _detect_reply_options(segments[-1].text)
+
         for index, segment in enumerate(segments, start=1):
             if segment.kind == "code":
                 await send_code_block(
@@ -700,7 +750,7 @@ class SessionRuntime:
                 )
                 continue
 
-            provider_label = provider_display_label(provider) or "Codex"
+            provider_label = provider_display_label(provider) or "Agent"
             title_prefix = (
                 self._t(update, "runtime.provider_output_single", provider=provider_label)
                 if total == 1
@@ -719,6 +769,32 @@ class SessionRuntime:
                     message,
                     reply_to_message_id=self._take_reply_to_message_id(reply_state),
                 )
+
+        if reply_options and update.effective_chat is not None:
+            token = self.register_reply_options(update.effective_chat.id, reply_options)
+            await send_html_text(
+                update,
+                context,
+                f"<b>{html.escape(self._t(update, 'runtime.reply_options_prompt'))}</b>",
+            )
+            # Each option gets its own message with a single button right under it, so
+            # the full option text is always visible next to the button that picks it —
+            # no truncation, no guessing which button maps to which paragraph.
+            for index, option in enumerate(reply_options):
+                await send_html_text(
+                    update,
+                    context,
+                    html.escape(option),
+                    reply_markup=self._reply_option_keyboard(update, token, index),
+                )
+
+    def _reply_option_keyboard(self, update: Update, token: str, index: int) -> InlineKeyboardMarkup:
+        button = InlineKeyboardButton(
+            self._t(update, "runtime.reply_option_select_button"),
+            callback_data=f"agentopt:{token}:{index}",
+            **affirmative_inline_button_kwargs(),
+        )
+        return InlineKeyboardMarkup([[button]])
 
     def _chunk_assistant_prose(self, title_prefix: str, text: str) -> list[str]:
         normalized = text.strip()

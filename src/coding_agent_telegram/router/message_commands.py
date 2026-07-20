@@ -73,6 +73,37 @@ class MessageCommandMixin:
         finally:
             await self._drain_chat_message_queue(chat_id, context)
 
+    @require_allowed_chat(answer_callback=True)
+    async def handle_agent_reply_option_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or not query.data:
+            return
+
+        await query.answer()
+        parts = query.data.split(":", 2)
+        if len(parts) != 3:
+            return
+        _, token, index_text = parts
+        entry = self._agent_reply_option_tokens.pop(token, None)
+        if entry is None:
+            if hasattr(query, "edit_message_reply_markup"):
+                await query.edit_message_reply_markup(reply_markup=None)
+            return
+
+        chat_id, options = entry
+        if update.effective_chat is None or update.effective_chat.id != chat_id:
+            return
+        try:
+            option_text = options[int(index_text)]
+        except (ValueError, IndexError):
+            return
+
+        if hasattr(query, "edit_message_reply_markup"):
+            await query.edit_message_reply_markup(reply_markup=None)
+
+        await send_text(update, context, self._t(update, "runtime.reply_option_selected", choice=option_text))
+        await self._process_user_message(update, context, option_text)
+
     @require_allowed_chat()
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message is None or not update.message.text:
