@@ -3000,13 +3000,21 @@ def test_claude_reply_with_options_offers_buttons_and_resends_choice(tmp_path: P
     asyncio.run(router.handle_message(update, context))
 
     assert len(runner.resume_calls) == 1
-    final_message = next(message for message in bot.messages if "Which approach would you like" in message[1])
-    reply_markup = final_message[3]
-    assert reply_markup is not None
-    buttons = [button for row in reply_markup.inline_keyboard for button in row]
-    assert [button.text for button in buttons] == ["Patch the validator directly", "Rewrite the parser"]
-    token_callback_data = buttons[0].callback_data
-    assert token_callback_data.startswith("agentopt:")
+    assert any("Which approach would you like" in message[1] for message in bot.messages)
+    assert any("Action needed" in message[1] for message in bot.messages)
+
+    option_messages = [message for message in bot.messages if message[3] is not None]
+    assert [message[1] for message in option_messages] == [
+        "Patch the validator directly",
+        "Rewrite the parser",
+    ]
+    for message in option_messages:
+        buttons = [button for row in message[3].inline_keyboard for button in row]
+        assert len(buttons) == 1
+        assert buttons[0].api_kwargs == {"style": "primary"}
+        assert buttons[0].callback_data.startswith("agentopt:")
+
+    token_callback_data = option_messages[0][3].inline_keyboard[0][0].callback_data
 
     query = SimpleNamespace(data=token_callback_data, answer=None, edit_message_reply_markup=None)
     edited_markup = []

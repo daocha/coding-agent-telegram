@@ -32,6 +32,7 @@ from coding_agent_telegram.i18n import locale_from_update, translate
 from coding_agent_telegram.providers import provider_label as provider_display_label
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
+    affirmative_inline_button_kwargs,
     markdownish_to_html,
     send_code_block,
     send_html_text,
@@ -729,15 +730,13 @@ class SessionRuntime:
         total = len(segments)
 
         # If the agent's final reply reads like it's asking the user to pick between a
-        # few options, offer them as buttons on the last message. Tapping one just
-        # sends the option text back as the next chat message — same as if the user
-        # had typed it — so this never needs to interrupt or hold open the CLI process.
-        reply_options_markup: InlineKeyboardMarkup | None = None
+        # few options, detect them now so we can offer buttons after the reply is sent.
+        # Tapping one just sends the option text back as the next chat message — same
+        # as if the user had typed it — so this never needs to interrupt or hold open
+        # the CLI process.
+        reply_options: tuple[str, ...] = ()
         if provider == "claude" and segments[-1].kind == "prose" and update.effective_chat is not None:
-            options = _detect_reply_options(segments[-1].text)
-            if options:
-                token = self.register_reply_options(update.effective_chat.id, options)
-                reply_options_markup = self._reply_options_keyboard(token, options)
+            reply_options = _detect_reply_options(segments[-1].text)
 
         for index, segment in enumerate(segments, start=1):
             if segment.kind == "code":
@@ -763,25 +762,39 @@ class SessionRuntime:
                     total=total,
                 )
             )
-            messages = self._chunk_assistant_prose(title_prefix, segment.text)
-            last_message_index = len(messages) - 1
-            for message_index, message in enumerate(messages):
-                is_final_message = index == total and message_index == last_message_index
+            for message in self._chunk_assistant_prose(title_prefix, segment.text):
                 await send_html_text(
                     update,
                     context,
                     message,
                     reply_to_message_id=self._take_reply_to_message_id(reply_state),
-                    reply_markup=reply_options_markup if is_final_message else None,
                 )
 
-    def _reply_options_keyboard(self, token: str, options: tuple[str, ...]) -> InlineKeyboardMarkup:
-        buttons = [
-            InlineKeyboardButton(option[:60], callback_data=f"agentopt:{token}:{index}")
-            for index, option in enumerate(options)
-        ]
-        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-        return InlineKeyboardMarkup(rows)
+        if reply_options and update.effective_chat is not None:
+            token = self.register_reply_options(update.effective_chat.id, reply_options)
+            await send_html_text(
+                update,
+                context,
+                f"<b>{html.escape(self._t(update, 'runtime.reply_options_prompt'))}</b>",
+            )
+            # Each option gets its own message with a single button right under it, so
+            # the full option text is always visible next to the button that picks it —
+            # no truncation, no guessing which button maps to which paragraph.
+            for index, option in enumerate(reply_options):
+                await send_html_text(
+                    update,
+                    context,
+                    html.escape(option),
+                    reply_markup=self._reply_option_keyboard(update, token, index),
+                )
+
+    def _reply_option_keyboard(self, update: Update, token: str, index: int) -> InlineKeyboardMarkup:
+        button = InlineKeyboardButton(
+            self._t(update, "runtime.reply_option_select_button"),
+            callback_data=f"agentopt:{token}:{index}",
+            **affirmative_inline_button_kwargs(),
+        )
+        return InlineKeyboardMarkup([[button]])
 
     def _chunk_assistant_prose(self, title_prefix: str, text: str) -> list[str]:
         normalized = text.strip()

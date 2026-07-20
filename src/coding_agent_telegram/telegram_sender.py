@@ -68,6 +68,14 @@ class AssistantSegment:
     language: Optional[str] = None
 
 
+def affirmative_inline_button_kwargs() -> dict[str, dict[str, str]]:
+    return {"api_kwargs": {"style": "primary"}}
+
+
+def negative_inline_button_kwargs() -> dict[str, dict[str, str]]:
+    return {"api_kwargs": {"style": "danger"}}
+
+
 def _max_telegram_message_length(context: ContextTypes.DEFAULT_TYPE) -> int:
     bot_data = getattr(context, "bot_data", None)
     if isinstance(bot_data, dict):

@@ -28,7 +28,11 @@ from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.speech_to_text import WhisperSpeechToText
-from coding_agent_telegram.telegram_sender import send_text
+from coding_agent_telegram.telegram_sender import (
+    affirmative_inline_button_kwargs,
+    negative_inline_button_kwargs,
+    send_text,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -235,10 +239,10 @@ class CommandRouterBase:
         return translate(self._locale(update), key, **kwargs)
 
     def _affirmative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
-        return {"api_kwargs": {"style": "primary"}}
+        return affirmative_inline_button_kwargs()
 
     def _negative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
-        return {"api_kwargs": {"style": "danger"}}
+        return negative_inline_button_kwargs()
 
     async def _notify_if_current_project_busy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         chat = update.effective_chat
