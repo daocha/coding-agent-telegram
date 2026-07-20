@@ -11,6 +11,10 @@ import portalocker
 T = TypeVar("T")
 
 
+def _normalize_provider(provider: str) -> str:
+    return str(provider or "codex").strip().lower() or "codex"
+
+
 class SessionStoreError(Exception):
     """Raised when the session store cannot be accessed due to a file-lock conflict."""
 
@@ -149,10 +153,11 @@ class SessionStore:
         initialized_from: Optional[str] = None,
     ) -> dict[str, str]:
         now = self._now()
+        normalized_provider = _normalize_provider(provider)
         sessions[session_id] = {
             "name": session_name,
             "project_folder": project_folder,
-            "provider": provider,
+            "provider": normalized_provider,
             "branch_name": branch_name or "",
             "origin": origin,
             "origin_label": origin_label or ("Bot managed session" if origin == "bot" else origin),
@@ -193,7 +198,7 @@ class SessionStore:
 
     def set_current_provider(self, bot_id: str, chat_id: int, provider: str) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
-            chat_data["current_provider"] = provider
+            chat_data["current_provider"] = _normalize_provider(provider)
 
         self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
@@ -257,7 +262,7 @@ class SessionStore:
             )
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = project_folder
-            chat_data["current_provider"] = provider
+            chat_data["current_provider"] = _normalize_provider(provider)
             if branch_name:
                 chat_data["current_branch"] = branch_name
 
@@ -376,7 +381,7 @@ class SessionStore:
 
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = session["project_folder"]
-            chat_data["current_provider"] = session.get("provider", "codex")
+            chat_data["current_provider"] = _normalize_provider(session.get("provider", "codex"))
             if session.get("branch_name"):
                 chat_data["current_branch"] = session["branch_name"]
             else:
