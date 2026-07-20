@@ -184,6 +184,37 @@ class MarkdownRunner(DummyRunner):
         )
 
 
+class ReplyOptionsRunner(DummyRunner):
+    def resume_session(
+        self,
+        provider,
+        session_id,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.resume_calls.append({"provider": provider, "user_message": user_message})
+        if len(self.resume_calls) == 1:
+            text = (
+                "I found two ways to fix this. Which approach would you like me to take?\n"
+                "1. Patch the validator directly\n"
+                "2. Rewrite the parser"
+            )
+        else:
+            text = "Done."
+        return AgentRunResult(
+            session_id=session_id,
+            success=True,
+            assistant_text=text,
+            error_message=None,
+            raw_events=[],
+        )
+
+
 class CommandBlockRunner(DummyRunner):
     def resume_session(
         self,
@@ -2930,6 +2961,110 @@ def test_copilot_output_uses_copilot_label(tmp_path: Path):
     asyncio.run(router.handle_message(update, context))
 
     assert any("Copilot output" in message[1] for message in bot.messages)
+
+
+def test_claude_output_uses_claude_label(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = MarkdownRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_md", "markdown-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="check formatting")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert any("Claude output" in message[1] for message in bot.messages)
+    assert not any("Codex output" in message[1] for message in bot.messages)
+
+
+def test_claude_reply_with_options_offers_buttons_and_resends_choice(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ReplyOptionsRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_opt", "opt-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="how should I fix this bug?")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert len(runner.resume_calls) == 1
+    final_message = next(message for message in bot.messages if "Which approach would you like" in message[1])
+    reply_markup = final_message[3]
+    assert reply_markup is not None
+    buttons = [button for row in reply_markup.inline_keyboard for button in row]
+    assert [button.text for button in buttons] == ["Patch the validator directly", "Rewrite the parser"]
+    token_callback_data = buttons[0].callback_data
+    assert token_callback_data.startswith("agentopt:")
+
+    query = SimpleNamespace(data=token_callback_data, answer=None, edit_message_reply_markup=None)
+    edited_markup = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit_markup(reply_markup=None):
+        edited_markup.append(reply_markup)
+
+    query.answer = fake_answer
+    query.edit_message_reply_markup = fake_edit_markup
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+
+    asyncio.run(router.handle_agent_reply_option_callback(callback_update, context))
+
+    assert edited_markup == [None]
+    assert len(runner.resume_calls) == 2
+    assert runner.resume_calls[1]["user_message"] == "Patch the validator directly"
+    assert any(
+        "Continuing with: Patch the validator directly" in message[1] for message in bot.messages
+    )
+
+
+def test_agent_reply_option_callback_ignores_unknown_token(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ReplyOptionsRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_opt", "opt-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    query = SimpleNamespace(data="agentopt:deadbeef0000:0", answer=None, edit_message_reply_markup=None)
+    edited_markup = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit_markup(reply_markup=None):
+        edited_markup.append(reply_markup)
+
+    query.answer = fake_answer
+    query.edit_message_reply_markup = fake_edit_markup
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+    )
+    context = SimpleNamespace(args=[], bot=FakeBot())
+
+    asyncio.run(router.handle_agent_reply_option_callback(callback_update, context))
+
+    assert edited_markup == [None]
+    assert runner.resume_calls == []
 
 
 def test_message_reports_missing_project_folder_before_running_agent(tmp_path: Path):

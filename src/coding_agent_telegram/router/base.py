@@ -6,6 +6,7 @@ import html
 import logging
 import os
 import re
+import secrets
 import shlex
 from collections import deque
 from concurrent.futures import CancelledError, Future
@@ -118,6 +119,7 @@ class CommandRouterBase:
             bot_id=deps.bot_id,
             git=self.git,
             run_with_typing=self._run_with_typing,
+            register_reply_options=self._register_agent_reply_options,
         )
         # Per-workspace asyncio locks keyed by project_folder name.
         # Prevents concurrent agent runs on the same workspace regardless of
@@ -132,6 +134,7 @@ class CommandRouterBase:
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}
         self._branch_source_tokens: dict[str, tuple[str, str, str]] = {}
+        self._agent_reply_option_tokens: dict[str, tuple[int, tuple[str, ...]]] = {}
 
     def _register_branch_source_token(self, source_kind: str, source_branch: str, new_branch: str) -> str:
         key = f"{source_kind}:{source_branch}:{new_branch}"
@@ -141,6 +144,11 @@ class CommandRouterBase:
 
     def _lookup_branch_source_token(self, token: str) -> tuple[str, str, str] | None:
         return self._branch_source_tokens.get(token)
+
+    def _register_agent_reply_options(self, chat_id: int, options: tuple[str, ...]) -> str:
+        token = secrets.token_hex(6)
+        self._agent_reply_option_tokens[token] = (chat_id, options)
+        return token
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         indexed_sessions = list(enumerate(sessions.items()))

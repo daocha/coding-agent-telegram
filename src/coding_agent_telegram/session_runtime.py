@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 from typing import Awaitable, Callable, Optional, Sequence
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
@@ -57,6 +57,42 @@ COMPACT_BOOTSTRAP_TEMPLATE = (
 
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
+
+# Matches a numbered/lettered list line, e.g. "1. Do X" or "a) Do Y".
+_OPTION_LINE_RE = re.compile(r"^\s*(?:[0-9]{1,2}[.)]|[A-Za-z][.)])\s+(.{2,140}?)\s*$")
+# Requires an explicit "which one do you want" style cue near the option list,
+# so an ordinary numbered list in a reply doesn't get mistaken for a menu.
+_OPTION_QUESTION_CUE_RE = re.compile(
+    r"\b(which (one|option|approach|way)|let me know which|should i|shall i|"
+    r"would you like me to|which would you|go with|pick one|choose one|which do you want)\b",
+    re.IGNORECASE,
+)
+_MAX_REPLY_OPTIONS = 6
+_REPLY_OPTION_TAIL_LINES = 12
+
+
+def _detect_reply_options(text: str) -> tuple[str, ...]:
+    """Return option labels if the assistant's reply is asking the user to pick one."""
+    stripped = text.strip()
+    if not stripped:
+        return ()
+    tail_lines = stripped.splitlines()[-_REPLY_OPTION_TAIL_LINES:]
+    if not _OPTION_QUESTION_CUE_RE.search("\n".join(tail_lines)):
+        return ()
+
+    options: list[str] = []
+    for line in tail_lines:
+        match = _OPTION_LINE_RE.match(line)
+        if match:
+            options.append(match.group(1).strip())
+
+    if len(options) < 2:
+        return ()
+    return tuple(options[:_MAX_REPLY_OPTIONS])
+
+
+def _session_provider(session: dict[str, str]) -> str:
+    return str(session.get("provider") or "codex").strip().lower() or "codex"
 
 
 def _reply_to_message_id(update: Update) -> int | None:
@@ -163,6 +199,7 @@ class PhotoAttachmentStore:
 
 
 RunWithTyping = Callable[..., Awaitable[object]]
+RegisterReplyOptions = Callable[[int, tuple[str, ...]], str]
 
 
 class SessionRuntime:
@@ -175,6 +212,7 @@ class SessionRuntime:
         bot_id: str,
         git: GitWorkspaceManager,
         run_with_typing: RunWithTyping,
+        register_reply_options: RegisterReplyOptions,
     ) -> None:
         self.cfg = cfg
         self.store = store
@@ -182,6 +220,7 @@ class SessionRuntime:
         self.bot_id = bot_id
         self.git = git
         self.run_with_typing = run_with_typing
+        self.register_reply_options = register_reply_options
 
     def _locale(self, update: Update | None) -> str:
         return self.cfg.locale
@@ -253,7 +292,7 @@ class SessionRuntime:
             return None
 
         project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
+        provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
         logger.info(
             "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'. "
@@ -400,7 +439,7 @@ class SessionRuntime:
             return None
 
         project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
+        provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
         session_name = session["name"]
         logger.info(
@@ -688,6 +727,18 @@ class SessionRuntime:
             return
 
         total = len(segments)
+
+        # If the agent's final reply reads like it's asking the user to pick between a
+        # few options, offer them as buttons on the last message. Tapping one just
+        # sends the option text back as the next chat message — same as if the user
+        # had typed it — so this never needs to interrupt or hold open the CLI process.
+        reply_options_markup: InlineKeyboardMarkup | None = None
+        if provider == "claude" and segments[-1].kind == "prose" and update.effective_chat is not None:
+            options = _detect_reply_options(segments[-1].text)
+            if options:
+                token = self.register_reply_options(update.effective_chat.id, options)
+                reply_options_markup = self._reply_options_keyboard(token, options)
+
         for index, segment in enumerate(segments, start=1):
             if segment.kind == "code":
                 await send_code_block(
@@ -700,7 +751,7 @@ class SessionRuntime:
                 )
                 continue
 
-            provider_label = provider_display_label(provider) or "Codex"
+            provider_label = provider_display_label(provider) or "Agent"
             title_prefix = (
                 self._t(update, "runtime.provider_output_single", provider=provider_label)
                 if total == 1
@@ -712,13 +763,25 @@ class SessionRuntime:
                     total=total,
                 )
             )
-            for message in self._chunk_assistant_prose(title_prefix, segment.text):
+            messages = self._chunk_assistant_prose(title_prefix, segment.text)
+            last_message_index = len(messages) - 1
+            for message_index, message in enumerate(messages):
+                is_final_message = index == total and message_index == last_message_index
                 await send_html_text(
                     update,
                     context,
                     message,
                     reply_to_message_id=self._take_reply_to_message_id(reply_state),
+                    reply_markup=reply_options_markup if is_final_message else None,
                 )
+
+    def _reply_options_keyboard(self, token: str, options: tuple[str, ...]) -> InlineKeyboardMarkup:
+        buttons = [
+            InlineKeyboardButton(option[:60], callback_data=f"agentopt:{token}:{index}")
+            for index, option in enumerate(options)
+        ]
+        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+        return InlineKeyboardMarkup(rows)
 
     def _chunk_assistant_prose(self, title_prefix: str, text: str) -> list[str]:
         normalized = text.strip()

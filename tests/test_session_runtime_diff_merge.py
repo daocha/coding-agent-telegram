@@ -1,5 +1,5 @@
 from coding_agent_telegram.diff_utils import FileDiff, TEXTUAL_DIFF_UNAVAILABLE
-from coding_agent_telegram.session_runtime import SessionRuntime
+from coding_agent_telegram.session_runtime import SessionRuntime, _detect_reply_options
 
 
 def _runtime() -> SessionRuntime:
@@ -10,6 +10,7 @@ def _runtime() -> SessionRuntime:
         bot_id="bot-a",
         git=None,
         run_with_typing=None,
+        register_reply_options=None,
     )
 
 
@@ -113,3 +114,44 @@ def test_merge_snapshot_diffs_handles_empty_inputs():
     runtime = _runtime()
     merged = runtime._merge_snapshot_diffs([], {})
     assert merged == []
+
+
+# ---------------------------------------------------------------------------
+# _detect_reply_options
+# ---------------------------------------------------------------------------
+
+
+def test_detect_reply_options_finds_numbered_choices_with_question_cue():
+    text = (
+        "I found two ways to fix this. Which approach would you like me to take?\n"
+        "1. Patch the validator directly\n"
+        "2. Rewrite the parser"
+    )
+    assert _detect_reply_options(text) == ("Patch the validator directly", "Rewrite the parser")
+
+
+def test_detect_reply_options_ignores_plain_numbered_list_without_question_cue():
+    text = "Here is what I changed:\n1. Updated the validator\n2. Added a regression test"
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_ignores_question_without_option_list():
+    text = "Should I proceed with these changes? Let me know and I'll continue."
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_ignores_single_option_line():
+    text = "Which approach would you like me to take?\n1. Patch the validator directly"
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_caps_at_max_options():
+    lines = [f"{i}. Option {i}" for i in range(1, 10)]
+    text = "Which one do you want?\n" + "\n".join(lines)
+    options = _detect_reply_options(text)
+    assert len(options) == 6
+    assert options[0] == "Option 1"
+
+
+def test_detect_reply_options_returns_empty_for_blank_text():
+    assert _detect_reply_options("   ") == ()

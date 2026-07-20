@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from telegram import Update
+from telegram import InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
@@ -87,6 +87,7 @@ async def send_text(
     text: str,
     *,
     reply_to_message_id: Optional[int] = None,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
 ) -> None:
     if update.effective_chat is None:
         return
@@ -100,12 +101,14 @@ async def send_text(
         resolved_reply_to_message_id,
         text,
     )
+    last_index = len(chunks) - 1
     for index, chunk in enumerate(chunks):
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=html.escape(chunk),
             parse_mode=ParseMode.HTML,
             reply_to_message_id=resolved_reply_to_message_id if index == 0 else None,
+            reply_markup=reply_markup if index == last_index else None,
         )
 
 
@@ -138,6 +141,7 @@ async def send_html_text(
     text: str,
     *,
     reply_to_message_id: Optional[int] = None,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
 ) -> None:
     if update.effective_chat is None:
         return
@@ -150,7 +154,13 @@ async def send_html_text(
         text,
     )
     if len(text) > max_length:
-        await send_text(update, context, _strip_html_tags(text), reply_to_message_id=reply_to_message_id)
+        await send_text(
+            update,
+            context,
+            _strip_html_tags(text),
+            reply_to_message_id=reply_to_message_id,
+            reply_markup=reply_markup,
+        )
         return
     try:
         await context.bot.send_message(
@@ -158,11 +168,18 @@ async def send_html_text(
             text=text,
             parse_mode=ParseMode.HTML,
             reply_to_message_id=_default_reply_to_message_id(update, reply_to_message_id),
+            reply_markup=reply_markup,
         )
     except BadRequest as exc:
         if "Can't parse entities" not in str(exc):
             raise
-        await send_text(update, context, _strip_html_tags(text), reply_to_message_id=reply_to_message_id)
+        await send_text(
+            update,
+            context,
+            _strip_html_tags(text),
+            reply_to_message_id=reply_to_message_id,
+            reply_markup=reply_markup,
+        )
 
 
 def markdownish_to_html(text: str) -> str:
