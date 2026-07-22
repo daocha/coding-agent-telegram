@@ -85,7 +85,13 @@ def _detect_reply_options(text: str) -> tuple[str, ...]:
     for line in tail_lines:
         match = _OPTION_LINE_RE.match(line)
         if match:
-            options.append(match.group(1).strip())
+            label = match.group(1).strip()
+            if label.endswith("?"):
+                # Each line is its own question (e.g. "1. Should I use A or B?"),
+                # not a choice for one decision — bail out rather than offering
+                # buttons that would resend a question as if it were an answer.
+                return ()
+            options.append(label)
 
     if len(options) < 2:
         return ()
