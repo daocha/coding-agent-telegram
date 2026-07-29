@@ -1,6 +1,6 @@
 <div align="center">
   <img width="600" alt="Coding Agent Telegram" src="https://github.com/user-attachments/assets/aca106f8-0d64-40e9-94d9-2542da5dfde9" />
-  <h1>Coding Agent Telegram 🚀</h1>
+  <h1>Claude Code / Codex / Copilot Coding Agent Telegram 🚀</h1>
   <p>
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.md">English</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.de.md">Deutsch</a> |
