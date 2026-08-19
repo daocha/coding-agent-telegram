@@ -835,11 +835,17 @@ class MultiAgentRunner:
         )
         return args
 
-    def _claude_base(self, user_message: str) -> list[str]:
+    def _claude_base(self, user_message: str, *, for_session_creation: bool = False) -> list[str]:
         args = []
         if self.claude_model:
             args.extend(["--model", self.claude_model])
-        if self.claude_permission_mode:
+        # Session creation only primes the CLI to hand back a session ID, so it runs
+        # read-only. Without this the priming prompt inherits full autopilot
+        # permissions and the agent may act on it (e.g. creating a git branch named
+        # after the session) behind the bot's back.
+        if for_session_creation:
+            args.extend(["--permission-mode", "plan"])
+        elif self.claude_permission_mode:
             args.extend(["--permission-mode", self.claude_permission_mode])
         if self.claude_allowed_tools:
             args.extend(["--allowedTools", ",".join(self.claude_allowed_tools)])
@@ -864,9 +870,16 @@ class MultiAgentRunner:
         *,
         skip_git_repo_check: bool = False,
         image_paths: Sequence[Path] = (),
+        priming_only: bool = False,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
         on_progress: Optional[Callable[[AgentProgressInfo], None]] = None,
     ) -> AgentRunResult:
+        """Create a session.
+
+        ``priming_only`` marks calls whose prompt exists solely to make the CLI hand
+        back a session ID; those run read-only so the throwaway prompt cannot be acted
+        on. Callers that pass a real user request must leave it False.
+        """
         if provider == "codex":
             args = [
                 self.codex_bin,
@@ -894,7 +907,7 @@ class MultiAgentRunner:
                 on_progress=on_progress,
             )
         elif provider == "claude":
-            args = [self.claude_bin, *self._claude_base(user_message)]
+            args = [self.claude_bin, *self._claude_base(user_message, for_session_creation=priming_only)]
             return self._run(
                 args,
                 provider="claude",

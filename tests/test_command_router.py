@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 from coding_agent_telegram.agent_runner import AgentProgressInfo, AgentRunResult, AgentStallInfo
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
+from coding_agent_telegram.router.session_lifecycle_commands import SESSION_PRIMING_PROMPT
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.speech_to_text import SpeechToTextError
@@ -32,6 +33,7 @@ class DummyRunner:
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        priming_only=False,
         on_stall=None,
         on_progress=None,
     ):
@@ -128,6 +130,7 @@ class CompactingRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        priming_only=False,
         on_stall=None,
         on_progress=None,
     ):
@@ -1187,6 +1190,7 @@ class StallingRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        priming_only=False,
         on_stall=None,
         on_progress=None,
     ):
@@ -1565,7 +1569,7 @@ def test_new_without_name_uses_new_session_as_default_name(tmp_path: Path):
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
     assert "Session created successfully: sess_abc123" in bot.messages[-1][1]
-    assert runner.create_calls[-1]["user_message"] == "Create session: new session"
+    assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
 
 
 def test_new_without_name_ignores_existing_new_session_labels(tmp_path: Path):
@@ -1610,7 +1614,7 @@ def test_plain_text_create_session_new_session_uses_unnamed_flow(tmp_path: Path)
 
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
-    assert runner.create_calls[-1]["user_message"] == "Create session: new session"
+    assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
 
 
 def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path):
@@ -1632,7 +1636,7 @@ def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path)
 
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "release prep"
-    assert runner.create_calls[-1]["user_message"] == "Create session: release prep"
+    assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
 
 
 def test_provider_command_sends_inline_buttons(tmp_path: Path):
@@ -8147,6 +8151,7 @@ class FailingCreateRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        priming_only=False,
         on_stall=None,
         on_progress=None,
     ):

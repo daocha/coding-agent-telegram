@@ -762,6 +762,63 @@ def test_claude_runner_ignores_image_paths_without_error(monkeypatch):
     assert result.success is True
 
 
+def test_claude_priming_session_creation_runs_read_only(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_permission_mode="bypassPermissions",
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "prime me", priming_only=True)
+
+    args = calls[0][0]
+    assert args[args.index("--permission-mode") + 1] == "plan"
+    assert "bypassPermissions" not in args
+
+
+def test_claude_session_creation_with_real_prompt_keeps_configured_permission_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_permission_mode="bypassPermissions",
+    )
+
+    # The replacement-session path passes the real user request here, so it must not
+    # be downgraded to read-only.
+    runner.create_session("claude", Path("/tmp/project"), "fix the bug")
+
+    args = calls[0][0]
+    assert args[args.index("--permission-mode") + 1] == "bypassPermissions"
+
+
+def test_claude_resume_keeps_configured_permission_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_permission_mode="bypassPermissions",
+    )
+
+    runner.resume_session("claude", "sess_abc", Path("/tmp/project"), "keep working")
+
+    args = calls[0][0]
+    assert args[args.index("--permission-mode") + 1] == "bypassPermissions"
+
+
 # ---------------------------------------------------------------------------
 # _validate_session_id
 # ---------------------------------------------------------------------------
