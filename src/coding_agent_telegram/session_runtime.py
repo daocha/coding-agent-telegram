@@ -510,6 +510,9 @@ class SessionRuntime:
             COMPACT_BOOTSTRAP_TEMPLATE.format(summary=compact_summary),
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            # Seeds context and returns a session ID only. The summary lists "next
+            # steps", which an autopilot agent would otherwise start executing here.
+            priming_only=True,
             stall_message=self._t(update, "runtime.replacement_session_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
