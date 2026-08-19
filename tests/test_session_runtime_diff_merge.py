@@ -155,3 +155,12 @@ def test_detect_reply_options_caps_at_max_options():
 
 def test_detect_reply_options_returns_empty_for_blank_text():
     assert _detect_reply_options("   ") == ()
+
+
+def test_detect_reply_options_ignores_multiple_independent_questions():
+    text = (
+        "I have a couple of questions before proceeding:\n"
+        "1. Should I use approach A or B for the caching layer?\n"
+        "2. Do you want unit tests included in this PR?"
+    )
+    assert _detect_reply_options(text) == ()
