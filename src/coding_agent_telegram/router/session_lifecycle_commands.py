@@ -11,6 +11,15 @@ from coding_agent_telegram.telegram_sender import send_text
 from .base import logger, require_allowed_chat
 
 
+# Sent only to make the CLI open a session and return its ID. Kept explicitly inert:
+# an instruction like "Create session: <name>" reads as a real task to an autonomous
+# agent, which would then act on it (e.g. creating a git branch named after the
+# session) without the bot knowing.
+SESSION_PRIMING_PROMPT = (
+    "Reply with exactly: ready. Do not make any changes, run any commands, or use any tools."
+)
+
+
 class SessionLifecycleCommandMixin:
     _CREATE_SESSION_TEXT_RE = re.compile(r"^\s*create\s+session\s*:\s*(.*?)\s*$", re.IGNORECASE)
 
@@ -137,9 +146,10 @@ class SessionLifecycleCommandMixin:
             self.deps.agent_runner.create_session,
             provider,
             project_path,
-            f"Create session: {creation_label}",
+            SESSION_PRIMING_PROMPT,
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.runtime.should_skip_git_repo_check(project_folder),
+            priming_only=True,
             stall_message=self._t(update, "runtime.replacement_session_stall"),
         )
 
