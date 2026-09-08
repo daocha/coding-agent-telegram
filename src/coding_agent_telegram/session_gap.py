@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from coding_agent_telegram.native_claude_sessions import claude_projects_root
+from coding_agent_telegram.native_codex_sessions import codex_state_db_path
 from coding_agent_telegram.native_copilot_sessions import copilot_session_roots
 
 
@@ -44,7 +45,7 @@ def _claude_last_activity(session_id: str) -> Optional[datetime]:
 
 
 def _codex_last_activity(session_id: str) -> Optional[datetime]:
-    db_path = Path.home() / ".codex" / "state_5.sqlite"
+    db_path = codex_state_db_path()
     if not db_path.exists():
         return None
     try:

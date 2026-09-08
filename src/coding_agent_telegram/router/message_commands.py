@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import tempfile
 from pathlib import Path
@@ -28,6 +29,7 @@ class MessageCommandMixin:
         user_message: str,
         *,
         suppress_working_notice: bool = False,
+        skip_long_gap_check: bool = False,
     ) -> None:
         chat_id = update.effective_chat.id
         pending_action = self._pending_action(chat_id)
@@ -59,7 +61,9 @@ class MessageCommandMixin:
             if should_prioritize_existing_queue:
                 await self._drain_chat_message_queue(chat_id, context)
             return
-        if await self._maybe_warn_long_gap(update, context, user_message, suppress_working_notice):
+        if not skip_long_gap_check and await self._maybe_warn_long_gap(
+            update, context, user_message, suppress_working_notice
+        ):
             return
         logger.info("Processing user message immediately for chat %s. Preview: %.120r", chat_id, user_message)
         self._store_pending_action(
@@ -105,12 +109,14 @@ class MessageCommandMixin:
         if active_id is None or session is None:
             return False
 
-        provider = str(session.get("provider") or "codex").strip().lower()
+        provider = str(session.get("provider") or "codex").strip().lower() or "codex"
         threshold_seconds = self._long_gap_threshold_seconds(provider)
         if threshold_seconds <= 0:
             return False
 
-        gap_seconds = gap_seconds_since_last_activity(provider, active_id)
+        # gap_seconds_since_last_activity does blocking filesystem/sqlite I/O; keep it
+        # off the event loop so one chat's check can't stall every other chat's bot.
+        gap_seconds = await asyncio.to_thread(gap_seconds_since_last_activity, provider, active_id)
         if gap_seconds is None or gap_seconds < threshold_seconds:
             return False
 
@@ -176,17 +182,31 @@ class MessageCommandMixin:
         if action == "longgap:proceed":
             await query.edit_message_text(self._t(update, "runtime.long_gap_proceeding"))
             await self._process_user_message(
-                update, context, user_message, suppress_working_notice=suppress_working_notice
+                update,
+                context,
+                user_message,
+                suppress_working_notice=suppress_working_notice,
+                skip_long_gap_check=True,
             )
             return
 
         if action == "longgap:compact":
             await query.edit_message_text(self._t(update, "runtime.long_gap_compacting"))
-            compact_result = await self.runtime.compact_active_session(update, context)
-            if compact_result is None or not compact_result.success:
-                return
+            # Whether compaction succeeds, fails, or can't start because the workspace is
+            # busy, still replay the held message rather than silently dropping it:
+            # - success: runs on the new, freshly-compacted session.
+            # - failure: compact_active_session already reported the error; falling
+            #   through still delivers the user's message instead of losing it.
+            # - busy (returns None, no message sent by compact_active_session): the
+            #   normal queueing path in _process_user_message picks it up and tells
+            #   the user it was queued.
+            await self.runtime.compact_active_session(update, context)
             await self._process_user_message(
-                update, context, user_message, suppress_working_notice=suppress_working_notice
+                update,
+                context,
+                user_message,
+                suppress_working_notice=suppress_working_notice,
+                skip_long_gap_check=True,
             )
 
     @require_allowed_chat(answer_callback=True)

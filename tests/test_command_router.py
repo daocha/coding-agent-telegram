@@ -3910,6 +3910,18 @@ def test_long_gap_proceed_anyway_dispatches_held_message(tmp_path: Path, monkeyp
     cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.create_session("bot-a", 123, "sess_idle", "idle-session", "backend", "codex")
+    # Deliberately still idle past the threshold: this reproduces the "Proceed anyway"
+    # regression where replaying the message re-triggered _maybe_warn_long_gap because
+    # the native transcript's mtime doesn't move until the agent actually runs a turn.
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle",
+        cwd=backend,
+        title="idle-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+    )
     store.set_pending_action(
         "bot-a",
         123,
@@ -3940,6 +3952,57 @@ def test_long_gap_proceed_anyway_dispatches_held_message(tmp_path: Path, monkeyp
     assert edited == ["Proceeding on the existing session..."]
     assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
     assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_compact_failure_still_dispatches_held_message(tmp_path: Path):
+    """If compaction fails (or the workspace is busy), the held message must still be
+    delivered instead of silently dropped -- it should fall back to running on the
+    original session rather than vanishing with no trace."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    # Plain DummyRunner's resume_session returns an empty assistant_text, so the
+    # compact summary step fails with "no usable handoff summary" -- exercising the
+    # compaction-failed path without a dedicated failing runner.
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {"kind": "long_gap_confirm", "user_message": "keep going", "suppress_working_notice": False},
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:compact", answer=None, edit_message_text=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(update, context))
+
+    # No new session was created since compaction failed before that step.
+    assert runner.create_calls == []
+    # The compact summary attempt happened, then -- instead of being dropped -- the
+    # original held message was dispatched on the still-current session.
+    assert [call["user_message"] for call in runner.resume_calls][-1] == "keep going"
+    assert runner.resume_calls[-1]["session_id"] == "sess_current"
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_current"
+    assert state.get("pending_action") is None
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):

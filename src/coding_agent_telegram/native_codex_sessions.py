@@ -7,8 +7,12 @@ from coding_agent_telegram.native_session_types import NativeSessionRecord
 from coding_agent_telegram.native_session_utils import iso_from_unix, normalize_init_text, path_matches_project
 
 
+def codex_state_db_path() -> Path:
+    return Path.home() / ".codex" / "state_5.sqlite"
+
+
 def discover_codex_sessions(project_path: Path, project_folder: str) -> list[NativeSessionRecord]:
-    db_path = Path.home() / ".codex" / "state_5.sqlite"
+    db_path = codex_state_db_path()
     if not db_path.exists():
         return []
     try:

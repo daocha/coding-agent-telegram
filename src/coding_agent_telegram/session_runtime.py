@@ -244,7 +244,8 @@ class SessionRuntime:
         reply_state["reply_to_message_id"] = None
         return reply_to_message_id
 
-    def _next_rotated_session_name(self, chat_id: int, base_name: str) -> str:
+    def _next_unique_session_name(self, chat_id: int, base_name: str, *, suffix_template: str) -> str:
+        """Find the first unused name of the form suffix_template.format(base=base_name, n=1), n=2, ...)."""
         existing = {
             data.get("name", "").strip().lower()
             for data in self.store.list_sessions(self.bot_id, chat_id).values()
@@ -252,27 +253,20 @@ class SessionRuntime:
         }
         suffix = 1
         while True:
-            candidate = f"{base_name}-{suffix}"
+            candidate = suffix_template.format(base=base_name, n=suffix)
             if candidate.lower() not in existing:
                 return candidate
             suffix += 1
+
+    def _next_rotated_session_name(self, chat_id: int, base_name: str) -> str:
+        return self._next_unique_session_name(chat_id, base_name, suffix_template="{base}-{n}")
 
     def _next_resume_session_name(self, chat_id: int, base_name: str) -> str:
         """Like ``_next_rotated_session_name``, but for compaction: strips any existing
         ``-resumeN`` suffix first so repeated compaction produces "name-resume1",
         "name-resume2", ... instead of "name-resume1-resume1-resume1"."""
         stripped_base_name = _RESUME_SUFFIX_RE.sub("", base_name)
-        existing = {
-            data.get("name", "").strip().lower()
-            for data in self.store.list_sessions(self.bot_id, chat_id).values()
-            if data.get("name", "").strip()
-        }
-        suffix = 1
-        while True:
-            candidate = f"{stripped_base_name}-resume{suffix}"
-            if candidate.lower() not in existing:
-                return candidate
-            suffix += 1
+        return self._next_unique_session_name(chat_id, stripped_base_name, suffix_template="{base}-resume{n}")
 
     def should_skip_git_repo_check(self, project_folder: str) -> bool:
         return self.cfg.codex_skip_git_repo_check or self.store.is_project_trusted(project_folder)
