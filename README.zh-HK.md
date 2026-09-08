@@ -435,6 +435,22 @@ bot 目前接受：
     <td>單次 代理執行 的硬性 timeout。預設：<code>0</code>（停用）。</td>
   </tr>
   <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>在恢復一個已閒置一段時間的 session 之前，提醒使用者 provider 的 prompt cache 好大機會已經過期，恢復可能會消耗遠多於平時的 token —— 並提供按鈕讓你揀先 compact 定係直接繼續。預設：<code>true</code>。詳見下方 FAQ。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Claude Code session 觸發呢個警告前嘅閒置門檻（秒）。預設：<code>3600</code>（1 小時，對應 Claude Code 嘅擴充 prompt-cache 保留時間）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Codex session 觸發呢個警告前嘅閒置門檻（秒）。預設：<code>600</code>（10 分鐘；因為 Codex 嘅 cache 保留時間冇咁精確嘅官方說明，所以取值偏保守）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Copilot session 觸發呢個警告前嘅閒置門檻（秒）。預設：<code>600</code>（10 分鐘；同 Codex 一樣嘅考量）。</td>
+  </tr>
+  <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>建立每次執行的前後 快照 diff 時，bot 會以文字讀取的最大檔案大小。預設：<code>200000</code>。</td>
   </tr>
@@ -683,6 +699,45 @@ log 會**同時寫入 stdout 和輪轉 日誌檔案**，路徑如下：
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ 常見問題 / 故障排查
+
+<details>
+<summary><b>點解喺普通 terminal 入面跑 <code>claude --resume</code>，睇唔到由 Telegram 建立嘅 session？</b></summary>
+
+呢個係 Claude Code CLI 嘅預期行為，唔係呢個 app 嘅 bug。
+
+呢個 bot 建立嘅 session 係透過 Claude Code 嘅 headless `-p`/print 模式運行嘅。Claude Code 會喺 transcript 入面將呢種方式啟動嘅 session 標記為 `entrypoint: "sdk-cli"`，相對於你直接喺 terminal 打 `claude` 開始嘅 session 嘅 `entrypoint: "cli"`。冇指定 session ID 嘅互動式 `claude --resume` 選擇器淨係會列出 `entrypoint` 係 `cli` 嘅 session —— 佢刻意隱藏 headless / 由 SDK 驅動嘅執行，將呢啲當成自動化輸出，而唔係打算俾人手動接續嘅對話。
+
+session 資料本身冇遺失或者唔一樣 —— 佢係一個完全正常、可以完整恢復嘅 Claude Code session，儲存喺 `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`。一旦你有咗 ID，就可以直接恢復：
+
+```bash
+claude --resume <session-id>
+```
+
+呢個正正就係點解呢個 app 會自帶一套 session 搜尋機制（俾 `/switch` 用）而唔係靠原生選擇器 —— 佢會直接掃描 JSONL 檔案，並按 project path 嚟配對，所以即使喺普通嘅 `claude --resume` 入面永遠都唔會出現，Telegram 建立嘅 session 都會喺呢度顯示出嚟。
+
+Codex 同 Copilot 喺佢哋自己嘅 resume/list 指令入面並冇做呢種互動式同 headless 嘅區分，所以呢兩個 provider 嘅 session 喺普通 terminal 都會照樣顯示。
+</details>
+
+<details>
+<summary><b>呢個 app 會唔會比直接用 Claude Code terminal 消耗更多 token？</b></summary>
+
+唔係因為每次調用本身有固有嘅額外開銷差異 —— headless（`-p`）同互動式 Claude Code 用緊嘅係同一套底層協議同計價方式。但實際使用上，24/7 嘅 Telegram 使用方式的確可能會比典型嘅 terminal 使用方式消耗明顯更多 token，原因有兩個會互相疊加：
+
+- **session 可能會無限增長。** 由於 bot 會好方便噉喺數小時甚至數日內持續恢復同一個 session，如果你從來冇轉換過佢，一個 session 可能會累積數百個回合同數 MB 嘅 transcript。喺互動式 terminal 入面，你通常會更自然噉完成一個任務之後下次重新開始，context 因此會更容易保持細細哋。
+- **Telegram 訊息之間嘅閒置間隔會令 prompt cache 過期。** Claude 嘅 prompt cache TTL 好短。如果你喺呢個 window 入面回覆，之後嘅回合就係平嘅 cache read。如果間隔好耐（例如你瞓咗一覺，第二朝先回覆），下一條訊息就要將*全部*已經累積嘅 context 當成貴好多嘅 cache write 從頭重新處理一次 —— 而呢個成本仲會隨住 session 當時已有嘅大細而增加。呢個就係點解即使未到「繁忙」時段，你當日發出第一條訊息嗰陣用量都可能會爆升。
+
+**紓緩方法：** 對長期使用嘅 session 定期跑 `/compact`（呢個 app 已經支援作為 Telegram 指令），而唔係俾一個 session 無限期噉繼續行落去，尤其係當你發現佢已經閒置咗好耐嘅時候。為冇關連嘅工作開一個新嘅 `/new` session，都有助於將 context —— 同成本 —— 控制喺合理範圍內。
+
+而家 app 都會自動幫你做埋呢步：喺恢復一個閒置時間超過各 provider 門檻（`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`，預設 Claude Code 係 1 小時，Codex/Copilot 係 10 分鐘）嘅 session 之前，佢會先扣住你嘅訊息並且問：
+
+> ⏳ 呢個 session 已經閒置咗 {gap}。而家恢復好大機會會將成段對話從頭重新處理一次（provider 嘅回覆 cache 好大機會已經過期），可能會比平時多消耗唔少 token。要唔要先 compact 嚟開一個更細、更慳嘅 session，定係直接繼續？
+>
+> [✅ 先 compact] [⚠️ 直接繼續]
+
+揀**先 compact**會先總結番舊 session，再根據嗰個摘要開一個新 session，然之後喺新 session 度繼續處理你嘅訊息 —— 新 session 會用舊 session 個名加上遞增嘅 `-resumeN` 後綴嚟命名（例如 `fix-bug` → `fix-bug-resume1` → 下次 compact 就變成 `fix-bug-resume2`），噉樣你喺 `/switch` 入面都仲可以將佢同原本嘅 session 分辨出嚟。揀**直接繼續**就淨係會好似平時噉喺現有嘅 session 度繼續。可以用 `LONG_GAP_WARNING_ENABLED=false` 嚟關閉成個檢查機制。
+</details>
 
 ## 📌 備註
 

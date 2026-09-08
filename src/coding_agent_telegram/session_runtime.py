@@ -59,6 +59,10 @@ COMPACT_BOOTSTRAP_TEMPLATE = (
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
 
+# Matches a trailing "-resumeN" suffix so re-compacting an already-compacted
+# session rotates the number instead of stacking suffixes.
+_RESUME_SUFFIX_RE = re.compile(r"-resume\d+$", re.IGNORECASE)
+
 # Matches a numbered/lettered list line, e.g. "1. Do X" or "a) Do Y".
 _OPTION_LINE_RE = re.compile(r"^\s*(?:[0-9]{1,2}[.)]|[A-Za-z][.)])\s+(.{2,140}?)\s*$")
 # Requires an explicit "which one do you want" style cue near the option list,
@@ -249,6 +253,23 @@ class SessionRuntime:
         suffix = 1
         while True:
             candidate = f"{base_name}-{suffix}"
+            if candidate.lower() not in existing:
+                return candidate
+            suffix += 1
+
+    def _next_resume_session_name(self, chat_id: int, base_name: str) -> str:
+        """Like ``_next_rotated_session_name``, but for compaction: strips any existing
+        ``-resumeN`` suffix first so repeated compaction produces "name-resume1",
+        "name-resume2", ... instead of "name-resume1-resume1-resume1"."""
+        stripped_base_name = _RESUME_SUFFIX_RE.sub("", base_name)
+        existing = {
+            data.get("name", "").strip().lower()
+            for data in self.store.list_sessions(self.bot_id, chat_id).values()
+            if data.get("name", "").strip()
+        }
+        suffix = 1
+        while True:
+            candidate = f"{stripped_base_name}-resume{suffix}"
             if candidate.lower() not in existing:
                 return candidate
             suffix += 1
@@ -535,7 +556,7 @@ class SessionRuntime:
             await send_text(update, context, error_text)
             return create_result
 
-        switched_session_name = self._next_rotated_session_name(chat_id, session_name)
+        switched_session_name = self._next_resume_session_name(chat_id, session_name)
         self.store.create_session(
             self.bot_id,
             chat_id,

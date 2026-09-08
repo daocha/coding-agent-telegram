@@ -437,6 +437,22 @@ Der Bot akzeptiert derzeit:
     <td>Hartes Zeitlimit für einen einzelnen Agentenlauf. Standard: <code>0</code> (deaktiviert).</td>
   </tr>
   <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>Warnt vor dem Fortsetzen einer länger inaktiven Sitzung, dass der Prompt-Cache des Anbieters wahrscheinlich abgelaufen ist und das Fortsetzen deutlich mehr Tokens verbrauchen kann — mit Schaltflächen zum vorherigen Komprimieren oder trotzdem Fortsetzen. Standard: <code>true</code>. Siehe FAQ weiter unten.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Claude-Code-Sitzungen ausgelöst wird. Standard: <code>3600</code> (1 Stunde, entsprechend dem erweiterten Prompt-Cache-Fenster von Claude Code).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Codex-Sitzungen ausgelöst wird. Standard: <code>600</code> (10 Minuten; konservativ, da Codex' Cache-Fenster nicht so genau dokumentiert ist).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Copilot-Sitzungen ausgelöst wird. Standard: <code>600</code> (10 Minuten; gleicher Vorbehalt wie bei Codex).</td>
+  </tr>
+  <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>Maximale Dateigröße, die der Bot als Text liest, wenn er Vorher/Nachher-Snapshots für Run-Diffs erstellt. Standard: <code>200000</code>.</td>
   </tr>
@@ -685,6 +701,45 @@ Paketversionen werden aus Git-Tags abgeleitet.
 - TestPyPI/Testen: `v2026.3.26.dev1`
 - PyPI-Prerelease: `v2026.3.26rc1`
 - PyPI-Stable: `v2026.3.26`
+
+## ❓ FAQ / Fehlerbehebung
+
+<details>
+<summary><b>Warum zeigt <code>claude --resume</code> in einem normalen Terminal keine von Telegram erstellten Sitzungen an?</b></summary>
+
+Das ist erwartetes Verhalten der Claude-Code-CLI, kein Fehler in dieser App.
+
+Von diesem Bot erstellte Sitzungen laufen über den Headless-Modus `-p`/print von Claude Code. Claude Code markiert jede so gestartete Sitzung im Transkript mit `entrypoint: "sdk-cli"`, im Gegensatz zu `entrypoint: "cli"` für eine Sitzung, die du direkt im Terminal durch Eingabe von `claude` startest. Der interaktive `claude --resume`-Picker (ohne Sitzungs-ID) listet nur Sitzungen mit `cli`-Entrypoint auf — er blendet Headless-/SDK-gesteuerte Läufe bewusst aus und behandelt sie als Automatisierungs-Output statt als Unterhaltungen, die von Hand fortgesetzt werden sollen.
+
+Die Sitzungsdaten selbst sind weder verloren noch anders — es handelt sich um eine ganz normale, vollständig fortsetzbare Claude-Code-Sitzung, gespeichert unter `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`. Sobald du die ID hast, kannst du sie direkt fortsetzen:
+
+```bash
+claude --resume <session-id>
+```
+
+Genau deshalb bringt diese App eine eigene Sitzungserkennung mit (verwendet von `/switch`), statt sich auf den nativen Picker zu verlassen — sie durchsucht die JSONL-Dateien direkt und gleicht sie über den Projektpfad ab, sodass von Telegram erstellte Sitzungen dort auftauchen, obwohl sie in einem einfachen `claude --resume` nie erscheinen.
+
+Codex und Copilot machen diesen Unterschied zwischen interaktiv und Headless in ihren eigenen Resume-/Listenbefehlen nicht, weshalb Sitzungen dieser Anbieter in einem normalen Terminal weiterhin ganz normal auftauchen.
+</details>
+
+<details>
+<summary><b>Verbraucht diese App mehr Tokens als die direkte Nutzung des Claude-Code-Terminals?</b></summary>
+
+Nicht wegen eines grundsätzlichen Unterschieds im Overhead pro Aufruf — Headless (`-p`) und interaktives Claude Code nutzen dasselbe zugrunde liegende Protokoll und dieselbe Preisgestaltung. In der Praxis kann 24/7-Telegram-Nutzung aber spürbar mehr Tokens verbrauchen als typische Terminal-Nutzung, aus zwei sich verstärkenden Gründen:
+
+- **Sitzungen können unbegrenzt wachsen.** Da der Bot bequem dieselbe Sitzung über Stunden oder Tage hinweg fortsetzt, kann eine Sitzung Hunderte von Turns und Megabytes an Transkript ansammeln, wenn du sie nie rotierst. In einem interaktiven Terminal würdest du eher eine Aufgabe abschließen und beim nächsten Mal neu anfangen, wodurch der Kontext kleiner bleibt.
+- **Leerlaufphasen zwischen Telegram-Nachrichten lassen den Prompt-Cache ablaufen.** Claudes Prompt-Cache hat eine kurze TTL. Antwortest du innerhalb dieses Fensters, sind Folge-Turns günstige Cache-Reads. Gibt es eine lange Pause (z. B. du schläfst und antwortest erst am nächsten Morgen), muss der *gesamte* angesammelte Kontext bei deiner nächsten Nachricht als deutlich teurerer Cache-Write komplett neu verarbeitet werden — und diese Kosten wachsen mit der bisherigen Größe der Sitzung. Deshalb kann der Verbrauch genau dann in die Höhe schnellen, wenn du deine erste Nachricht des Tages schickst, sogar vor den „Hauptzeiten“.
+
+**Abhilfe:** Führe bei langlebigen Sitzungen regelmäßig `/compact` aus (dieser Telegram-Befehl wird von der App unterstützt), statt eine Sitzung unbegrenzt weiterlaufen zu lassen — besonders, wenn sie länger im Leerlauf war. Auch eine neue `/new`-Sitzung für nicht zusammenhängende Arbeit hilft, Kontext — und Kosten — begrenzt zu halten.
+
+Die App tut das inzwischen auch automatisch: Bevor sie eine Sitzung fortsetzt, die länger als ein anbieterabhängiger Schwellenwert (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, standardmäßig 1 Stunde für Claude Code, 10 Minuten für Codex/Copilot) im Leerlauf war, hält sie deine Nachricht zurück und fragt:
+
+> ⏳ Diese Sitzung war {gap} im Leerlauf. Sie jetzt fortzusetzen, verarbeitet die gesamte Unterhaltung wahrscheinlich komplett neu (der Antwort-Cache des Anbieters ist vermutlich abgelaufen), was deutlich mehr Tokens als üblich verbrauchen kann. Erst komprimieren, um eine kleinere, günstigere Sitzung zu starten, oder trotzdem fortsetzen?
+>
+> [✅ Erst komprimieren] [⚠️ Trotzdem fortsetzen]
+
+Wählst du **Erst komprimieren**, wird die Sitzung zusammengefasst, eine neue Sitzung aus dieser Zusammenfassung gestartet und deine Nachricht anschließend auf der neuen Sitzung fortgesetzt — benannt nach der alten Sitzung mit einem fortlaufenden `-resumeN`-Suffix (z. B. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bei der nächsten Komprimierung), damit du sie in `/switch` weiterhin von der ursprünglichen unterscheiden kannst. Wählst du **Trotzdem fortsetzen**, wird ganz normal auf der bestehenden Sitzung weitergemacht. Die gesamte Prüfung lässt sich mit `LONG_GAP_WARNING_ENABLED=false` deaktivieren.
+</details>
 
 ## 📌 Hinweise
 

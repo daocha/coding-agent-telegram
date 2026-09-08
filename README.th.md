@@ -433,6 +433,22 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>ฮาร์ดไทม์เอาต์สำหรับ การรันของเอเจนต์ หนึ่งครั้ง ค่าเริ่มต้น: <code>0</code> (ปิดใช้งาน)</td>
   </tr>
   <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>ก่อน resume session ที่ idle มาสักพัก จะเตือนว่า prompt cache ของ provider น่าจะหมดอายุแล้ว และการ resume อาจกิน token มากกว่าปกติมาก — พร้อมปุ่มให้เลือก compact ก่อน หรือดำเนินการต่อเลย ค่าเริ่มต้น: <code>true</code> ดู FAQ ด้านล่าง</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Claude Code ค่าเริ่มต้น: <code>3600</code> (1 ชั่วโมง ตรงกับช่วง extended prompt-cache ของ Claude Code)</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Codex ค่าเริ่มต้น: <code>600</code> (10 นาที ตั้งไว้แบบระมัดระวังเพราะช่วง cache ของ Codex ไม่ได้มีเอกสารระบุไว้ชัดเจนขนาดนั้น)</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Copilot ค่าเริ่มต้น: <code>600</code> (10 นาที เหตุผลเดียวกับ Codex)</td>
+  </tr>
+  <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>ขนาดไฟล์สูงสุดที่บอตจะอ่านเป็นข้อความเพื่อสร้าง สแนปช็อตก่อนและหลังการรัน สำหรับ diff ของแต่ละ run ค่าเริ่มต้น: <code>200000</code></td>
   </tr>
@@ -681,6 +697,45 @@ log จะถูกเขียน **ทั้งไปที่ stdout แล�
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ FAQ / การแก้ปัญหา
+
+<details>
+<summary><b>ทำไม <code>claude --resume</code> ใน terminal ปกติถึงไม่แสดง session ที่สร้างจาก Telegram?</b></summary>
+
+นี่คือพฤติกรรมปกติของ Claude Code CLI ไม่ใช่บั๊กของแอปนี้
+
+session ที่สร้างโดย bot นี้จะรันผ่านโหมด headless `-p`/print ของ Claude Code ซึ่ง Claude Code จะติดแท็ก session ที่เริ่มด้วยวิธีนี้ใน transcript ว่า `entrypoint: "sdk-cli"` ต่างจาก `entrypoint: "cli"` ของ session ที่คุณเริ่มโดยพิมพ์ `claude` ตรงๆ ใน terminal ตัวเลือก `claude --resume` แบบ interactive (ไม่ระบุ session ID) จะแสดงเฉพาะ session ที่มี entrypoint เป็น `cli` เท่านั้น — มันซ่อน run ที่มาจาก headless/SDK โดยตั้งใจ เพราะถือว่าเป็น output ของระบบอัตโนมัติ ไม่ใช่บทสนทนาที่ตั้งใจให้กลับมาต่อด้วยมือ
+
+ข้อมูล session เองไม่ได้หายหรือแตกต่างไปแต่อย่างใด มันคือ session ของ Claude Code ปกติที่ resume ได้เต็มรูปแบบ เก็บอยู่ที่ `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl` เมื่อคุณมี ID แล้วก็ resume ได้โดยตรง:
+
+```bash
+claude --resume <session-id>
+```
+
+นี่คือเหตุผลที่แอปนี้มีระบบค้นหา session ของตัวเอง (ใช้โดย `/switch`) แทนที่จะพึ่ง picker แบบ native — มันสแกนไฟล์ JSONL โดยตรงและจับคู่ด้วย project path ทำให้ session ที่สร้างจาก Telegram ปรากฏที่นั่น แม้จะไม่เคยปรากฏใน `claude --resume` ธรรมดาเลยก็ตาม
+
+Codex และ Copilot ไม่ได้แยกความแตกต่างระหว่าง interactive กับ headless แบบนี้ในคำสั่ง resume/list ของตัวเอง จึงเป็นเหตุผลว่าทำไม session ของ provider เหล่านั้นยังคงแสดงตามปกติใน terminal ทั่วไป
+</details>
+
+<details>
+<summary><b>แอปนี้กิน token มากกว่าการใช้ terminal ของ Claude Code โดยตรงหรือไม่?</b></summary>
+
+ไม่ใช่เพราะ overhead ต่อการเรียกที่ต่างกันโดยพื้นฐาน — โหมด headless (`-p`) และ Claude Code แบบ interactive ใช้ protocol และโครงสร้างราคาเดียวกัน แต่ในทางปฏิบัติ การใช้งานผ่าน Telegram แบบ 24/7 สามารถกิน token มากกว่าการใช้งานผ่าน terminal ทั่วไปอย่างเห็นได้ชัด ด้วยเหตุผลสองข้อที่ส่งผลซ้อนกัน:
+
+- **session สามารถโตได้ไม่จำกัด** เพราะ bot จะ resume session เดิมต่อไปเรื่อยๆ ข้ามชั่วโมงหรือข้ามวันอย่างสะดวก session หนึ่งจึงสะสม turn เป็นร้อยและ transcript เป็นเมกะไบต์ได้ ถ้าไม่เคย rotate เลย ใน terminal แบบ interactive คุณมักจะทำงานเสร็จแล้วเริ่มใหม่ในครั้งถัดไปโดยธรรมชาติมากกว่า ทำให้ context เล็กกว่า
+- **ช่วง idle ระหว่างข้อความ Telegram ทำให้ prompt cache หมดอายุ** prompt cache ของ Claude มี TTL สั้น ถ้าคุณตอบภายใน window นั้น turn ถัดไปจะเป็น cache read ที่ถูก แต่ถ้ามีช่วงห่างนาน (เช่น คุณไปนอนแล้วตอบตอนเช้า) context ที่สะสมไว้ *ทั้งหมด* จะต้องถูกประมวลผลใหม่ตั้งแต่ต้นในข้อความถัดไปในรูปแบบ cache write ที่แพงกว่ามาก — และค่าใช้จ่ายนี้จะยิ่งสูงขึ้นตามขนาดของ session ที่สะสมมา นี่คือเหตุผลที่ usage อาจพุ่งขึ้นทันทีที่คุณส่งข้อความแรกของวัน แม้จะยังไม่ถึงช่วง "peak" ก็ตาม
+
+**วิธีบรรเทา:** รัน `/compact` เป็นระยะกับ session ที่ใช้งานยาวนาน (แอปนี้รองรับเป็นคำสั่ง Telegram) แทนที่จะปล่อยให้ session รันไปเรื่อยๆ ไม่มีที่สิ้นสุด โดยเฉพาะถ้าสังเกตว่ามัน idle มานาน การเริ่ม session ใหม่ด้วย `/new` สำหรับงานที่ไม่เกี่ยวข้องกันก็ช่วยควบคุม context — และค่าใช้จ่าย — ให้อยู่ในขอบเขตได้เช่นกัน
+
+ตอนนี้แอปทำสิ่งนี้ให้โดยอัตโนมัติด้วย: ก่อนจะ resume session ที่ idle เกิน threshold ของแต่ละ provider (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS` ค่าเริ่มต้นคือ 1 ชั่วโมงสำหรับ Claude Code และ 10 นาทีสำหรับ Codex/Copilot) แอปจะกันข้อความของคุณไว้ก่อนแล้วถามว่า:
+
+> ⏳ session นี้ idle มาแล้ว {gap} การ resume ตอนนี้มีแนวโน้มจะประมวลผลบทสนทนาทั้งหมดใหม่ตั้งแต่ต้น (cache การตอบกลับของ provider น่าจะหมดอายุแล้ว) ซึ่งอาจกิน token มากกว่าปกติอย่างมาก ต้องการ compact ก่อนเพื่อเริ่ม session ใหม่ที่เล็กและถูกกว่า หรือดำเนินการต่อเลย?
+>
+> [✅ Compact ก่อน] [⚠️ ดำเนินการต่อเลย]
+
+ถ้าเลือก **Compact ก่อน** จะสรุป session, เริ่ม session ใหม่จากสรุปนั้น แล้วดำเนินการต่อด้วยข้อความของคุณบน session ใหม่ — ตั้งชื่อตาม session เดิมพร้อม suffix `-resumeN` ที่เพิ่มขึ้นเรื่อยๆ (เช่น `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` เมื่อ compact ครั้งถัดไป) เพื่อให้ยังแยกจาก session ต้นฉบับได้ใน `/switch` ถ้าเลือก **ดำเนินการต่อเลย** ก็จะดำเนินการต่อบน session เดิมตามปกติ ปิดการตรวจสอบทั้งหมดนี้ได้ด้วย `LONG_GAP_WARNING_ENABLED=false`
+</details>
 
 ## 📌 หมายเหตุ
 

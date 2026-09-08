@@ -211,5 +211,10 @@
   "status.usage_compact": "Usage: /compact",
   "runtime.compacting_session": "Compacting the active session...",
   "runtime.compact_summary_missing": "The provider did not return a usable compact handoff summary.",
-  "runtime.session_compacted": "Session compacted successfully. Switched to {session_name} ({session_id})."
+  "runtime.session_compacted": "Session compacted successfully. Switched to {session_name} ({session_id}).",
+  "runtime.long_gap_warning": "⏳ This session has been idle for {gap}. Resuming it now will likely reprocess the whole conversation from scratch (the provider's response cache has probably expired), which can burn significantly more tokens than usual. Compact first to start a smaller, cheaper session, or proceed anyway?",
+  "runtime.long_gap_compact_button": "✅ Compact first",
+  "runtime.long_gap_proceed_button": "⚠️ Proceed anyway",
+  "runtime.long_gap_proceeding": "Proceeding on the existing session...",
+  "runtime.long_gap_compacting": "Compacting before continuing..."
 }

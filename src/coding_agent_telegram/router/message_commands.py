@@ -5,9 +5,10 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.session_gap import gap_seconds_since_last_activity, humanize_gap_seconds
 from coding_agent_telegram.session_runtime import PhotoAttachmentError
 from coding_agent_telegram.speech_to_text import SpeechToTextError
 from coding_agent_telegram.telegram_sender import send_text
@@ -58,6 +59,8 @@ class MessageCommandMixin:
             if should_prioritize_existing_queue:
                 await self._drain_chat_message_queue(chat_id, context)
             return
+        if await self._maybe_warn_long_gap(update, context, user_message, suppress_working_notice):
+            return
         logger.info("Processing user message immediately for chat %s. Preview: %.120r", chat_id, user_message)
         self._store_pending_action(
             chat_id,
@@ -72,6 +75,119 @@ class MessageCommandMixin:
                 return
         finally:
             await self._drain_chat_message_queue(chat_id, context)
+
+    def _long_gap_threshold_seconds(self, provider: str) -> int:
+        cfg = self.deps.cfg
+        if provider == "claude":
+            return cfg.claude_long_gap_seconds
+        if provider == "codex":
+            return cfg.codex_long_gap_seconds
+        if provider == "copilot":
+            return cfg.copilot_long_gap_seconds
+        return 0
+
+    async def _maybe_warn_long_gap(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_message: str,
+        suppress_working_notice: bool,
+    ) -> bool:
+        """Ask before resuming a session idle long enough to risk a costly cache miss.
+
+        Returns True if a warning was sent and *user_message* is now held pending a
+        button response (caller must not dispatch it), False if it's safe to proceed.
+        """
+        if not self.deps.cfg.long_gap_warning_enabled:
+            return False
+        chat_id = update.effective_chat.id
+        active_id, session, _project_path = self._active_session_context(chat_id)
+        if active_id is None or session is None:
+            return False
+
+        provider = str(session.get("provider") or "codex").strip().lower()
+        threshold_seconds = self._long_gap_threshold_seconds(provider)
+        if threshold_seconds <= 0:
+            return False
+
+        gap_seconds = gap_seconds_since_last_activity(provider, active_id)
+        if gap_seconds is None or gap_seconds < threshold_seconds:
+            return False
+
+        logger.info(
+            "Long idle gap detected for chat %s on session '%s' (%s): %.0fs since last activity "
+            "(threshold %ss for provider %s). Asking user to compact or proceed.",
+            chat_id,
+            session.get("name"),
+            active_id,
+            gap_seconds,
+            threshold_seconds,
+            provider,
+        )
+        self._store_pending_action(
+            chat_id,
+            {
+                "kind": "long_gap_confirm",
+                "user_message": user_message,
+                "suppress_working_notice": suppress_working_notice,
+            },
+        )
+        markup = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        self._t(update, "runtime.long_gap_compact_button"),
+                        callback_data="longgap:compact",
+                        **self._affirmative_inline_button_kwargs(),
+                    ),
+                    InlineKeyboardButton(
+                        self._t(update, "runtime.long_gap_proceed_button"),
+                        callback_data="longgap:proceed",
+                        **self._negative_inline_button_kwargs(),
+                    ),
+                ]
+            ]
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=self._t(update, "runtime.long_gap_warning", gap=humanize_gap_seconds(gap_seconds)),
+            reply_markup=markup,
+        )
+        return True
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_long_gap_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None:
+            return
+        await query.answer()
+        action = (query.data or "").strip()
+        chat_id = update.effective_chat.id
+        pending_action = self._pending_action(chat_id)
+        if not isinstance(pending_action, dict) or pending_action.get("kind") != "long_gap_confirm":
+            if hasattr(query, "edit_message_reply_markup"):
+                await query.edit_message_reply_markup(reply_markup=None)
+            return
+
+        user_message = str(pending_action.get("user_message") or "")
+        suppress_working_notice = bool(pending_action.get("suppress_working_notice"))
+        self._store_pending_action(chat_id, None)
+
+        if action == "longgap:proceed":
+            await query.edit_message_text(self._t(update, "runtime.long_gap_proceeding"))
+            await self._process_user_message(
+                update, context, user_message, suppress_working_notice=suppress_working_notice
+            )
+            return
+
+        if action == "longgap:compact":
+            await query.edit_message_text(self._t(update, "runtime.long_gap_compacting"))
+            compact_result = await self.runtime.compact_active_session(update, context)
+            if compact_result is None or not compact_result.success:
+                return
+            await self._process_user_message(
+                update, context, user_message, suppress_working_notice=suppress_working_notice
+            )
 
     @require_allowed_chat(answer_callback=True)
     async def handle_agent_reply_option_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

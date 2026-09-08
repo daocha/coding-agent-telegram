@@ -437,6 +437,22 @@ De bot accepteert momenteel:
     <td>Harde timeout voor één agent-run. Standaard: <code>0</code> (uitgeschakeld).</td>
   </tr>
   <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>Waarschuwt, voordat een lang inactieve sessie wordt hervat, dat de prompt-cache van de provider waarschijnlijk is verlopen en hervatten veel meer tokens kan kosten dan normaal — met knoppen om eerst te compacten of toch door te gaan. Standaard: <code>true</code>. Zie de FAQ hieronder.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Claude Code-sessies. Standaard: <code>3600</code> (1 uur, overeenkomend met het uitgebreide prompt-cachevenster van Claude Code).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Codex-sessies. Standaard: <code>600</code> (10 minuten; behoudend, want het cachevenster van Codex is niet zo precies gedocumenteerd).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Copilot-sessies. Standaard: <code>600</code> (10 minuten; zelfde voorbehoud als bij Codex).</td>
+  </tr>
+  <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>Maximale bestandsgrootte die de bot als tekst leest voor de voor/na-momentopname voor per-run diffs. Standaard: <code>200000</code>.</td>
   </tr>
@@ -681,6 +697,45 @@ Pakketversies worden afgeleid van Git-tags.
 - TestPyPI/testen: `v2026.3.26.dev1`
 - PyPI-prerelease: `v2026.3.26rc1`
 - PyPI-stable: `v2026.3.26`
+
+## ❓ FAQ / Probleemoplossing
+
+<details>
+<summary><b>Waarom toont <code>claude --resume</code> in een gewone terminal geen sessies die vanuit Telegram zijn gemaakt?</b></summary>
+
+Dit is verwacht gedrag van de Claude Code CLI, geen bug in deze app.
+
+Sessies die door deze bot worden gemaakt, lopen via de headless `-p`/print-modus van Claude Code. Claude Code labelt elke zo gestarte sessie in de transcriptie met `entrypoint: "sdk-cli"`, tegenover `entrypoint: "cli"` voor een sessie die je start door direct `claude` in een terminal te typen. De interactieve `claude --resume`-picker (zonder sessie-ID) toont alleen sessies met `cli`-entrypoint — hij verbergt headless/SDK-gestuurde runs bewust en behandelt ze als automatiseringsoutput in plaats van gesprekken die met de hand hervat moeten worden.
+
+De sessiedata zelf is niet kwijt of anders — het is een heel normale, volledig hervatbare Claude Code-sessie, opgeslagen onder `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`. Zodra je de ID hebt, kun je hem direct hervatten:
+
+```bash
+claude --resume <session-id>
+```
+
+Dit is precies waarom deze app zijn eigen sessie-detectie meelevert (gebruikt door `/switch`) in plaats van te vertrouwen op de native picker — hij doorzoekt de JSONL-bestanden rechtstreeks en matcht ze op projectpad, zodat vanuit Telegram gemaakte sessies daar wél verschijnen, ook al komen ze nooit voor in een gewone `claude --resume`.
+
+Codex en Copilot maken dit onderscheid tussen interactief en headless niet in hun eigen resume-/lijstcommando's, waardoor sessies van die providers gewoon blijven verschijnen in een normale terminal.
+</details>
+
+<details>
+<summary><b>Verbruikt deze app meer tokens dan de Claude Code-terminal rechtstreeks gebruiken?</b></summary>
+
+Niet vanwege een inherent verschil in overhead per aanroep — headless (`-p`) en interactieve Claude Code gebruiken hetzelfde onderliggende protocol en dezelfde prijsstelling. Maar in de praktijk kan 24/7-Telegramgebruik merkbaar meer tokens verbruiken dan typisch terminalgebruik, om twee elkaar versterkende redenen:
+
+- **Sessies kunnen onbeperkt groeien.** Omdat de bot gemakshalve dezelfde sessie uren of dagen lang blijft hervatten, kan een sessie honderden beurten en megabytes aan transcriptie opbouwen als je hem nooit roteert. In een interactieve terminal rond je eerder een taak af en begin je de volgende keer opnieuw, waardoor de context kleiner blijft.
+- **Inactieve periodes tussen Telegram-berichten laten de prompt-cache verlopen.** Claude's prompt-cache heeft een korte TTL. Antwoord je binnen dat venster, dan zijn vervolgbeurten goedkope cache-reads. Is er een lange pauze (bijvoorbeeld je slaapt en antwoordt de volgende ochtend), dan moet de *volledige* opgebouwde context bij je volgende bericht helemaal opnieuw worden verwerkt als een veel duurdere cache-write — en die kosten groeien met hoe groot de sessie inmiddels is. Daarom kan het verbruik precies pieken op het moment dat je je eerste bericht van de dag stuurt, zelfs nog vóór de "spits".
+
+**Mitigatie:** draai periodiek `/compact` op langlopende sessies (deze app ondersteunt dit als Telegram-commando) in plaats van een sessie onbeperkt door te laten lopen, zeker als je merkt dat hij lang inactief is geweest. Een nieuwe `/new`-sessie starten voor niet-gerelateerd werk helpt ook om context — en kosten — beperkt te houden.
+
+De app doet dit inmiddels ook automatisch: voordat een sessie wordt hervat die langer inactief is geweest dan een per-provider drempel (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, standaard 1 uur voor Claude Code, 10 minuten voor Codex/Copilot), houdt hij je bericht vast en vraagt:
+
+> ⏳ Deze sessie is {gap} inactief geweest. Hem nu hervatten zal waarschijnlijk het hele gesprek helemaal opnieuw verwerken (de responscache van de provider is vermoedelijk verlopen), wat aanzienlijk meer tokens kan kosten dan normaal. Eerst compacten om een kleinere, goedkopere sessie te starten, of toch doorgaan?
+>
+> [✅ Eerst compacten] [⚠️ Toch doorgaan]
+
+Kies je **Eerst compacten**, dan wordt de sessie samengevat, wordt er een nieuwe sessie gestart op basis van die samenvatting, en gaat je bericht daarna verder op de nieuwe sessie — genoemd naar de oude sessie met een oplopend `-resumeN`-achtervoegsel (bv. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bij de volgende compactie), zodat je hem in `/switch` nog steeds van het origineel kunt onderscheiden. Kies je **Toch doorgaan**, dan gaat het gewoon verder op de bestaande sessie zoals normaal. Schakel de hele check uit met `LONG_GAP_WARNING_ENABLED=false`.
+</details>
 
 ## 📌 Opmerkingen
 

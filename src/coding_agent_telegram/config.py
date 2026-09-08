@@ -25,6 +25,14 @@ DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
 DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 DEFAULT_OPENAI_WHISPER_MODEL = "base"
 DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
+# How long a session can sit idle before resuming it risks a costly prompt-cache
+# miss (see README FAQ: "does this app burn more tokens than the terminal?").
+# Claude Code's extended cache checkpoint holds for about an hour, empirically
+# confirmed against real session transcripts. Codex/Copilot's cache windows are
+# shorter and not documented as precisely, so their defaults are conservative.
+DEFAULT_CLAUDE_LONG_GAP_SECONDS = 3600
+DEFAULT_CODEX_LONG_GAP_SECONDS = 600
+DEFAULT_COPILOT_LONG_GAP_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -66,6 +74,10 @@ class AppConfig:
     default_agent_provider: str
     agent_hard_timeout_seconds: int
     app_internal_root: Path
+    long_gap_warning_enabled: bool
+    claude_long_gap_seconds: int
+    codex_long_gap_seconds: int
+    copilot_long_gap_seconds: int
     locale: str = DEFAULT_LOCALE
 
 
@@ -316,5 +328,15 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
         ),
         app_internal_root=app_internal_root,
+        long_gap_warning_enabled=_parse_bool(os.getenv("LONG_GAP_WARNING_ENABLED", "true"), default=True),
+        claude_long_gap_seconds=int(
+            os.getenv("CLAUDE_LONG_GAP_SECONDS", str(DEFAULT_CLAUDE_LONG_GAP_SECONDS))
+        ),
+        codex_long_gap_seconds=int(
+            os.getenv("CODEX_LONG_GAP_SECONDS", str(DEFAULT_CODEX_LONG_GAP_SECONDS))
+        ),
+        copilot_long_gap_seconds=int(
+            os.getenv("COPILOT_LONG_GAP_SECONDS", str(DEFAULT_COPILOT_LONG_GAP_SECONDS))
+        ),
         locale=locale,
     )

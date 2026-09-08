@@ -437,6 +437,22 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>単一の エージェント実行 に対するハードタイムアウト。既定: <code>0</code>（無効）。</td>
   </tr>
   <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>しばらく idle だった session を resume する前に、provider の prompt cache が切れている可能性があり resume すると通常よりかなり多くの token を消費しうる旨を警告し、先に compact するか、そのまま続行するかのボタンを出します。既定: <code>true</code>。詳細は下の FAQ を参照。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Claude Code の session に対して警告が発火するまでの idle しきい値（秒）。既定: <code>3600</code>（1時間。Claude Code の拡張 prompt cache ウィンドウに合わせています）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Codex の session に対して警告が発火するまでの idle しきい値（秒）。既定: <code>600</code>（10分。Codex の cache ウィンドウはそこまで正確に文書化されていないため控えめな値です）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Copilot の session に対して警告が発火するまでの idle しきい値（秒）。既定: <code>600</code>（10分。Codex と同じ注意点があります）。</td>
+  </tr>
+  <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>実行ごとの diff 用に 実行前後のスナップショット を作る際、bot がテキストとして読む最大ファイルサイズです。既定: <code>200000</code>.</td>
   </tr>
@@ -679,6 +695,45 @@ package version は Git tag から導出されます。
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ FAQ / トラブルシューティング
+
+<details>
+<summary><b>普通のターミナルで <code>claude --resume</code> を実行しても、Telegram から作った session が表示されないのはなぜですか？</b></summary>
+
+これは Claude Code CLI の想定どおりの挙動であり、このアプリのバグではありません。
+
+この bot が作る session は、Claude Code の headless な `-p`/print モードを通じて実行されます。Claude Code はそうやって開始された session を transcript 上で `entrypoint: "sdk-cli"` としてマークします。これは、ターミナルで直接 `claude` と入力して始めた session の `entrypoint: "cli"` とは異なります。session ID を指定しない対話的な `claude --resume` ピッカーは `cli` entrypoint の session しか一覧表示しません — headless / SDK 駆動の実行は意図的に隠されており、手動で再開すべき会話ではなく自動化の出力として扱われます。
+
+session データ自体が失われたり別物になったりしているわけではありません。`~/.claude/projects/<encoded-project-path>/<session-id>.jsonl` に保存された、ごく普通の resume 可能な Claude Code session です。ID さえ分かれば直接 resume できます。
+
+```bash
+claude --resume <session-id>
+```
+
+このアプリが native の picker に頼らず独自の session discovery（`/switch` が使用）を持っているのはまさにこのためです — JSONL ファイルを直接スキャンしてプロジェクトパスで照合するので、単純な `claude --resume` には決して現れなくても、Telegram で作った session はここに表示されます。
+
+Codex と Copilot は自分たちの resume/list コマンドでこの「対話的 vs headless」という区別をしないため、これらの provider の session は普通のターミナルでも問題なく表示され続けます。
+</details>
+
+<details>
+<summary><b>このアプリは Claude Code のターミナルを直接使う場合より多くの token を消費しますか？</b></summary>
+
+呼び出しごとの本質的な overhead の違いによるものではありません — headless（`-p`）も対話的な Claude Code も、同じ下層プロトコルと同じ課金体系を使っています。しかし実際には、24時間365日の Telegram 利用は、典型的なターミナル利用よりも顕著に多くの token を消費し得ます。それには重なり合う2つの理由があります。
+
+- **session が際限なく肥大化しうる。** bot は同じ session を何時間、何日にもわたって都合よく resume し続けるため、rotate しない限り数百 turn・数メガバイトの transcript が積み上がることがあります。対話的なターミナルであれば、タスクを終えて次回は新しく始めるのが自然で、context は小さく保たれやすいです。
+- **Telegram メッセージ間の idle 間隔が prompt cache を失効させる。** Claude の prompt cache は TTL が短いです。その window 内に返信すれば、続く turn は安価な cache read で済みます。長い間隔が空くと（例えば寝て翌朝返信するなど）、次のメッセージ送信時に蓄積された context 全体を、はるかに高価な cache write としてゼロから再処理しなければなりません — しかもこのコストは、その時点までに session がどれだけ大きくなっているかに比例して増えます。だからこそ、たとえ「ピーク」時間帯より前でも、その日最初のメッセージを送った瞬間に使用量が跳ね上がることがあるのです。
+
+**軽減策:** session を無期限に走らせ続けるのではなく、特に長時間 idle だったと気づいたときは、長く使う session に対して定期的に `/compact`（このアプリが Telegram コマンドとしてサポート）を実行してください。関連のない作業には新しく `/new` session を始めることも、context — ひいてはコスト — を抑えるのに役立ちます。
+
+このアプリは今ではこれを自動でも行います。provider ごとのしきい値（`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`、既定は Claude Code が1時間、Codex/Copilot が10分）を超えて idle だった session を resume する前に、あなたのメッセージを保留してこう尋ねます。
+
+> ⏳ この session は {gap} の間 idle でした。今 resume すると会話全体をゼロから再処理する可能性が高く（provider の応答 cache はおそらく失効しています）、通常よりかなり多くの token を消費するおそれがあります。先に compact して小さく安価な session を始めますか、それともそのまま続行しますか？
+>
+> [✅ 先に compact] [⚠️ そのまま続行]
+
+**先に compact** を選ぶと、session を要約し、その要約から新しい session を開始したうえで、あなたのメッセージをその新しい session 上で続行します — 名前は元の session 名に `-resumeN` という連番のサフィックスを付けたもの（例: `fix-bug` → `fix-bug-resume1` → 次の compaction で `fix-bug-resume2`）になるので、`/switch` でも元の session と区別できます。**そのまま続行** を選ぶと、既存の session 上でいつもどおり続行するだけです。この仕組み全体は `LONG_GAP_WARNING_ENABLED=false` で無効化できます。
+</details>
 
 ## 📌 メモ
 

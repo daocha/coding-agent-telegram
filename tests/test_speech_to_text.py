@@ -47,6 +47,10 @@ def _cfg(tmp_path: Path, *, model: str = "base", timeout: int = 120) -> AppConfi
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
         app_internal_root=tmp_path / ".coding-agent-telegram",
+        long_gap_warning_enabled=False,
+        claude_long_gap_seconds=3600,
+        codex_long_gap_seconds=600,
+        copilot_long_gap_seconds=600,
         locale="en",
     )
 

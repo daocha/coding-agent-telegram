@@ -437,6 +437,22 @@ Le bot accepte actuellement :
     <td>Timeout dur pour une exécution d’agent. Défaut : <code>0</code> (désactivé).</td>
   </tr>
   <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>Avant de reprendre une session restée inactive un moment, avertit que le cache de prompt du fournisseur a probablement expiré et que la reprise peut consommer bien plus de tokens que d'habitude — avec des boutons pour compacter d'abord ou continuer quand même. Défaut : <code>true</code>. Voir la FAQ ci-dessous.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Claude Code. Défaut : <code>3600</code> (1 heure, correspondant à la fenêtre de cache de prompt étendue de Claude Code).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Codex. Défaut : <code>600</code> (10 minutes ; valeur prudente, la fenêtre de cache de Codex n'étant pas documentée aussi précisément).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Copilot. Défaut : <code>600</code> (10 minutes ; même réserve que pour Codex).</td>
+  </tr>
+  <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
     <td>Taille maximale de fichier que le bot lira en texte pour construire le instantané avant/après des diffs. Défaut : <code>200000</code>.</td>
   </tr>
@@ -681,6 +697,45 @@ Les versions du paquet sont dérivées des tags Git.
 - TestPyPI/test : `v2026.3.26.dev1`
 - préversion PyPI : `v2026.3.26rc1`
 - version stable PyPI : `v2026.3.26`
+
+## ❓ FAQ / Dépannage
+
+<details>
+<summary><b>Pourquoi <code>claude --resume</code> dans un terminal classique n'affiche-t-il aucune session créée depuis Telegram ?</b></summary>
+
+C'est un comportement attendu de la CLI Claude Code, pas un bug de cette app.
+
+Les sessions créées par ce bot passent par le mode headless `-p`/print de Claude Code. Claude Code marque toute session démarrée ainsi avec `entrypoint: "sdk-cli"` dans sa transcription, contre `entrypoint: "cli"` pour une session que vous démarrez en tapant directement `claude` dans un terminal. Le sélecteur interactif `claude --resume` (sans ID de session) ne liste que les sessions avec un entrypoint `cli` — il masque délibérément les runs headless/pilotés par le SDK, les traitant comme de la sortie d'automatisation plutôt que des conversations destinées à être reprises à la main.
+
+Les données de session elles-mêmes ne sont ni perdues ni différentes — c'est une session Claude Code normale et totalement reprenable, stockée sous `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`. Vous pouvez la reprendre directement une fois l'ID en main :
+
+```bash
+claude --resume <session-id>
+```
+
+C'est exactement pour ça que cette app embarque sa propre découverte de sessions (utilisée par `/switch`) au lieu de se fier au sélecteur natif — elle scanne directement les fichiers JSONL et les associe par chemin de projet, si bien que les sessions créées depuis Telegram y apparaissent même si elles n'apparaissent jamais dans un simple `claude --resume`.
+
+Codex et Copilot ne font pas cette distinction interactif/headless dans leurs propres commandes de reprise/liste, ce qui explique pourquoi les sessions de ces fournisseurs continuent d'apparaître normalement dans un terminal classique.
+</details>
+
+<details>
+<summary><b>Cette app consomme-t-elle plus de tokens que l'utilisation directe du terminal Claude Code ?</b></summary>
+
+Pas à cause d'une différence de surcoût inhérente par appel — le mode headless (`-p`) et Claude Code interactif utilisent le même protocole sous-jacent et la même tarification. Mais en pratique, un usage Telegram 24/7 peut consommer nettement plus de tokens qu'un usage terminal classique, pour deux raisons qui se cumulent :
+
+- **Les sessions peuvent grossir sans limite.** Comme le bot reprend commodément la même session sur des heures voire des jours, une session peut accumuler des centaines d'échanges et des mégaoctets de transcription si vous ne la faites jamais tourner. Dans un terminal interactif, vous auriez plus naturellement tendance à finir une tâche et repartir de zéro la fois suivante, gardant ainsi un contexte plus petit.
+- **Les intervalles d'inactivité entre messages Telegram font expirer le cache de prompt.** Le cache de prompt de Claude a une durée de vie courte. Si vous répondez dans cette fenêtre, les échanges suivants sont des lectures de cache peu coûteuses. S'il y a un long intervalle (par exemple vous dormez et répondez le lendemain matin), tout le contexte accumulé doit être retraité intégralement lors de votre prochain message, sous forme d'une écriture de cache bien plus coûteuse — et ce coût augmente avec la taille déjà atteinte par la session. C'est pourquoi la consommation peut s'envoler dès votre premier message de la journée, même avant les heures de « pointe ».
+
+**Mitigation :** exécutez périodiquement `/compact` sur les sessions longue durée (cette app le prend en charge comme commande Telegram) plutôt que de laisser une session tourner indéfiniment, surtout si vous remarquez qu'elle est restée inactive longtemps. Démarrer une nouvelle session `/new` pour un travail sans rapport aide aussi à garder le contexte — et le coût — sous contrôle.
+
+L'app le fait désormais aussi automatiquement : avant de reprendre une session restée inactive au-delà d'un seuil propre à chaque fournisseur (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, par défaut 1 heure pour Claude Code, 10 minutes pour Codex/Copilot), elle retient votre message et demande :
+
+> ⏳ Cette session est inactive depuis {gap}. La reprendre maintenant va probablement retraiter toute la conversation depuis le début (le cache de réponses du fournisseur a sans doute expiré), ce qui peut consommer bien plus de tokens que d'habitude. Compacter d'abord pour démarrer une session plus petite et moins coûteuse, ou continuer quand même ?
+>
+> [✅ Compacter d'abord] [⚠️ Continuer quand même]
+
+Choisir **Compacter d'abord** résume la session, en démarre une nouvelle à partir de ce résumé, puis poursuit avec votre message sur la nouvelle session — nommée d'après l'ancienne avec un suffixe `-resumeN` incrémental (par ex. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` à la compaction suivante), pour pouvoir toujours la distinguer de l'originale dans `/switch`. Choisir **Continuer quand même** poursuit simplement sur la session existante comme d'habitude. Désactivez tout le mécanisme avec `LONG_GAP_WARNING_ENABLED=false`.
+</details>
 
 ## 📌 Remarques
 

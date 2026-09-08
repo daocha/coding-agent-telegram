@@ -7,6 +7,7 @@ import sqlite3
 import shlex
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -580,6 +581,10 @@ def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
         app_internal_root=tmp_path / ".coding-agent-telegram",
+        long_gap_warning_enabled=False,
+        claude_long_gap_seconds=3600,
+        codex_long_gap_seconds=600,
+        copilot_long_gap_seconds=600,
         locale=locale,
     )
 
@@ -3792,8 +3797,149 @@ def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: st
     assert "Use this compact handoff summary" in runner.create_calls[-1]["user_message"]
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_compacted"
-    assert state["sessions"]["sess_compacted"]["name"] == "current-session-1"
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume1"
     assert "Session compacted successfully." in bot.messages[-1][1]
+
+
+def test_compact_run_twice_increments_resume_suffix(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = CompactingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    update = make_update(text="/compact")
+
+    asyncio.run(router.handle_compact(update, context))
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume1"
+
+    asyncio.run(router.handle_compact(update, context))
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume2"
+
+
+def test_long_gap_warning_sent_and_holds_message_when_native_session_idle_past_threshold(
+    tmp_path: Path, monkeypatch
+):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle", "idle-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle",
+        cwd=backend,
+        title="idle-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,  # 2h ago, well past the 10-minute threshold
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls == []
+    chat_id, text, _parse_mode, reply_markup = bot.messages[-1]
+    assert chat_id == 123
+    assert "idle" in text.lower()
+    buttons = reply_markup.inline_keyboard[0]
+    assert [button.callback_data for button in buttons] == ["longgap:compact", "longgap:proceed"]
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending == {
+        "kind": "long_gap_confirm",
+        "user_message": "keep going",
+        "suppress_working_notice": False,
+    }
+
+
+def test_long_gap_warning_skipped_when_native_session_recently_active(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_fresh", "fresh-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_fresh",
+        cwd=backend,
+        title="fresh-session",
+        branch="",
+        created_at=int(time.time()) - 30,
+        updated_at=int(time.time()) - 30,  # 30s ago, well under the 10-minute threshold
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_proceed_anyway_dispatches_held_message(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle", "idle-session", "backend", "codex")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {"kind": "long_gap_confirm", "user_message": "keep going", "suppress_working_notice": False},
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:proceed", answer=None, edit_message_text=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(update, context))
+
+    assert edited == ["Proceeding on the existing session..."]
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
