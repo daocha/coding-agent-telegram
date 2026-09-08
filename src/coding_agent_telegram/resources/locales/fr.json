@@ -37,6 +37,7 @@
   "git.push_in_progress": "Push de la branche `{branch_name}` vers `origin`...",
   "git.usage_push": "Utilisation : /push",
   "message.photo_only_codex": "Les pièces jointes photo sont actuellement prises en charge uniquement pour les sessions Codex.",
+  "message.photo_blocked_by_pending_action": "Une action liée à un message précédent attend encore votre réponse (par exemple une invite compacter/continuer). Veuillez d'abord la résoudre, puis renvoyez cette photo.",
   "message.question_queued": "Question mise en file d’attente sous Q{question_number}. Elle sera traitée une fois la tâche actuelle terminée.",
   "message.voice_speech_to_text_disabled": "Les messages vocaux ne sont pas activés.\nDéfinissez ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true et installez d'abord les prérequis locaux de Whisper.",
   "message.unsupported_message_type": "Type de message non pris en charge.\nCe bot accepte actuellement les messages texte, les photos, les messages vocaux et les fichiers audio.",

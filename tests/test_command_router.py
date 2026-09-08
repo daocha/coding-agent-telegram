@@ -4172,6 +4172,75 @@ def test_long_gap_warning_also_applies_to_photo_messages(tmp_path: Path, monkeyp
     assert store.get_chat_state("bot-a", 123).get("pending_action") is None
 
 
+def test_photo_does_not_clobber_pending_long_gap_confirmation(tmp_path: Path, monkeypatch):
+    """A photo sent while a text message's long-gap confirmation is still pending must
+    not silently overwrite it -- that would orphan the original warning's buttons and
+    lose the held text message when they're pressed."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle_clobber", "clobber-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle_clobber",
+        cwd=backend,
+        title="clobber-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+        tokens_used=100_000,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    # First, a text message triggers and holds the long-gap warning.
+    asyncio.run(router.handle_message(make_update(text="original text message"), context))
+    pending_after_text = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending_after_text["kind"] == "long_gap_confirm"
+    assert pending_after_text["user_message"] == "original text message"
+
+    # A photo arrives before the user answers -- it must be rejected, not silently
+    # replace the pending confirmation.
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    photo_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="ignore me"),
+    )
+    asyncio.run(router.handle_photo(photo_update, context))
+
+    pending_after_photo = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending_after_photo == pending_after_text  # untouched
+    assert runner.resume_calls == []
+
+    # Resolving the (still-original) prompt must run the original text, not the photo.
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:proceed", answer=None, edit_message_text=None),
+    )
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        return None
+
+    callback_update.callback_query.answer = fake_answer
+    callback_update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(callback_update, context))
+
+    assert runner.resume_calls
+    assert runner.resume_calls[-1]["user_message"] == "original text message"
+    assert runner.resume_calls[-1]["image_paths"] == ()
+
+
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()

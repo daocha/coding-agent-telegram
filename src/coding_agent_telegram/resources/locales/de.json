@@ -37,6 +37,7 @@
   "git.push_in_progress": "Zweig `{branch_name}` wird nach `origin` gepusht...",
   "git.usage_push": "Verwendung: /push",
   "message.photo_only_codex": "Fotoanhänge werden derzeit nur für Codex-Sitzungen unterstützt.",
+  "message.photo_blocked_by_pending_action": "Eine Aktion aus einer früheren Nachricht wartet noch auf deine Antwort (z. B. eine Compact/Fortsetzen-Abfrage). Löse das bitte zuerst, dann sende dieses Foto erneut.",
   "message.question_queued": "Frage als Q{question_number} in die Warteschlange gestellt. Sie wird verarbeitet, sobald die aktuelle Agent-Aufgabe abgeschlossen ist.",
   "message.voice_speech_to_text_disabled": "Sprachnachrichten sind nicht aktiviert.\nSetze ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true und installiere zuerst die lokalen Whisper-Voraussetzungen.",
   "message.unsupported_message_type": "Nicht unterstützter Nachrichtentyp.\nDieser Bot akzeptiert derzeit Textnachrichten, Fotos, Sprachnachrichten und Audiodateien.",

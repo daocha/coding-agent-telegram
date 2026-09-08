@@ -37,6 +37,7 @@
   "git.usage_pull": "Cách dùng: /pull",
   "git.usage_push": "Cách dùng: /push",
   "message.photo_only_codex": "Hiện tại tệp đính kèm ảnh chỉ được hỗ trợ cho các phiên Codex.",
+  "message.photo_blocked_by_pending_action": "Một hành động từ tin nhắn trước đó vẫn đang chờ phản hồi của bạn (ví dụ: lời nhắc compact/tiếp tục). Vui lòng giải quyết việc đó trước, sau đó gửi lại ảnh này.",
   "message.question_queued": "Câu hỏi đã được xếp hàng dưới dạng Q{question_number}. Nó sẽ được xử lý sau khi tác vụ hiện tại của tác nhân hoàn tất.",
   "message.voice_speech_to_text_disabled": "Tin nhắn thoại chưa được bật.\nHãy đặt ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true và cài đặt trước các điều kiện cần cục bộ của Whisper.",
   "message.unsupported_message_type": "Loại tin nhắn không được hỗ trợ.\nbot này hiện chấp nhận tin nhắn văn bản, ảnh, tin nhắn thoại và tệp âm thanh.",

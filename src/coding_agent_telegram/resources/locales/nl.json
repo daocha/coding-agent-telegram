@@ -37,6 +37,7 @@
   "git.push_in_progress": "Tak `{branch_name}` wordt naar `origin` gepusht...",
   "git.usage_push": "Gebruik: /push",
   "message.photo_only_codex": "Foto-bijlagen worden momenteel alleen ondersteund voor Codex-sessies.",
+  "message.photo_blocked_by_pending_action": "Er wacht nog een actie van een eerder bericht op je antwoord (bijv. een compact/doorgaan-prompt). Los dat eerst op en stuur deze foto daarna opnieuw.",
   "message.question_queued": "Vraag in de wachtrij geplaatst als Q{question_number}. Deze wordt verwerkt nadat de huidige agenttaak is voltooid.",
   "message.voice_speech_to_text_disabled": "Spraakberichten zijn niet ingeschakeld.\nZet ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true en installeer eerst de lokale Whisper-vereisten.",
   "message.unsupported_message_type": "Niet-ondersteund berichttype.\nDeze bot accepteert momenteel tekstberichten, foto's, spraakberichten en audiobestanden.",

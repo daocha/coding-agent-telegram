@@ -37,6 +37,7 @@
   "git.usage_pull": "Usage: /pull",
   "git.usage_push": "Usage: /push",
   "message.photo_only_codex": "Photo attachments are currently supported only for Codex and Claude sessions.",
+  "message.photo_blocked_by_pending_action": "An action from an earlier message is still waiting for your response (e.g. a compact/proceed prompt). Please resolve that first, then resend this photo.",
   "message.question_queued": "Question queued as Q{question_number}. It will run after the current agent task finishes.",
   "message.voice_speech_to_text_disabled": "Voice messages are not enabled.\nSet ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true and install the local Whisper prerequisites first.",
   "message.unsupported_message_type": "Unsupported message type.\nThis bot currently accepts text messages, photos, voice messages, and audio files.",

@@ -37,6 +37,7 @@
   "git.push_in_progress": "브랜치 `{branch_name}` 를 `origin` 으로 push 하는 중...",
   "git.usage_push": "사용법: /push",
   "message.photo_only_codex": "사진 첨부는 현재 Codex 세션에서만 지원됩니다.",
+  "message.photo_blocked_by_pending_action": "이전 메시지에서 시작된 작업이 아직 응답을 기다리고 있습니다(예: compact/진행 확인). 먼저 그것을 해결한 뒤 이 사진을 다시 보내주세요.",
   "message.question_queued": "질문이 Q{question_number} 로 대기열에 추가되었습니다. 현재 에이전트 작업이 끝난 뒤 처리됩니다.",
   "message.voice_speech_to_text_disabled": "음성 메시지가 활성화되어 있지 않습니다.\nENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true 를 설정하고 먼저 로컬 Whisper 필수 요소를 설치하세요.",
   "message.unsupported_message_type": "지원되지 않는 메시지 유형입니다.\n이 봇은 현재 텍스트 메시지, 사진, 음성 메시지, 오디오 파일을 받습니다.",

@@ -37,6 +37,7 @@
   "git.usage_pull": "用法：/pull",
   "git.usage_push": "用法：/push",
   "message.photo_only_codex": "当前仅 Codex 会话支持图片附件。",
+  "message.photo_blocked_by_pending_action": "之前一条消息触发的操作仍在等待你的回复（例如 compact/继续 的确认提示）。请先处理完那个，再重新发送这张图片。",
   "message.question_queued": "问题已加入队列，编号为 Q{question_number}。当前代理任务完成后将开始处理。",
   "message.voice_speech_to_text_disabled": "语音消息功能尚未启用。\n请先设置 ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true，并安装本地 Whisper 依赖。",
   "message.unsupported_message_type": "不支持的消息类型。\n此机器人当前接受文本消息、图片、语音消息和音频文件。",

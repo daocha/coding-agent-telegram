@@ -37,6 +37,7 @@
   "git.push_in_progress": "ブランチ `{branch_name}` を `origin` に push 中...",
   "git.usage_push": "使い方: /push",
   "message.photo_only_codex": "写真添付は現在 Codex セッションでのみサポートされています。",
+  "message.photo_blocked_by_pending_action": "以前のメッセージに関する操作がまだあなたの応答待ちです（例: compact/続行 の確認）。先にそれを解決してから、この写真を再送信してください。",
   "message.question_queued": "質問は Q{question_number} としてキューに追加されました。現在のエージェント処理が終わった後に実行されます。",
   "message.voice_speech_to_text_disabled": "音声メッセージは有効になっていません。\nENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true を設定し、先にローカル Whisper の前提条件をインストールしてください。",
   "message.unsupported_message_type": "未対応のメッセージ種類です。\nこのボットは現在、テキストメッセージ、写真、音声メッセージ、音声ファイルを受け付けます。",

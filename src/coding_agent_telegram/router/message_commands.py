@@ -357,6 +357,16 @@ class MessageCommandMixin:
         if update.message is None or not update.message.photo:
             return
 
+        chat_id = update.effective_chat.id
+        if isinstance(self._pending_action(chat_id), dict):
+            # Unlike text (which routes through _process_user_message and queues
+            # behind a pending action), a photo can't be queued -- _enqueue_chat_message
+            # only stores text. Proceeding anyway would silently overwrite whatever the
+            # pending action is holding (e.g. a long-gap compact/proceed confirmation
+            # for an earlier message), orphaning its buttons and losing that message.
+            await send_text(update, context, self._t(update, "message.photo_blocked_by_pending_action"))
+            return
+
         session, project_path = await self._active_session_project_or_notify(update, context)
         if session is None or project_path is None:
             return

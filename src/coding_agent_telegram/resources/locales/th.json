@@ -37,6 +37,7 @@
   "git.usage_pull": "วิธีใช้: /pull",
   "git.usage_push": "วิธีใช้: /push",
   "message.photo_only_codex": "ขณะนี้รองรับไฟล์แนบรูปภาพเฉพาะสำหรับเซสชัน Codex เท่านั้น",
+  "message.photo_blocked_by_pending_action": "มีการดำเนินการจากข้อความก่อนหน้านี้ที่ยังรอการตอบกลับของคุณอยู่ (เช่น พรอมต์ compact/ดำเนินการต่อ) กรุณาจัดการสิ่งนั้นให้เสร็จก่อน แล้วค่อยส่งรูปนี้ใหม่อีกครั้ง",
   "message.question_queued": "จัดคิวคำถามเป็น Q{question_number} แล้ว จะประมวลผลหลังจากงานเอเจนต์ปัจจุบันเสร็จสิ้น",
   "message.voice_speech_to_text_disabled": "ยังไม่ได้เปิดใช้งานข้อความเสียง\nตั้งค่า ENABLE_OPENAI_WHISPER_SPEECH_TO_TEXT=true และติดตั้งส่วนที่ Whisper ต้องใช้ในเครื่องก่อน",
   "message.unsupported_message_type": "ประเภทข้อความไม่รองรับ\nขณะนี้บอตนี้รองรับข้อความตัวอักษร รูปภาพ ข้อความเสียง และไฟล์เสียง",
