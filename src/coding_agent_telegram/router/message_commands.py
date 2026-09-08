@@ -5,11 +5,12 @@ import logging
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Sequence
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from coding_agent_telegram.session_gap import gap_seconds_since_last_activity, humanize_gap_seconds
+from coding_agent_telegram.session_gap import gap_seconds_since, humanize_gap_seconds, native_session_activity
 from coding_agent_telegram.session_runtime import PhotoAttachmentError
 from coding_agent_telegram.speech_to_text import SpeechToTextError
 from coding_agent_telegram.telegram_sender import send_text
@@ -19,6 +20,14 @@ from .base import require_allowed_chat
 
 logger = logging.getLogger(__name__)
 MAX_STT_AUDIO_BYTES = 20 * 1024 * 1024
+# Best-effort "is this session even big enough to be worth warning about" gate, keyed
+# by provider, in the same units session_gap.py reports for that provider (see its
+# module docstring). A provider missing here (or a session whose size can't be
+# determined) skips the size gate and relies on the idle-time check alone.
+_SIZE_GATE_TOKENS = {
+    "claude": 20_000,  # cache_creation + cache_read + input tokens on the last turn
+    "codex": 50_000,  # cumulative tokens_used reported by Codex's local session db
+}
 
 
 class MessageCommandMixin:
@@ -29,7 +38,6 @@ class MessageCommandMixin:
         user_message: str,
         *,
         suppress_working_notice: bool = False,
-        skip_long_gap_check: bool = False,
     ) -> None:
         chat_id = update.effective_chat.id
         pending_action = self._pending_action(chat_id)
@@ -61,9 +69,53 @@ class MessageCommandMixin:
             if should_prioritize_existing_queue:
                 await self._drain_chat_message_queue(chat_id, context)
             return
-        if not skip_long_gap_check and await self._maybe_warn_long_gap(
-            update, context, user_message, suppress_working_notice
-        ):
+        if await self._maybe_warn_long_gap(update, context, user_message, suppress_working_notice):
+            return
+        await self._dispatch_pending_message_now(
+            update, context, user_message, suppress_working_notice=suppress_working_notice
+        )
+
+    async def _dispatch_pending_message_now(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_message: str,
+        *,
+        suppress_working_notice: bool = False,
+    ) -> None:
+        """Run *user_message* now, skipping the *queue-behind-other-queued-messages* and
+        long-gap checks -- but still deferring to a genuinely busy workspace so a message
+        is never silently dropped.
+
+        Used both by the normal (already-checked) path in ``_process_user_message`` and
+        to replay a message that was held for a confirmation button (long-gap
+        compact/proceed). For a held message, re-running the full should-queue check
+        would be wrong: it would push this older, already-approved message behind newer
+        messages that queued up while the confirmation prompt was waiting for a reply.
+        A currently-busy workspace is different -- that's not a queue-ordering nicety,
+        it's the only thing standing between this call and a dropped message, so it's
+        still checked explicitly.
+        """
+        chat_id = update.effective_chat.id
+        if self._is_project_busy(chat_id):
+            reply_to_message_id = getattr(getattr(update, "message", None), "message_id", None)
+            _queue_file, question_number = self._enqueue_chat_message(
+                chat_id,
+                user_message,
+                reply_to_message_id=reply_to_message_id,
+            )
+            logger.info(
+                "Project busy: queued held user message for chat %s as Q%s. Preview: %.120r",
+                chat_id,
+                question_number,
+                user_message,
+            )
+            await send_text(
+                update,
+                context,
+                self._t(update, "message.question_queued", question_number=question_number),
+                reply_to_message_id=reply_to_message_id,
+            )
             return
         logger.info("Processing user message immediately for chat %s. Preview: %.120r", chat_id, user_message)
         self._store_pending_action(
@@ -77,6 +129,29 @@ class MessageCommandMixin:
         try:
             if await self._continue_pending_action(update, context):
                 return
+        finally:
+            await self._drain_chat_message_queue(chat_id, context)
+
+    async def _dispatch_active_session_message(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_message: str,
+        *,
+        image_paths: Sequence[Path] = (),
+    ) -> None:
+        """Run *user_message* (optionally with attachments) directly against the active
+        session, bypassing the queueing/long-gap machinery. Mirrors what ``handle_photo``
+        already did, factored out so a held photo message can be replayed identically
+        after a long-gap confirmation."""
+        chat_id = update.effective_chat.id
+        try:
+            self._last_run_results[chat_id] = await self.runtime.run_active_session(
+                update,
+                context,
+                user_message=user_message,
+                image_paths=image_paths,
+            )
         finally:
             await self._drain_chat_message_queue(chat_id, context)
 
@@ -96,6 +171,8 @@ class MessageCommandMixin:
         context: ContextTypes.DEFAULT_TYPE,
         user_message: str,
         suppress_working_notice: bool,
+        *,
+        image_paths: Sequence[Path] = (),
     ) -> bool:
         """Ask before resuming a session idle long enough to risk a costly cache miss.
 
@@ -114,20 +191,41 @@ class MessageCommandMixin:
         if threshold_seconds <= 0:
             return False
 
-        # gap_seconds_since_last_activity does blocking filesystem/sqlite I/O; keep it
-        # off the event loop so one chat's check can't stall every other chat's bot.
-        gap_seconds = await asyncio.to_thread(gap_seconds_since_last_activity, provider, active_id)
+        # native_session_activity does blocking filesystem/sqlite I/O; keep it off the
+        # event loop so one chat's check can't stall every other chat's bot.
+        last_activity, size_tokens = await asyncio.to_thread(native_session_activity, provider, active_id)
+        gap_seconds = gap_seconds_since(last_activity)
         if gap_seconds is None or gap_seconds < threshold_seconds:
+            return False
+
+        # Avoid nagging about sessions too small for a full reprocess to matter, when
+        # the provider exposes a cheap size signal at all (session_gap.py returns None
+        # for providers/situations it can't determine one for -- fail open there rather
+        # than suppressing a legitimate warning).
+        size_gate = _SIZE_GATE_TOKENS.get(provider)
+        if size_gate is not None and size_tokens is not None and size_tokens < size_gate:
+            logger.info(
+                "Skipping long-gap warning for chat %s session '%s' (%s): idle %.0fs but only "
+                "~%s tokens accumulated (below the %s-token gate for provider %s).",
+                chat_id,
+                session.get("name"),
+                active_id,
+                gap_seconds,
+                size_tokens,
+                size_gate,
+                provider,
+            )
             return False
 
         logger.info(
             "Long idle gap detected for chat %s on session '%s' (%s): %.0fs since last activity "
-            "(threshold %ss for provider %s). Asking user to compact or proceed.",
+            "(threshold %ss, ~%s tokens accumulated, provider %s). Asking user to compact or proceed.",
             chat_id,
             session.get("name"),
             active_id,
             gap_seconds,
             threshold_seconds,
+            size_tokens if size_tokens is not None else "unknown",
             provider,
         )
         self._store_pending_action(
@@ -136,6 +234,7 @@ class MessageCommandMixin:
                 "kind": "long_gap_confirm",
                 "user_message": user_message,
                 "suppress_working_notice": suppress_working_notice,
+                "image_paths": [str(path) for path in image_paths],
             },
         )
         markup = InlineKeyboardMarkup(
@@ -177,17 +276,23 @@ class MessageCommandMixin:
 
         user_message = str(pending_action.get("user_message") or "")
         suppress_working_notice = bool(pending_action.get("suppress_working_notice"))
+        image_paths = tuple(Path(path) for path in pending_action.get("image_paths") or ())
         self._store_pending_action(chat_id, None)
+
+        async def replay() -> None:
+            # Deliberately bypasses _process_user_message: re-running the should-queue
+            # and long-gap checks here is wrong for a held message (see
+            # _dispatch_pending_message_now's docstring).
+            if image_paths:
+                await self._dispatch_active_session_message(update, context, user_message, image_paths=image_paths)
+            else:
+                await self._dispatch_pending_message_now(
+                    update, context, user_message, suppress_working_notice=suppress_working_notice
+                )
 
         if action == "longgap:proceed":
             await query.edit_message_text(self._t(update, "runtime.long_gap_proceeding"))
-            await self._process_user_message(
-                update,
-                context,
-                user_message,
-                suppress_working_notice=suppress_working_notice,
-                skip_long_gap_check=True,
-            )
+            await replay()
             return
 
         if action == "longgap:compact":
@@ -195,19 +300,13 @@ class MessageCommandMixin:
             # Whether compaction succeeds, fails, or can't start because the workspace is
             # busy, still replay the held message rather than silently dropping it:
             # - success: runs on the new, freshly-compacted session.
-            # - failure: compact_active_session already reported the error; falling
-            #   through still delivers the user's message instead of losing it.
+            # - failure: compact_active_session already reported the error; replaying
+            #   still delivers the user's message instead of losing it.
             # - busy (returns None, no message sent by compact_active_session): the
-            #   normal queueing path in _process_user_message picks it up and tells
-            #   the user it was queued.
+            #   text-message path still queues correctly via _continue_pending_action;
+            #   the photo path shares the same busy-handling as handle_photo already had.
             await self.runtime.compact_active_session(update, context)
-            await self._process_user_message(
-                update,
-                context,
-                user_message,
-                suppress_working_notice=suppress_working_notice,
-                skip_long_gap_check=True,
-            )
+            await replay()
 
     @require_allowed_chat(answer_callback=True)
     async def handle_agent_reply_option_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -274,16 +373,11 @@ class MessageCommandMixin:
             await send_text(update, context, error_text)
             return
         prompt = self.photo_attachments.build_prompt(attachment_path, project_path, caption)
-        chat_id = update.effective_chat.id
-        try:
-            self._last_run_results[chat_id] = await self.runtime.run_active_session(
-                update,
-                context,
-                user_message=prompt,
-                image_paths=(attachment_path,),
-            )
-        finally:
-            await self._drain_chat_message_queue(chat_id, context)
+        if await self._maybe_warn_long_gap(
+            update, context, prompt, suppress_working_notice=False, image_paths=(attachment_path,)
+        ):
+            return
+        await self._dispatch_active_session_message(update, context, prompt, image_paths=(attachment_path,))
 
     async def _handle_audio_like(
         self,

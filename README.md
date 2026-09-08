@@ -457,7 +457,7 @@ The bot currently accepts:
   </tr>
   <tr>
     <td><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>Before resuming a session that has been idle a while, warn that the provider's prompt cache has likely expired and resuming may burn far more tokens than usual — with buttons to compact first or proceed anyway. Default: <code>true</code>. See the FAQ below.</td>
+    <td>Before resuming a session that has been idle a while <em>and</em> has accumulated enough context for a reprocess to be costly, warn that the provider's prompt cache has likely expired — with buttons to compact first or proceed anyway. Default: <code>true</code>. See the FAQ below.</td>
   </tr>
   <tr>
     <td><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -465,11 +465,11 @@ The bot currently accepts:
   </tr>
   <tr>
     <td><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>Idle threshold in seconds before the warning fires for Codex sessions. Default: <code>600</code> (10 minutes; conservative, Codex's cache window isn't documented as precisely).</td>
+    <td>Idle threshold in seconds before the warning fires for Codex sessions. Default: <code>1800</code> (30 minutes; Codex/OpenAI don't document an idle-based cache-expiry number, so this is a heuristic — kept less aggressive than Claude's, and paired with a size gate so small sessions don't nag).</td>
   </tr>
   <tr>
     <td><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>Idle threshold in seconds before the warning fires for Copilot sessions. Default: <code>600</code> (10 minutes; same caveat as Codex).</td>
+    <td>Idle threshold in seconds before the warning fires for Copilot sessions. Default: <code>0</code> (disabled). GitHub's own docs state Copilot CLI has no inactivity timeout and already auto-compacts its own context natively (~80-95% usage) — there's no idle-based risk to warn about here, so this defers to Copilot's own mechanism instead of inventing one. Set a positive value to opt into an idle-based nudge anyway.</td>
   </tr>
   <tr>
     <td><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -752,7 +752,9 @@ Not because of some inherent per-call overhead difference — headless (`-p`) an
 
 **Mitigation:** periodically run `/compact` on long-lived sessions (this app supports it as a Telegram command) instead of letting one session run indefinitely, especially if you notice it's been idle for a long stretch. Starting a fresh `/new` session for unrelated work also helps keep context — and cost — bounded.
 
-The app also does this automatically: before resuming a session that has been idle past a per-provider threshold (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, default 1 hour for Claude Code, 10 minutes for Codex/Copilot), it holds your message and asks:
+The app also does this automatically, combining two signals per provider so it only interrupts you when it's actually likely to matter: an idle-time threshold (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *and* how much context the session has already accumulated (skipping the warning for small/cheap sessions even if they've been idle a while, since reprocessing those from scratch is negligible anyway). Defaults: 1 hour for Claude Code (an idle-time number with real evidence behind it — see above); 30 minutes for Codex, paired with the size gate, since neither Codex nor OpenAI document an idle-based cache-expiry number and the earlier, more aggressive default turned out to nag too often; and disabled by default for Copilot, because [GitHub's own docs](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) state Copilot CLI has no inactivity timeout at all and already auto-compacts its own context natively (around 80–95% usage) — there's nothing idle-related to warn about there, so this defers to Copilot's own mechanism rather than inventing one. Set `COPILOT_LONG_GAP_SECONDS` to a positive value if you want an idle-based nudge for Copilot anyway.
+
+When the threshold and size gate are both met, it holds your message and asks:
 
 > ⏳ This session has been idle for {gap}. Resuming it now will likely reprocess the whole conversation from scratch (the provider's response cache has probably expired), which can burn significantly more tokens than usual. Compact first to start a smaller, cheaper session, or proceed anyway?
 >

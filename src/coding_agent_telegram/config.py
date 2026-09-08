@@ -26,13 +26,26 @@ DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 DEFAULT_OPENAI_WHISPER_MODEL = "base"
 DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
 # How long a session can sit idle before resuming it risks a costly prompt-cache
-# miss (see README FAQ: "does this app burn more tokens than the terminal?").
-# Claude Code's extended cache checkpoint holds for about an hour, empirically
-# confirmed against real session transcripts. Codex/Copilot's cache windows are
-# shorter and not documented as precisely, so their defaults are conservative.
+# miss (see README FAQ: "does this app burn more tokens than the terminal?"). This is
+# only the idle-time half of the check -- session_gap.py also gates on accumulated
+# session size where a provider exposes one, so small/cheap sessions don't nag even
+# past this threshold (see _SIZE_GATE_TOKENS in router/message_commands.py).
+#
+# Claude: no official idle-based cache-expiry number is published, but the extended
+# prompt-cache checkpoint was empirically confirmed (against real session transcripts)
+# to hold for about an hour before a full-context reprocess kicks in.
 DEFAULT_CLAUDE_LONG_GAP_SECONDS = 3600
-DEFAULT_CODEX_LONG_GAP_SECONDS = 600
-DEFAULT_COPILOT_LONG_GAP_SECONDS = 600
+# Codex: OpenAI doesn't document an idle-based cache-expiry number either. Raised from
+# an earlier, more aggressive default now that the size gate above filters out small
+# sessions -- there's no basis for the original number being especially "correct", so
+# this favors fewer interruptions.
+DEFAULT_CODEX_LONG_GAP_SECONDS = 1800
+# Copilot: GitHub's docs state Copilot CLI has no inactivity timeout at all, and it
+# already auto-compacts its own context (around ~80-95% usage) without any idle
+# involvement. There's nothing analogous to warn about here, so this defaults to
+# disabled (0) rather than inventing an idle-cache-expiry assumption that doesn't
+# apply to this provider. Set a positive value to opt into an idle-based nudge anyway.
+DEFAULT_COPILOT_LONG_GAP_SECONDS = 0
 
 
 @dataclass(frozen=True)
