@@ -434,7 +434,7 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>Trước khi resume một session đã idle một thời gian, cảnh báo rằng prompt cache của provider có thể đã hết hạn và việc resume có thể tốn nhiều token hơn hẳn bình thường — kèm các nút để compact trước hoặc cứ tiếp tục. Mặc định: <code>true</code>. Xem FAQ bên dưới.</td>
+    <td>Trước khi resume một session đã idle một thời gian <em>và</em> đã tích lũy đủ context khiến việc xử lý lại tốn kém, cảnh báo rằng prompt cache của provider có thể đã hết hạn — kèm các nút để compact trước hoặc cứ tiếp tục. Mặc định: <code>true</code>. Xem FAQ bên dưới.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -442,11 +442,11 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Codex. Mặc định: <code>600</code> (10 phút; giá trị thận trọng vì cửa sổ cache của Codex không được tài liệu hóa chính xác đến mức đó).</td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Codex. Mặc định: <code>3600</code> (1 giờ, giống Claude; OpenAI không tài liệu hóa số liệu hết hạn cache dựa trên idle cho Codex, và cache riêng của Codex nhìn chung cũng ngắn hạn hơn Claude, nên khớp với ngưỡng của Claude không làm giảm độ chính xác -- kết hợp với size gate để các session nhỏ không gây phiền).</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Copilot. Mặc định: <code>600</code> (10 phút; cùng lưu ý như Codex).</td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Copilot. Mặc định: <code>0</code> (tắt). Tài liệu chính thức của GitHub nêu rõ Copilot CLI không có inactivity timeout và đã tự động nén (auto-compact) context của chính nó (quanh mức sử dụng 80-95%) -- không có rủi ro nào liên quan đến idle cần cảnh báo ở đây, nên phần này để cơ chế riêng của Copilot xử lý thay vì tự bịa ra một cái. Đặt giá trị dương nếu bạn vẫn muốn có nhắc nhở dựa trên idle cho Copilot.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -722,7 +722,9 @@ Không phải do chênh lệch overhead cố hữu trên mỗi lần gọi — h
 
 **Cách giảm thiểu:** định kỳ chạy `/compact` trên các session tồn tại lâu (app này hỗ trợ như một lệnh Telegram) thay vì để một session chạy vô thời hạn, đặc biệt nếu bạn nhận thấy nó đã idle một thời gian dài. Bắt đầu một session `/new` mới cho công việc không liên quan cũng giúp giữ context — và chi phí — trong tầm kiểm soát.
 
-Giờ đây app cũng tự động làm việc này: trước khi resume một session đã idle quá ngưỡng riêng theo từng provider (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, mặc định 1 giờ cho Claude Code, 10 phút cho Codex/Copilot), app sẽ giữ tin nhắn của bạn lại và hỏi:
+Giờ đây app cũng tự động làm việc này, bằng cách kết hợp hai tín hiệu theo từng provider để chỉ làm gián đoạn bạn khi thực sự đáng: một ngưỡng idle (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *và* lượng context mà session đã tích lũy (bỏ qua cảnh báo cho các session nhỏ/rẻ ngay cả khi đã idle một lúc, vì xử lý lại từ đầu khi đó gần như không đáng kể). Mặc định: 1 giờ cho cả Claude Code lẫn Codex -- con số của Claude có bằng chứng thực tế hỗ trợ (xem ở trên), và dù OpenAI không tài liệu hóa cho Codex, cache riêng của Codex nhìn chung cũng ngắn hạn hơn Claude, nên khớp với ngưỡng của Claude không tốn gì về độ chính xác mà chỉ giúp giảm số lần gián đoạn, nhất là khi giờ đã kết hợp với size gate; và tắt theo mặc định cho Copilot, vì [tài liệu chính thức của GitHub](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) nêu rõ Copilot CLI hoàn toàn không có inactivity timeout và đã tự động nén context của chính nó (quanh mức sử dụng 80-95%) -- không có gì liên quan đến idle cần cảnh báo ở đó, nên phần này để cơ chế riêng của Copilot xử lý thay vì tự bịa ra một cái. Đặt `COPILOT_LONG_GAP_SECONDS` thành giá trị dương nếu bạn vẫn muốn có nhắc nhở dựa trên idle cho Copilot.
+
+Khi cả ngưỡng idle và size gate đều thỏa mãn, app sẽ giữ tin nhắn của bạn lại và hỏi:
 
 > ⏳ Session này đã idle {gap}. Resume ngay bây giờ nhiều khả năng sẽ xử lý lại toàn bộ cuộc hội thoại từ đầu (cache phản hồi của provider có lẽ đã hết hạn), có thể tốn token nhiều hơn đáng kể so với bình thường. Compact trước để bắt đầu một session nhỏ hơn, rẻ hơn, hay cứ tiếp tục?
 >

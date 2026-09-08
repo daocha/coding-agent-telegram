@@ -35,11 +35,13 @@ DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
 # prompt-cache checkpoint was empirically confirmed (against real session transcripts)
 # to hold for about an hour before a full-context reprocess kicks in.
 DEFAULT_CLAUDE_LONG_GAP_SECONDS = 3600
-# Codex: OpenAI doesn't document an idle-based cache-expiry number either. Raised from
-# an earlier, more aggressive default now that the size gate above filters out small
-# sessions -- there's no basis for the original number being especially "correct", so
-# this favors fewer interruptions.
-DEFAULT_CODEX_LONG_GAP_SECONDS = 1800
+# Codex: OpenAI doesn't document an idle-based cache-expiry number either, and its API
+# prompt cache is generally shorter-lived than Claude's extended checkpoint anyway --
+# by the time either 30 or 60 minutes of idle has passed, the cache is almost
+# certainly gone regardless, so there's no accuracy cost to picking the larger number.
+# Matches Claude's threshold for a simpler mental model, now that the size gate above
+# already filters out small sessions that wouldn't be worth nagging about anyway.
+DEFAULT_CODEX_LONG_GAP_SECONDS = 3600
 # Copilot: GitHub's docs state Copilot CLI has no inactivity timeout at all, and it
 # already auto-compacts its own context (around ~80-95% usage) without any idle
 # involvement. There's nothing analogous to warn about here, so this defaults to

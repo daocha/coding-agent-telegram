@@ -438,7 +438,7 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>Waarschuwt, voordat een lang inactieve sessie wordt hervat, dat de prompt-cache van de provider waarschijnlijk is verlopen en hervatten veel meer tokens kan kosten dan normaal — met knoppen om eerst te compacten of toch door te gaan. Standaard: <code>true</code>. Zie de FAQ hieronder.</td>
+    <td>Waarschuwt, voordat een sessie wordt hervat die al een tijdje inactief is <em>en</em> genoeg context heeft opgebouwd om een herverwerking kostbaar te maken, dat de prompt-cache van de provider waarschijnlijk is verlopen — met knoppen om eerst te compacten of toch door te gaan. Standaard: <code>true</code>. Zie de FAQ hieronder.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -446,11 +446,11 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Codex-sessies. Standaard: <code>600</code> (10 minuten; behoudend, want het cachevenster van Codex is niet zo precies gedocumenteerd).</td>
+    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Codex-sessies. Standaard: <code>3600</code> (1 uur, gelijk aan Claude; OpenAI documenteert geen op inactiviteit gebaseerd cache-vervalgetal voor Codex, en de eigen cache van Codex is sowieso doorgaans korter dan die van Claude, dus aansluiten bij Claude's drempel kost niets aan nauwkeurigheid — gecombineerd met de omvangdrempel zodat kleine sessies niet vervelend worden).</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Copilot-sessies. Standaard: <code>600</code> (10 minuten; zelfde voorbehoud als bij Codex).</td>
+    <td>Inactiviteitsdrempel in seconden voordat de waarschuwing afgaat voor Copilot-sessies. Standaard: <code>0</code> (uitgeschakeld). GitHub's eigen documentatie stelt dat Copilot CLI geen inactiviteitstimeout heeft en zijn eigen context al native compact (rond 80-95% gebruik) — er is hier geen op inactiviteit gebaseerd risico om voor te waarschuwen, dus dit vertrouwt op Copilot's eigen mechanisme in plaats van er zelf een te verzinnen. Stel een positieve waarde in als je toch een op inactiviteit gebaseerde melding voor Copilot wilt.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -728,7 +728,9 @@ Niet vanwege een inherent verschil in overhead per aanroep — headless (`-p`) e
 
 **Mitigatie:** draai periodiek `/compact` op langlopende sessies (deze app ondersteunt dit als Telegram-commando) in plaats van een sessie onbeperkt door te laten lopen, zeker als je merkt dat hij lang inactief is geweest. Een nieuwe `/new`-sessie starten voor niet-gerelateerd werk helpt ook om context — en kosten — beperkt te houden.
 
-De app doet dit inmiddels ook automatisch: voordat een sessie wordt hervat die langer inactief is geweest dan een per-provider drempel (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, standaard 1 uur voor Claude Code, 10 minuten voor Codex/Copilot), houdt hij je bericht vast en vraagt:
+De app doet dit inmiddels ook automatisch, door per provider twee signalen te combineren zodat je alleen wordt onderbroken als het er echt toe doet: een inactiviteitsdrempel (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *en* hoeveel context de sessie al heeft opgebouwd (de waarschuwing wordt overgeslagen voor kleine/goedkope sessies, zelfs als ze een tijdje inactief zijn geweest, omdat die vanaf nul herverwerken toch verwaarloosbaar is). Standaardwaarden: 1 uur voor zowel Claude Code als Codex — Claude's getal is onderbouwd met echt bewijs (zie hierboven), en hoewel OpenAI er geen documenteert voor Codex, is de eigen cache van Codex sowieso doorgaans korter dan die van Claude, dus aansluiten bij Claude's drempel kost niets aan nauwkeurigheid en levert simpelweg minder onderbrekingen op, zeker nu gecombineerd met de omvangdrempel; en standaard uitgeschakeld voor Copilot, omdat [GitHub's eigen documentatie](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) stelt dat Copilot CLI helemaal geen inactiviteitstimeout heeft en zijn eigen context al native compact (rond 80-95% gebruik) — daar is niets inactiviteitsgerelateerds om voor te waarschuwen, dus dit vertrouwt op Copilot's eigen mechanisme in plaats van er zelf een te verzinnen. Stel `COPILOT_LONG_GAP_SECONDS` in op een positieve waarde als je toch een op inactiviteit gebaseerde melding voor Copilot wilt.
+
+Als zowel de drempel als de omvangdrempel worden gehaald, houdt de app je bericht vast en vraagt:
 
 > ⏳ Deze sessie is {gap} inactief geweest. Hem nu hervatten zal waarschijnlijk het hele gesprek helemaal opnieuw verwerken (de responscache van de provider is vermoedelijk verlopen), wat aanzienlijk meer tokens kan kosten dan normaal. Eerst compacten om een kleinere, goedkopere sessie te starten, of toch doorgaan?
 >

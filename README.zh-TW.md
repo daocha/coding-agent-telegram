@@ -436,7 +436,7 @@ bot 目前接受：
   </tr>
   <tr>
     <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>在恢復一個已經閒置一段時間的 session 之前，提醒使用者 provider 的 prompt cache 很可能已經過期，恢復可能會比平常消耗多很多 token —— 並提供按鈕讓你選擇先 compact 或直接繼續。預設：<code>true</code>。詳見下方 FAQ。</td>
+    <td>在恢復一個已經閒置一段時間<em>並且</em>已累積足夠 context（重新處理成本較高）的 session 之前，提醒使用者 provider 的 prompt cache 很可能已經過期 —— 並提供按鈕讓你選擇先 compact 或直接繼續。預設：<code>true</code>。詳見下方 FAQ。</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -444,11 +444,11 @@ bot 目前接受：
   </tr>
   <tr>
     <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>Codex session 觸發此警告前的閒置門檻（秒）。預設：<code>600</code>（10 分鐘；因為 Codex 的 cache 保留時間沒有那麼精確的官方說明，所以取值偏保守）。</td>
+    <td>Codex session 觸發此警告前的閒置門檻（秒）。預設：<code>3600</code>（1 小時，與 Claude 相同；OpenAI 並未為 Codex 公布以閒置時間為基礎的 cache 失效數字，而且 Codex 本身的 cache 通常也比 Claude 更短命，因此對齊 Claude 的門檻不會損失準確度 —— 並結合 size gate，避免小型 session 頻繁打擾）。</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>Copilot session 觸發此警告前的閒置門檻（秒）。預設：<code>600</code>（10 分鐘；與 Codex 相同的考量）。</td>
+    <td>Copilot session 觸發此警告前的閒置門檻（秒）。預設：<code>0</code>（停用）。GitHub 官方文件指出 Copilot CLI 沒有 inactivity timeout，並且已經原生自動壓縮自身 context（使用率約 80-95% 時）—— 這裡沒有需要提醒的閒置相關風險，因此交由 Copilot 自身機制處理，而不是自行假設一個並不存在的 API。若仍希望針對 Copilot 啟用以閒置時間為基礎的提醒，可設為正數。</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -730,7 +730,9 @@ Codex 和 Copilot 在自己的 resume/list 指令中並不會做這種互動式�
 
 **緩解方式：** 對長期使用的 session 定期執行 `/compact`（這個 app 已支援作為 Telegram 指令），而不是讓一個 session 無限期地繼續跑下去，尤其是當你發現它已經閒置很久的時候。為不相關的工作另外開一個新的 `/new` session，也有助於把 context——以及成本——控制在合理範圍內。
 
-現在 app 也會自動幫你做這件事：在恢復一個閒置時間超過各 provider 門檻（`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`，預設 Claude Code 為 1 小時、Codex/Copilot 為 10 分鐘）的 session 之前，它會先保留你的訊息並詢問：
+現在 app 也會自動幫你做這件事，透過結合每個 provider 的兩個訊號，只在真的可能有影響時才打斷你：一個閒置時間門檻（`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`），*以及* session 已經累積了多少 context（對於小型、成本低的 session，即使已經閒置一段時間，也會略過提醒，因為從頭重新處理它們的代價可以忽略不計）。預設值：Claude Code 與 Codex 均為 1 小時 —— Claude 的數字背後有實際證據支持（見上文），雖然 OpenAI 並未為 Codex 公布相應數字，但 Codex 本身的 cache 通常也比 Claude 更短命，因此對齊 Claude 的門檻不會損失準確度，只會減少打擾次數，尤其是現在還結合了 size gate；而 Copilot 預設關閉，因為[GitHub 官方文件](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management)明確指出 Copilot CLI 完全沒有 inactivity timeout，並且已經原生自動壓縮自身 context（使用率約 80-95% 時）—— 這裡沒有任何與閒置相關的問題需要提醒，因此交由 Copilot 自身機制處理，而不是自行假設一個。若仍希望針對 Copilot 啟用以閒置時間為基礎的提醒，可將 `COPILOT_LONG_GAP_SECONDS` 設為正數。
+
+當閒置門檻與 size gate 同時滿足時，它會先保留你的訊息並詢問：
 
 > ⏳ 這個 session 已經閒置了 {gap}。現在恢復很可能會把整段對話從頭重新處理一次（provider 的回覆 cache 很可能已經過期），可能會比平常多消耗不少 token。要先 compact 開啟一個較小、較省 token 的 session，還是直接繼續？
 >

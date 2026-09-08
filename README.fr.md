@@ -438,7 +438,7 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>Avant de reprendre une session restée inactive un moment, avertit que le cache de prompt du fournisseur a probablement expiré et que la reprise peut consommer bien plus de tokens que d'habitude — avec des boutons pour compacter d'abord ou continuer quand même. Défaut : <code>true</code>. Voir la FAQ ci-dessous.</td>
+    <td>Avant de reprendre une session restée inactive un moment <em>et</em> ayant accumulé assez de contexte pour qu'un retraitement soit coûteux, avertit que le cache de prompt du fournisseur a probablement expiré — avec des boutons pour compacter d'abord ou continuer quand même. Défaut : <code>true</code>. Voir la FAQ ci-dessous.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -446,11 +446,11 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Codex. Défaut : <code>600</code> (10 minutes ; valeur prudente, la fenêtre de cache de Codex n'étant pas documentée aussi précisément).</td>
+    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Codex. Défaut : <code>3600</code> (1 heure, comme pour Claude ; OpenAI ne documente aucun chiffre d'expiration de cache basé sur l'inactivité pour Codex, et le cache propre de Codex est de toute façon généralement plus éphémère que celui de Claude, donc s'aligner sur le seuil de Claude ne coûte rien en précision — combiné au filtre de taille pour que les petites sessions n'agacent pas).</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Copilot. Défaut : <code>600</code> (10 minutes ; même réserve que pour Codex).</td>
+    <td>Seuil d'inactivité en secondes avant que l'avertissement se déclenche pour les sessions Copilot. Défaut : <code>0</code> (désactivé). La documentation officielle de GitHub indique que Copilot CLI n'a aucun délai d'inactivité et compacte déjà nativement son propre contexte (autour de 80-95 % d'utilisation) — il n'y a ici aucun risque lié à l'inactivité à signaler, donc ceci s'en remet au mécanisme propre de Copilot plutôt que d'en inventer un. Définissez une valeur positive pour activer quand même une alerte basée sur l'inactivité pour Copilot.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -728,7 +728,9 @@ Pas à cause d'une différence de surcoût inhérente par appel — le mode head
 
 **Mitigation :** exécutez périodiquement `/compact` sur les sessions longue durée (cette app le prend en charge comme commande Telegram) plutôt que de laisser une session tourner indéfiniment, surtout si vous remarquez qu'elle est restée inactive longtemps. Démarrer une nouvelle session `/new` pour un travail sans rapport aide aussi à garder le contexte — et le coût — sous contrôle.
 
-L'app le fait désormais aussi automatiquement : avant de reprendre une session restée inactive au-delà d'un seuil propre à chaque fournisseur (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, par défaut 1 heure pour Claude Code, 10 minutes pour Codex/Copilot), elle retient votre message et demande :
+L'app le fait désormais aussi automatiquement, en combinant deux signaux par fournisseur pour ne vous interrompre que quand c'est vraiment susceptible d'importer : un seuil d'inactivité (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *et* la quantité de contexte déjà accumulée par la session (l'avertissement est ignoré pour les petites sessions peu coûteuses même après une longue inactivité, puisque les retraiter depuis zéro est alors négligeable). Valeurs par défaut : 1 heure pour Claude Code comme pour Codex — le chiffre de Claude repose sur des données réelles (voir plus haut), et bien qu'OpenAI n'en documente aucun pour Codex, le cache propre de Codex est de toute façon généralement plus éphémère que celui de Claude, donc s'aligner sur le seuil de Claude ne coûte rien en précision et se traduit simplement par moins d'interruptions, surtout désormais combiné au filtre de taille ; et désactivé par défaut pour Copilot, car [la documentation officielle de GitHub](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) indique que Copilot CLI n'a aucun délai d'inactivité et compacte déjà nativement son propre contexte (autour de 80-95 % d'utilisation) — il n'y a là rien de lié à l'inactivité à signaler, donc ceci s'en remet au mécanisme propre de Copilot plutôt que d'en inventer un. Définissez `COPILOT_LONG_GAP_SECONDS` à une valeur positive si vous voulez quand même une alerte basée sur l'inactivité pour Copilot.
+
+Quand le seuil et le filtre de taille sont tous deux atteints, elle retient votre message et demande :
 
 > ⏳ Cette session est inactive depuis {gap}. La reprendre maintenant va probablement retraiter toute la conversation depuis le début (le cache de réponses du fournisseur a sans doute expiré), ce qui peut consommer bien plus de tokens que d'habitude. Compacter d'abord pour démarrer une session plus petite et moins coûteuse, ou continuer quand même ?
 >

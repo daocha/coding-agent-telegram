@@ -434,7 +434,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>ก่อน resume session ที่ idle มาสักพัก จะเตือนว่า prompt cache ของ provider น่าจะหมดอายุแล้ว และการ resume อาจกิน token มากกว่าปกติมาก — พร้อมปุ่มให้เลือก compact ก่อน หรือดำเนินการต่อเลย ค่าเริ่มต้น: <code>true</code> ดู FAQ ด้านล่าง</td>
+    <td>ก่อน resume session ที่ idle มาสักพัก <em>และ</em> สะสม context มากพอที่การประมวลผลใหม่จะมีต้นทุนสูง จะเตือนว่า prompt cache ของ provider น่าจะหมดอายุแล้ว — พร้อมปุ่มให้เลือก compact ก่อน หรือดำเนินการต่อเลย ค่าเริ่มต้น: <code>true</code> ดู FAQ ด้านล่าง</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -442,11 +442,11 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Codex ค่าเริ่มต้น: <code>600</code> (10 นาที ตั้งไว้แบบระมัดระวังเพราะช่วง cache ของ Codex ไม่ได้มีเอกสารระบุไว้ชัดเจนขนาดนั้น)</td>
+    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Codex ค่าเริ่มต้น: <code>3600</code> (1 ชั่วโมง เท่ากับ Claude เนื่องจาก OpenAI ไม่มีเอกสารระบุตัวเลข cache หมดอายุแบบอิงตาม idle สำหรับ Codex และ cache ของ Codex เองก็มักจะอยู่ได้สั้นกว่า Claude อยู่แล้ว การตั้งให้เท่ากับ threshold ของ Claude จึงไม่เสียความแม่นยำ — และยังจับคู่กับ size gate เพื่อไม่ให้ session เล็กๆ มากวนใจด้วย)</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Copilot ค่าเริ่มต้น: <code>600</code> (10 นาที เหตุผลเดียวกับ Codex)</td>
+    <td>ค่า threshold ของช่วง idle (วินาที) ก่อนที่คำเตือนจะทำงานสำหรับ session ของ Copilot ค่าเริ่มต้น: <code>0</code> (ปิดใช้งาน) เอกสารของ GitHub เองระบุว่า Copilot CLI ไม่มี inactivity timeout และมันจะ auto-compact context ของตัวเองอยู่แล้วโดยธรรมชาติ (ที่ระดับการใช้งานประมาณ 80-95%) ตรงนี้จึงไม่มีความเสี่ยงจาก idle ที่ต้องเตือน จึงปล่อยให้เป็นหน้าที่ของกลไกของ Copilot เองแทนที่จะสมมติ API ที่ไม่มีอยู่จริง ตั้งค่าเป็นตัวเลขบวกได้ถ้าต้องการให้มีการแจ้งเตือนแบบ idle สำหรับ Copilot เช่นกัน</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -728,7 +728,9 @@ Codex และ Copilot ไม่ได้แยกความแตกต่�
 
 **วิธีบรรเทา:** รัน `/compact` เป็นระยะกับ session ที่ใช้งานยาวนาน (แอปนี้รองรับเป็นคำสั่ง Telegram) แทนที่จะปล่อยให้ session รันไปเรื่อยๆ ไม่มีที่สิ้นสุด โดยเฉพาะถ้าสังเกตว่ามัน idle มานาน การเริ่ม session ใหม่ด้วย `/new` สำหรับงานที่ไม่เกี่ยวข้องกันก็ช่วยควบคุม context — และค่าใช้จ่าย — ให้อยู่ในขอบเขตได้เช่นกัน
 
-ตอนนี้แอปทำสิ่งนี้ให้โดยอัตโนมัติด้วย: ก่อนจะ resume session ที่ idle เกิน threshold ของแต่ละ provider (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS` ค่าเริ่มต้นคือ 1 ชั่วโมงสำหรับ Claude Code และ 10 นาทีสำหรับ Codex/Copilot) แอปจะกันข้อความของคุณไว้ก่อนแล้วถามว่า:
+ตอนนี้แอปทำสิ่งนี้ให้โดยอัตโนมัติด้วย โดยผสาน signal สองอย่างต่อ provider เพื่อจะขัดจังหวะคุณเฉพาะตอนที่มีนัยสำคัญจริงๆ: threshold ของช่วง idle (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *และ* context ที่ session สะสมไว้แล้วมากแค่ไหน (จะข้ามคำเตือนสำหรับ session เล็กๆ ที่ต้นทุนต่ำ แม้จะ idle มาสักพักแล้วก็ตาม เพราะการประมวลผลใหม่ทั้งหมดแทบไม่มีต้นทุนอยู่แล้ว) ค่าเริ่มต้น: 1 ชั่วโมงทั้งสำหรับ Claude Code และ Codex — ตัวเลขของ Claude มีหลักฐานจริงรองรับ (ดูด้านบน) และแม้ OpenAI จะไม่มีเอกสารระบุไว้สำหรับ Codex แต่ cache ของ Codex เองก็มักจะอยู่ได้สั้นกว่า Claude อยู่แล้ว การตั้งให้เท่ากับ threshold ของ Claude จึงไม่เสียความแม่นยำ แค่ลดจำนวนครั้งที่ขัดจังหวะ (ยิ่งตอนนี้จับคู่กับ size gate ด้วย) ส่วน Copilot ปิดใช้งานโดยค่าเริ่มต้น เพราะ[เอกสารของ GitHub เอง](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management)ระบุว่า Copilot CLI ไม่มี inactivity timeout เลย และ auto-compact context ของตัวเองอยู่แล้วโดยธรรมชาติ (ที่ระดับการใช้งานประมาณ 80-95%) ตรงนี้จึงไม่มีอะไรเกี่ยวกับ idle ที่ต้องเตือน จึงปล่อยให้เป็นหน้าที่ของกลไกของ Copilot เองแทนที่จะสร้างขึ้นมาเอง ตั้งค่า `COPILOT_LONG_GAP_SECONDS` เป็นตัวเลขบวกได้ถ้าต้องการให้มีการแจ้งเตือนแบบ idle สำหรับ Copilot เช่นกัน
+
+เมื่อเข้าเงื่อนไขทั้ง threshold และ size gate แอปจะกันข้อความของคุณไว้ก่อนแล้วถามว่า:
 
 > ⏳ session นี้ idle มาแล้ว {gap} การ resume ตอนนี้มีแนวโน้มจะประมวลผลบทสนทนาทั้งหมดใหม่ตั้งแต่ต้น (cache การตอบกลับของ provider น่าจะหมดอายุแล้ว) ซึ่งอาจกิน token มากกว่าปกติอย่างมาก ต้องการ compact ก่อนเพื่อเริ่ม session ใหม่ที่เล็กและถูกกว่า หรือดำเนินการต่อเลย?
 >

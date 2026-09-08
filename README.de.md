@@ -438,7 +438,7 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
-    <td>Warnt vor dem Fortsetzen einer länger inaktiven Sitzung, dass der Prompt-Cache des Anbieters wahrscheinlich abgelaufen ist und das Fortsetzen deutlich mehr Tokens verbrauchen kann — mit Schaltflächen zum vorherigen Komprimieren oder trotzdem Fortsetzen. Standard: <code>true</code>. Siehe FAQ weiter unten.</td>
+    <td>Warnt, bevor eine Sitzung fortgesetzt wird, die lange im Leerlauf war <em>und</em> genug Kontext angesammelt hat, dass ein erneutes Verarbeiten teuer wäre, dass der Prompt-Cache des Anbieters wahrscheinlich abgelaufen ist — mit Schaltflächen zum vorherigen Komprimieren oder trotzdem Fortsetzen. Standard: <code>true</code>. Siehe FAQ weiter unten.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
@@ -446,11 +446,11 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
-    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Codex-Sitzungen ausgelöst wird. Standard: <code>600</code> (10 Minuten; konservativ, da Codex' Cache-Fenster nicht so genau dokumentiert ist).</td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Codex-Sitzungen ausgelöst wird. Standard: <code>3600</code> (1 Stunde, wie bei Claude; OpenAI dokumentiert für Codex keine cache-verfallszeit basierend auf Leerlauf, und Codex' eigener Cache ist ohnehin meist kurzlebiger als der von Claude, sodass ein Angleichen an Claudes Schwelle keine Genauigkeit kostet — kombiniert mit dem Größen-Gate, damit kleine Sitzungen nicht nerven).</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
-    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Copilot-Sitzungen ausgelöst wird. Standard: <code>600</code> (10 Minuten; gleicher Vorbehalt wie bei Codex).</td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Copilot-Sitzungen ausgelöst wird. Standard: <code>0</code> (deaktiviert). GitHubs eigene Dokumentation besagt, dass die Copilot-CLI kein Inaktivitäts-Timeout hat und ihren Kontext bereits nativ selbst komprimiert (bei ~80–95 % Auslastung) — hier gibt es kein leerlaufbezogenes Risiko zu warnen, daher verlässt sich diese App auf Copilots eigenen Mechanismus, statt einen zu erfinden, der nicht existiert. Setze einen positiven Wert, um trotzdem einen leerlaufbasierten Hinweis für Copilot zu aktivieren.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -732,7 +732,9 @@ Nicht wegen eines grundsätzlichen Unterschieds im Overhead pro Aufruf — Headl
 
 **Abhilfe:** Führe bei langlebigen Sitzungen regelmäßig `/compact` aus (dieser Telegram-Befehl wird von der App unterstützt), statt eine Sitzung unbegrenzt weiterlaufen zu lassen — besonders, wenn sie länger im Leerlauf war. Auch eine neue `/new`-Sitzung für nicht zusammenhängende Arbeit hilft, Kontext — und Kosten — begrenzt zu halten.
 
-Die App tut das inzwischen auch automatisch: Bevor sie eine Sitzung fortsetzt, die länger als ein anbieterabhängiger Schwellenwert (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`, standardmäßig 1 Stunde für Claude Code, 10 Minuten für Codex/Copilot) im Leerlauf war, hält sie deine Nachricht zurück und fragt:
+Die App tut das inzwischen auch automatisch, indem sie pro Anbieter zwei Signale kombiniert, damit sie dich nur dann unterbricht, wenn es wirklich wichtig ist: eine Leerlaufzeit-Schwelle (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *und* wie viel Kontext die Sitzung bereits angesammelt hat (die Warnung wird für kleine/günstige Sitzungen übersprungen, selbst wenn sie eine Weile im Leerlauf waren, da ein erneutes Verarbeiten dann vernachlässigbar wäre). Standardwerte: 1 Stunde sowohl für Claude Code als auch für Codex — Claudes Wert ist durch echte Daten belegt (siehe oben), und obwohl OpenAI für Codex keinen dokumentiert, ist Codex' eigener Prompt-Cache ohnehin meist kurzlebiger als der von Claude, sodass ein Angleichen an Claudes Schwelle keine Genauigkeit kostet und einfach zu weniger Unterbrechungen führt, besonders jetzt kombiniert mit dem Größen-Gate; für Copilot ist es standardmäßig deaktiviert, weil [GitHubs eigene Dokumentation](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) besagt, dass die Copilot-CLI überhaupt kein Inaktivitäts-Timeout hat und ihren Kontext bereits nativ selbst komprimiert (bei etwa 80–95 % Auslastung) — dort gibt es nichts Leerlaufbezogenes zu warnen, daher verlässt sich diese App auf Copilots eigenen Mechanismus, statt einen zu erfinden. Setze `COPILOT_LONG_GAP_SECONDS` auf einen positiven Wert, wenn du trotzdem einen leerlaufbasierten Hinweis für Copilot möchtest.
+
+Sind sowohl die Schwelle als auch das Größen-Gate erreicht, hält sie deine Nachricht zurück und fragt:
 
 > ⏳ Diese Sitzung war {gap} im Leerlauf. Sie jetzt fortzusetzen, verarbeitet die gesamte Unterhaltung wahrscheinlich komplett neu (der Antwort-Cache des Anbieters ist vermutlich abgelaufen), was deutlich mehr Tokens als üblich verbrauchen kann. Erst komprimieren, um eine kleinere, günstigere Sitzung zu starten, oder trotzdem fortsetzen?
 >
