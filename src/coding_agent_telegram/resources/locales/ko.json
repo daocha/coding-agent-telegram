@@ -208,5 +208,10 @@
   "status.usage_compact": "사용법: /compact",
   "runtime.compacting_session": "활성 세션을 압축하는 중입니다...",
   "runtime.compact_summary_missing": "프로바이더가 사용할 수 있는 간결한 인계 요약을 반환하지 않았습니다.",
-  "runtime.session_compacted": "세션 압축을 완료했습니다. {session_name} ({session_id})로 전환했습니다."
+  "runtime.session_compacted": "세션 압축을 완료했습니다. {session_name} ({session_id})로 전환했습니다.",
+  "runtime.long_gap_warning": "⏳ 이 session 은 {gap} 동안 idle 상태였습니다. 지금 재개하면 대화 전체를 처음부터 다시 처리할 가능성이 높아(provider 의 응답 cache 가 만료되었을 가능성이 큼) 평소보다 훨씬 많은 token 을 소모할 수 있습니다. 더 작고 저렴한 session 을 새로 시작하도록 먼저 compact 할까요, 아니면 그대로 진행할까요?",
+  "runtime.long_gap_compact_button": "✅ 먼저 compact",
+  "runtime.long_gap_proceed_button": "⚠️ 그대로 진행",
+  "runtime.long_gap_proceeding": "기존 session 에서 계속 진행합니다...",
+  "runtime.long_gap_compacting": "계속하기 전에 compact 중입니다..."
 }

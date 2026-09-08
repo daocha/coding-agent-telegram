@@ -208,5 +208,10 @@
   "status.usage_compact": "Cách dùng: /compact",
   "runtime.compacting_session": "Đang thu gọn phiên đang hoạt động...",
   "runtime.compact_summary_missing": "Nhà cung cấp không trả về bản tóm tắt bàn giao dạng rút gọn có thể sử dụng được.",
-  "runtime.session_compacted": "Đã thu gọn phiên thành công. Đã chuyển sang {session_name} ({session_id})."
+  "runtime.session_compacted": "Đã thu gọn phiên thành công. Đã chuyển sang {session_name} ({session_id}).",
+  "runtime.long_gap_warning": "⏳ Session này đã idle {gap}. Resume ngay bây giờ nhiều khả năng sẽ xử lý lại toàn bộ cuộc hội thoại từ đầu (cache phản hồi của provider có lẽ đã hết hạn), có thể tốn token nhiều hơn đáng kể so với bình thường. Compact trước để bắt đầu một session nhỏ hơn, rẻ hơn, hay cứ tiếp tục?",
+  "runtime.long_gap_compact_button": "✅ Compact trước",
+  "runtime.long_gap_proceed_button": "⚠️ Cứ tiếp tục",
+  "runtime.long_gap_proceeding": "Đang tiếp tục trên session hiện có...",
+  "runtime.long_gap_compacting": "Đang compact trước khi tiếp tục..."
 }

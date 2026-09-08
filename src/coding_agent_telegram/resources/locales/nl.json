@@ -208,5 +208,10 @@
   "status.usage_compact": "Gebruik: /compact",
   "runtime.compacting_session": "Actieve sessie wordt gecompact...",
   "runtime.compact_summary_missing": "De aanbieder gaf geen bruikbare compacte overdrachtssamenvatting terug.",
-  "runtime.session_compacted": "Sessie succesvol gecompact. Overgeschakeld naar {session_name} ({session_id})."
+  "runtime.session_compacted": "Sessie succesvol gecompact. Overgeschakeld naar {session_name} ({session_id}).",
+  "runtime.long_gap_warning": "⏳ Deze sessie is {gap} inactief geweest. Hem nu hervatten zal waarschijnlijk het hele gesprek helemaal opnieuw verwerken (de responscache van de provider is vermoedelijk verlopen), wat aanzienlijk meer tokens kan kosten dan normaal. Eerst compacten om een kleinere, goedkopere sessie te starten, of toch doorgaan?",
+  "runtime.long_gap_compact_button": "✅ Eerst compacten",
+  "runtime.long_gap_proceed_button": "⚠️ Toch doorgaan",
+  "runtime.long_gap_proceeding": "Doorgaan op de bestaande sessie...",
+  "runtime.long_gap_compacting": "Compacten voordat we doorgaan..."
 }

@@ -208,5 +208,10 @@
   "status.usage_compact": "Verwendung: /compact",
   "runtime.compacting_session": "Aktive Sitzung wird komprimiert...",
   "runtime.compact_summary_missing": "Der Anbieter hat keine verwendbare kompakte Übergabezusammenfassung zurückgegeben.",
-  "runtime.session_compacted": "Sitzung erfolgreich komprimiert. Zu {session_name} ({session_id}) gewechselt."
+  "runtime.session_compacted": "Sitzung erfolgreich komprimiert. Zu {session_name} ({session_id}) gewechselt.",
+  "runtime.long_gap_warning": "⏳ Diese Sitzung war {gap} im Leerlauf. Sie jetzt fortzusetzen, verarbeitet die gesamte Unterhaltung wahrscheinlich komplett neu (der Antwort-Cache des Anbieters ist vermutlich abgelaufen), was deutlich mehr Tokens als üblich verbrauchen kann. Erst komprimieren, um eine kleinere, günstigere Sitzung zu starten, oder trotzdem fortsetzen?",
+  "runtime.long_gap_compact_button": "✅ Erst komprimieren",
+  "runtime.long_gap_proceed_button": "⚠️ Trotzdem fortsetzen",
+  "runtime.long_gap_proceeding": "Setze mit der bestehenden Sitzung fort...",
+  "runtime.long_gap_compacting": "Komprimiere, bevor es weitergeht..."
 }

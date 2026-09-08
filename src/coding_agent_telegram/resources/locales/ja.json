@@ -208,5 +208,10 @@
   "status.usage_compact": "使い方: /compact",
   "runtime.compacting_session": "アクティブなセッションを圧縮しています...",
   "runtime.compact_summary_missing": "プロバイダーから利用可能な簡潔な引き継ぎ要約が返されませんでした。",
-  "runtime.session_compacted": "セッションの圧縮に成功しました。{session_name} ({session_id}) に切り替えました。"
+  "runtime.session_compacted": "セッションの圧縮に成功しました。{session_name} ({session_id}) に切り替えました。",
+  "runtime.long_gap_warning": "⏳ この session は {gap} の間 idle でした。今 resume すると会話全体をゼロから再処理する可能性が高く（provider の応答 cache はおそらく失効しています）、通常よりかなり多くの token を消費するおそれがあります。先に compact して小さく安価な session を始めますか、それともそのまま続行しますか？",
+  "runtime.long_gap_compact_button": "✅ 先に compact",
+  "runtime.long_gap_proceed_button": "⚠️ そのまま続行",
+  "runtime.long_gap_proceeding": "既存の session で続行しています...",
+  "runtime.long_gap_compacting": "続行前に compact しています..."
 }
