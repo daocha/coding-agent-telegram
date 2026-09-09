@@ -3870,8 +3870,8 @@ def test_long_gap_warning_sent_and_holds_message_when_native_session_idle_past_t
     chat_id, text, _parse_mode, reply_markup = bot.messages[-1]
     assert chat_id == 123
     assert "idle" in text.lower()
-    buttons = reply_markup.inline_keyboard[0]
-    assert [button.callback_data for button in buttons] == ["longgap:compact", "longgap:proceed"]
+    buttons = [button for row in reply_markup.inline_keyboard for button in row]
+    assert [button.callback_data for button in buttons] == ["longgap:switch", "longgap:compact", "longgap:proceed"]
     pending = store.get_chat_state("bot-a", 123)["pending_action"]
     assert pending == {
         "kind": "long_gap_confirm",
@@ -4243,6 +4243,56 @@ def test_long_gap_compact_failure_still_dispatches_held_message(tmp_path: Path):
     assert runner.resume_calls[-1]["session_id"] == "sess_current"
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_current"
+    assert state.get("pending_action") is None
+
+
+def test_long_gap_switch_starts_fresh_session_without_resuming_old_one(tmp_path: Path):
+    """Unlike compact, switching must never resume the old session -- that resume is
+    exactly the full-transcript reprocess cost this button exists to avoid."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {"kind": "long_gap_confirm", "user_message": "keep going", "suppress_working_notice": False},
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:switch", answer=None, edit_message_text=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(update, context))
+
+    assert edited == ["Switching to a new session..."]
+    # The old session is never resumed to generate a summary -- that resume is exactly
+    # the full-transcript reprocess this path exists to avoid. The only resume_session
+    # call is the replayed message running against the brand-new session afterward.
+    assert all(call["session_id"] != "sess_current" for call in runner.resume_calls)
+    assert runner.resume_calls[-1]["session_id"] == "sess_abc123"
+    assert runner.resume_calls[-1]["user_message"] == "keep going"
+    assert runner.create_calls[0]["priming_only"] is True
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert state["sessions"]["sess_abc123"]["name"] == "current-session-new1"
     assert state.get("pending_action") is None
 
 

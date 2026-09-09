@@ -327,16 +327,27 @@ class MessageCommandMixin:
             [
                 [
                     InlineKeyboardButton(
-                        self._t(update, "runtime.long_gap_compact_button"),
-                        callback_data="longgap:compact",
+                        self._t(update, "runtime.long_gap_switch_button"),
+                        callback_data="longgap:switch",
                         **self._affirmative_inline_button_kwargs(),
                     ),
+                ],
+                [
+                    # Deliberately no style kwargs: neither the cheap-but-lossy "switch"
+                    # option nor the risky-but-unmodified "proceed" one, so left unstyled
+                    # rather than colored as affirmative or dangerous.
+                    InlineKeyboardButton(
+                        self._t(update, "runtime.long_gap_compact_button"),
+                        callback_data="longgap:compact",
+                    ),
+                ],
+                [
                     InlineKeyboardButton(
                         self._t(update, "runtime.long_gap_proceed_button"),
                         callback_data="longgap:proceed",
                         **self._negative_inline_button_kwargs(),
                     ),
-                ]
+                ],
             ]
         )
         await context.bot.send_message(
@@ -378,6 +389,14 @@ class MessageCommandMixin:
 
         if action == "longgap:proceed":
             await query.edit_message_text(self._t(update, "runtime.long_gap_proceeding"))
+            await replay()
+            return
+
+        if action == "longgap:switch":
+            await query.edit_message_text(self._t(update, "runtime.long_gap_switching"))
+            # Same reasoning as the compact branch below: replay the held message
+            # regardless of whether switching succeeds, fails, or can't start.
+            await self.runtime.switch_to_new_session(update, context)
             await replay()
             return
 

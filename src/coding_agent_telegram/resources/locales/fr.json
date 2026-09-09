@@ -210,9 +210,13 @@
   "runtime.compacting_session": "Compression de la session active en cours...",
   "runtime.compact_summary_missing": "Le fournisseur n'a pas renvoyé de résumé de relais compact exploitable.",
   "runtime.session_compacted": "session compactée avec succès. Bascule vers {session_name} ({session_id}).",
-  "runtime.long_gap_warning": "⏳ Cette session est inactive depuis {gap}. La reprendre maintenant va probablement retraiter toute la conversation depuis le début (le cache de réponses du fournisseur a sans doute expiré), ce qui peut consommer bien plus de tokens que d'habitude. Compacter d'abord pour démarrer une session plus petite et moins coûteuse, ou continuer quand même ?",
-  "runtime.long_gap_compact_button": "✅ Compacter d'abord",
+  "runtime.switching_session": "Démarrage d'une nouvelle session...",
+  "runtime.session_switched": "Nouvelle session démarrée. Bascule vers {session_name} ({session_id}).",
+  "runtime.long_gap_warning": "⏳ Cette session est inactive depuis {gap}. La reprendre maintenant va probablement retraiter toute la conversation depuis le début (le cache de réponses du fournisseur a sans doute expiré), ce qui peut consommer bien plus de tokens que d'habitude. Compacter retraite aussi le contexte actuel une fois pour rédiger son résumé, donc cela peut aussi consommer beaucoup de tokens si cette session est déjà volumineuse. Basculer vers une nouvelle session évite complètement ce retraitement, mais démarre sans aucune mémoire de cette conversation. Basculer vers une nouvelle session, compacter d'abord, ou continuer quand même ?",
+  "runtime.long_gap_switch_button": "🆕 Basculer vers une nouvelle session",
+  "runtime.long_gap_compact_button": "🔄 Compacter d'abord",
   "runtime.long_gap_proceed_button": "⚠️ Continuer quand même",
   "runtime.long_gap_proceeding": "Poursuite sur la session existante...",
-  "runtime.long_gap_compacting": "Compression avant de continuer..."
+  "runtime.long_gap_compacting": "Compression avant de continuer...",
+  "runtime.long_gap_switching": "Bascule vers une nouvelle session..."
 }

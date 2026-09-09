@@ -210,9 +210,13 @@
   "runtime.compacting_session": "正在压缩当前活动会话...",
   "runtime.compact_summary_missing": "提供方没有返回可用的压缩交接摘要。",
   "runtime.session_compacted": "会话压缩成功。已切换到 {session_name} ({session_id})。",
-  "runtime.long_gap_warning": "⏳ 这个 session 已经空闲了 {gap}。现在恢复很可能会从头重新处理整段对话（provider 的响应 cache 大概率已经过期），可能会比平时多消耗不少 token。要先 compact 以开启一个更小、更省 token 的 session，还是直接继续？",
-  "runtime.long_gap_compact_button": "✅ 先 compact",
+  "runtime.switching_session": "正在启动新 session...",
+  "runtime.session_switched": "已启动新 session。已切换到 {session_name} ({session_id})。",
+  "runtime.long_gap_warning": "⏳ 这个 session 已经空闲了 {gap}。现在恢复很可能会从头重新处理整段对话（provider 的响应 cache 大概率已经过期），可能会比平时多消耗不少 token。compact 同样需要重新处理一次当前上下文来生成摘要，所以如果这个 session 已经很大，也会消耗不少 token。切换到新 session 可以完全跳过这次重新处理，但会失去这段对话的所有记忆。要切换到新 session、先 compact，还是直接继续？",
+  "runtime.long_gap_switch_button": "🆕 切换到新 session",
+  "runtime.long_gap_compact_button": "🔄 先 compact",
   "runtime.long_gap_proceed_button": "⚠️ 直接继续",
   "runtime.long_gap_proceeding": "正在现有 session 上继续...",
-  "runtime.long_gap_compacting": "继续之前正在 compact..."
+  "runtime.long_gap_compacting": "继续之前正在 compact...",
+  "runtime.long_gap_switching": "正在切换到新 session..."
 }

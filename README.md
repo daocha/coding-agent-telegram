@@ -756,9 +756,13 @@ The app also does this automatically, combining two signals per provider so it o
 
 When the threshold and size gate are both met, it holds your message and asks:
 
-> ⏳ This session has been idle for {gap}. Resuming it now will likely reprocess the whole conversation from scratch (the provider's response cache has probably expired), which can burn significantly more tokens than usual. Compact first to start a smaller, cheaper session, or proceed anyway?
+> ⏳ This session has been idle for {gap}. Resuming it now will likely reprocess the whole conversation from scratch (the provider's response cache has probably expired), which can burn significantly more tokens than usual. Compacting also reprocesses the current context once to write its summary, so it can burn a lot of tokens too if this session is already large. Switching to a new session skips that reprocessing entirely, but starts with no memory of this conversation. Switch to a new session, compact first, or proceed anyway?
 >
-> [✅ Compact first] [⚠️ Proceed anyway]
+> [🆕 Switch to new session]
+> [🔄 Compact first]
+> [⚠️ Proceed anyway]
+
+Note that `/compact` itself is not free of this cost: it works by resuming the current (possibly cold) session and asking it to summarize itself, so it still pays the same one-time full-transcript reprocess as just replying would — it just means you only pay it once instead of on every subsequent turn, since the resulting session starts small. **Switch to new session** is the only option that avoids that reprocess altogether: it abandons the old session's context without ever resuming it and starts completely fresh, at the cost of losing that context entirely rather than compressing it into a summary.
 
 Choosing **Compact first** summarizes the session, starts a fresh one from that summary, and then continues with your message on the new session — named after the old session with an incrementing `-resumeN` suffix (e.g. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` on the next compaction), so you can still tell it apart from the original in `/switch`. Choosing **Proceed anyway** just continues on the existing session as normal. Disable the whole check with `LONG_GAP_WARNING_ENABLED=false`.
 </details>
