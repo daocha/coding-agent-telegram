@@ -45,6 +45,7 @@ class DummyRunner:
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "priming_only": priming_only,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -142,6 +143,7 @@ class CompactingRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "priming_only": priming_only,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -1577,6 +1579,7 @@ def test_new_without_name_uses_new_session_as_default_name(tmp_path: Path):
     assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
     assert "Session created successfully: sess_abc123" in bot.messages[-1][1]
     assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
+    assert runner.create_calls[-1]["priming_only"] is True
 
 
 def test_new_without_name_ignores_existing_new_session_labels(tmp_path: Path):
@@ -1622,6 +1625,7 @@ def test_plain_text_create_session_new_session_uses_unnamed_flow(tmp_path: Path)
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
     assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
+    assert runner.create_calls[-1]["priming_only"] is True
 
 
 def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path):
@@ -1644,6 +1648,7 @@ def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path)
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "release prep"
     assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
+    assert runner.create_calls[-1]["priming_only"] is True
 
 
 def test_provider_command_sends_inline_buttons(tmp_path: Path):
@@ -3775,7 +3780,7 @@ def test_compact_reports_usage_when_args_are_passed(tmp_path: Path):
     assert bot.messages[-1][1] == "Usage: /compact"
 
 
-@pytest.mark.parametrize("provider", ["codex", "copilot"])
+@pytest.mark.parametrize("provider", ["codex", "copilot", "claude"])
 def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: str):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -3797,6 +3802,10 @@ def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: st
     assert "compact handoff summary" in runner.resume_calls[-1]["user_message"].lower()
     assert runner.create_calls[-1]["provider"] == provider
     assert "Use this compact handoff summary" in runner.create_calls[-1]["user_message"]
+    # The bootstrap prompt is a handoff summary that lists "next steps"; it must be
+    # marked priming-only so no provider starts executing them while merely seeding
+    # the replacement session.
+    assert runner.create_calls[-1]["priming_only"] is True
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_compacted"
     assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume1"
@@ -3938,6 +3947,25 @@ def test_long_gap_warning_skipped_when_native_session_recently_active(tmp_path: 
 
     assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
     assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_provider_tables_stay_in_sync_with_providers_and_config():
+    """The long-gap check is table-driven, and both tables fail *silently* when a
+    provider is missing: an absent config entry disables the warning, and an absent
+    activity entry reports "unknown". A typo'd AppConfig field name would likewise turn
+    the feature off via getattr's default rather than raising. Pin all three."""
+    import dataclasses
+
+    from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
+    from coding_agent_telegram.router.message_commands import _LONG_GAP_PROVIDER_CONFIG
+    from coding_agent_telegram.session_gap import _ACTIVITY_LOOKUP
+
+    assert set(_LONG_GAP_PROVIDER_CONFIG) == set(SUPPORTED_PROVIDERS)
+    assert set(_ACTIVITY_LOOKUP) == set(SUPPORTED_PROVIDERS)
+
+    config_fields = {field.name for field in dataclasses.fields(AppConfig)}
+    for provider, provider_config in _LONG_GAP_PROVIDER_CONFIG.items():
+        assert provider_config.threshold_field in config_fields, provider
 
 
 def _set_codex_thread_updated_at(home: Path, session_id: str, updated_at: int) -> None:

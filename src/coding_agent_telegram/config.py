@@ -27,9 +27,10 @@ DEFAULT_OPENAI_WHISPER_MODEL = "base"
 DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
 # How long a session can sit idle before resuming it risks a costly prompt-cache
 # miss (see README FAQ: "does this app burn more tokens than the terminal?"). This is
-# only the idle-time half of the check -- session_gap.py also gates on accumulated
-# session size where a provider exposes one, so small/cheap sessions don't nag even
-# past this threshold (see _SIZE_GATE_TOKENS in router/message_commands.py).
+# only the idle-time half of the check -- session_gap.py also reports accumulated
+# session size where a provider exposes one, and small/cheap sessions are gated out so
+# they don't nag even past this threshold (see _LONG_GAP_PROVIDER_CONFIG in
+# router/message_commands.py).
 #
 # Claude: no official idle-based cache-expiry number is published, but the extended
 # prompt-cache checkpoint was empirically confirmed (against real session transcripts)
