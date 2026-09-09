@@ -818,6 +818,13 @@ class MultiAgentRunner:
         *,
         for_session_creation: bool = False,
     ) -> list[str]:
+        # Session creation only primes the CLI to hand back a session ID, so the
+        # operator's permission grants are withheld and the throwaway prompt cannot be
+        # acted on. Copilot has no positive read-only switch like Claude's
+        # `--permission-mode plan` or Codex's `sandbox_mode=read-only`, so this is
+        # expressed by omission: with nothing allowed, Copilot falls back to asking
+        # before each tool use, and `--no-ask-user` (deliberately not gated here) turns
+        # that into a decline rather than a hang in this non-interactive run.
         args = []
         if self.copilot_model:
             args.extend(["--model", self.copilot_model])
@@ -912,7 +919,10 @@ class MultiAgentRunner:
         elif provider == "copilot":
             if image_paths:
                 return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
-            args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=True)]
+            args = [
+                self.copilot_bin,
+                *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=priming_only),
+            ]
             return self._run(
                 args,
                 provider="copilot",
