@@ -2419,6 +2419,63 @@ def test_current_reports_active_session_details(tmp_path: Path):
     assert "Branch: feature-1" in message
 
 
+def test_current_shows_last_active_and_tokens_for_native_session(tmp_path: Path, monkeypatch):
+    """/current should surface the session's real native activity (session_gap.py), the
+    same signal /switch shows, so a chat doesn't need to run /switch just to see how
+    stale/expensive-to-resume the active session actually is."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_native_codex", "session-a", "backend", "codex", branch_name="feature-1")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="session-a",
+        branch="feature-1",
+        created_at=1_700_000_000,
+        updated_at=int(time.time()) - 3600,
+        tokens_used=12_345,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Current session: session-a" in message
+    assert "Last active:" in message and "ago" in message
+    assert "~12.3k tokens used" in message
+
+
+def test_current_omits_activity_line_when_no_native_data_exists(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_no_native_data", "orphan-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Current session: orphan-session" in message
+    assert "Last active:" not in message
+    assert "tokens used" not in message
+
+
 def test_switch_does_not_checkout_branch_immediately(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()

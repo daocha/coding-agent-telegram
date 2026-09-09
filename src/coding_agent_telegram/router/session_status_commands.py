@@ -26,19 +26,19 @@ class SessionStatusCommandMixin:
             active_id,
             chat_id,
         )
-        await send_text(
+        details = self._t(
             update,
-            context,
-            self._t(
-                update,
-                "status.current_session_details",
-                session_name=session["name"],
-                session_id=active_id,
-                project_folder=session["project_folder"],
-                provider=session.get("provider", "codex"),
-                branch_name=session.get("branch_name") or self._t(update, "status.current_branch_placeholder"),
-            ),
+            "status.current_session_details",
+            session_name=session["name"],
+            session_id=active_id,
+            project_folder=session["project_folder"],
+            provider=session.get("provider", "codex"),
+            branch_name=session.get("branch_name") or self._t(update, "status.current_branch_placeholder"),
         )
+        activity_line = await self._switch_activity_line(chat_id, session.get("provider", "codex"), active_id)
+        if activity_line:
+            details = f"{details}\n{activity_line}"
+        await send_text(update, context, details)
 
     @require_allowed_chat()
     async def handle_abort(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
