@@ -74,6 +74,18 @@ _OPTION_QUESTION_CUE_RE = re.compile(
 )
 _MAX_REPLY_OPTIONS = 6
 _REPLY_OPTION_TAIL_LINES = 12
+# Trailing characters that can sit after a label's question mark and hide it. Claude
+# routinely bolds numbered questions ("1. **Use Redis or in-memory?**"), which would
+# otherwise read as a plain choice rather than a question.
+_OPTION_LABEL_TRAILING_NOISE = "*_`)]. \t"
+# A list of independent questions has every line ending in a question mark; a menu for
+# one decision may still have a single "Something else?" style escape option, so one
+# question mark alone must not suppress the whole menu.
+_MIN_QUESTION_LABELS_FOR_MULTI_QUESTION = 2
+
+
+def _label_is_question(label: str) -> bool:
+    return label.rstrip(_OPTION_LABEL_TRAILING_NOISE).endswith("?")
 
 
 def _detect_reply_options(text: str) -> tuple[str, ...]:
@@ -86,17 +98,20 @@ def _detect_reply_options(text: str) -> tuple[str, ...]:
         return ()
 
     options: list[str] = []
+    question_labels = 0
     for line in tail_lines:
         match = _OPTION_LINE_RE.match(line)
         if match:
             label = match.group(1).strip()
-            if label.endswith("?"):
-                # Each line is its own question (e.g. "1. Should I use A or B?"),
-                # not a choice for one decision — bail out rather than offering
-                # buttons that would resend a question as if it were an answer.
-                return ()
+            if _label_is_question(label):
+                question_labels += 1
             options.append(label)
 
+    if question_labels >= _MIN_QUESTION_LABELS_FOR_MULTI_QUESTION:
+        # Each line is its own question (e.g. "1. Should I use A or B?"), not a choice
+        # for one decision — bail out rather than offering buttons that would resend a
+        # question as if it were an answer.
+        return ()
     if len(options) < 2:
         return ()
     return tuple(options[:_MAX_REPLY_OPTIONS])
