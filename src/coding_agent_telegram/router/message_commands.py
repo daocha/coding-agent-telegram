@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Sequence
+from typing import NamedTuple, Optional, Sequence
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -20,13 +21,22 @@ from .base import require_allowed_chat
 
 logger = logging.getLogger(__name__)
 MAX_STT_AUDIO_BYTES = 20 * 1024 * 1024
-# Best-effort "is this session even big enough to be worth warning about" gate, keyed
-# by provider, in the same units session_gap.py reports for that provider (see its
-# module docstring). A provider missing here (or a session whose size can't be
-# determined) skips the size gate and relies on the idle-time check alone.
-_SIZE_GATE_TOKENS = {
-    "claude": 20_000,  # cache_creation + cache_read + input tokens on the last turn
-    "codex": 50_000,  # cumulative tokens_used reported by Codex's local session db
+
+
+class _LongGapProviderConfig(NamedTuple):
+    threshold_field: str  # AppConfig attribute holding the idle-seconds threshold
+    size_gate_tokens: Optional[int]  # below this, skip the warning even past threshold
+
+
+# Single source of truth for per-provider long-gap tuning, keyed by provider. A
+# provider missing here has the warning disabled outright (fails closed, unlike a
+# lookup that silently no-ops one half of the check). size_gate_tokens is in the same
+# units session_gap.py reports for that provider (see its module docstring); None
+# means no cheap size signal exists, so the idle-time check alone decides.
+_LONG_GAP_PROVIDER_CONFIG: dict[str, _LongGapProviderConfig] = {
+    "claude": _LongGapProviderConfig("claude_long_gap_seconds", 20_000),  # cache_creation + cache_read + input tokens
+    "codex": _LongGapProviderConfig("codex_long_gap_seconds", 50_000),  # cumulative tokens_used from Codex's session db
+    "copilot": _LongGapProviderConfig("copilot_long_gap_seconds", None),  # no local size signal; see session_gap.py
 }
 
 
@@ -156,14 +166,10 @@ class MessageCommandMixin:
             await self._drain_chat_message_queue(chat_id, context)
 
     def _long_gap_threshold_seconds(self, provider: str) -> int:
-        cfg = self.deps.cfg
-        if provider == "claude":
-            return cfg.claude_long_gap_seconds
-        if provider == "codex":
-            return cfg.codex_long_gap_seconds
-        if provider == "copilot":
-            return cfg.copilot_long_gap_seconds
-        return 0
+        provider_config = _LONG_GAP_PROVIDER_CONFIG.get(provider)
+        if provider_config is None:
+            return 0
+        return getattr(self.deps.cfg, provider_config.threshold_field, 0)
 
     async def _maybe_warn_long_gap(
         self,
@@ -187,8 +193,22 @@ class MessageCommandMixin:
             return False
 
         provider = str(session.get("provider") or "codex").strip().lower() or "codex"
+        provider_config = _LONG_GAP_PROVIDER_CONFIG.get(provider)
         threshold_seconds = self._long_gap_threshold_seconds(provider)
         if threshold_seconds <= 0:
+            return False
+
+        # A burst of quick messages on an already-active session would otherwise hit
+        # native_session_activity's filesystem/sqlite lookup on every single one; if we
+        # already confirmed this session's gap was below the threshold recently enough
+        # that it can't have crossed the threshold since, trust that instead of
+        # re-reading disk. Only ever short-circuits *below* the threshold, so a session
+        # that's genuinely gone idle still gets the real check once its cache entry
+        # ages out.
+        cache_key = f"{provider}:{active_id}"
+        now_monotonic = time.monotonic()
+        checked_at = self._session_gap_checked_at.get(cache_key)
+        if checked_at is not None and (now_monotonic - checked_at) < threshold_seconds:
             return False
 
         # native_session_activity does blocking filesystem/sqlite I/O; keep it off the
@@ -196,13 +216,14 @@ class MessageCommandMixin:
         last_activity, size_tokens = await asyncio.to_thread(native_session_activity, provider, active_id)
         gap_seconds = gap_seconds_since(last_activity)
         if gap_seconds is None or gap_seconds < threshold_seconds:
+            self._session_gap_checked_at[cache_key] = now_monotonic
             return False
 
         # Avoid nagging about sessions too small for a full reprocess to matter, when
         # the provider exposes a cheap size signal at all (session_gap.py returns None
         # for providers/situations it can't determine one for -- fail open there rather
         # than suppressing a legitimate warning).
-        size_gate = _SIZE_GATE_TOKENS.get(provider)
+        size_gate = provider_config.size_gate_tokens if provider_config else None
         if size_gate is not None and size_tokens is not None and size_tokens < size_gate:
             logger.info(
                 "Skipping long-gap warning for chat %s session '%s' (%s): idle %.0fs but only "

@@ -29,13 +29,12 @@ every incoming message:
 """
 
 import json
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 from coding_agent_telegram.native_claude_sessions import claude_projects_root
-from coding_agent_telegram.native_codex_sessions import codex_state_db_path
+from coding_agent_telegram.native_codex_sessions import query_codex_state_db
 from coding_agent_telegram.native_copilot_sessions import copilot_session_roots
 
 # How far from the end of a Claude transcript to read looking for the most recent
@@ -109,24 +108,10 @@ def _claude_activity(session_id: str) -> SessionActivity:
 
 
 def _codex_activity(session_id: str) -> SessionActivity:
-    db_path = codex_state_db_path()
-    if not db_path.exists():
+    rows = query_codex_state_db("SELECT updated_at, tokens_used FROM threads WHERE id = ?", (session_id,))
+    if not rows or not rows[0][0]:
         return SessionActivity(None, None)
-    try:
-        conn = sqlite3.connect(db_path)
-    except sqlite3.Error:
-        return SessionActivity(None, None)
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT updated_at, tokens_used FROM threads WHERE id = ?", (session_id,))
-        row = cursor.fetchone()
-    except sqlite3.Error:
-        return SessionActivity(None, None)
-    finally:
-        conn.close()
-    if not row or not row[0]:
-        return SessionActivity(None, None)
-    updated_at, tokens_used = row
+    updated_at, tokens_used = rows[0]
     size_tokens = int(tokens_used) if isinstance(tokens_used, (int, float)) else None
     return SessionActivity(datetime.fromtimestamp(updated_at, tz=timezone.utc), size_tokens)
 
@@ -144,18 +129,25 @@ def _copilot_activity(session_id: str) -> SessionActivity:
     return SessionActivity(latest, None)
 
 
+# One entry per provider this module knows how to inspect. A provider missing here
+# (or not yet added) falls back to "unknown activity" below, rather than needing its
+# own if/elif branch kept in sync with this dict.
+_ACTIVITY_LOOKUP: dict[str, Callable[[str], SessionActivity]] = {
+    "claude": _claude_activity,
+    "codex": _codex_activity,
+    "copilot": _copilot_activity,
+}
+
+
 def native_session_activity(provider: str, session_id: str) -> SessionActivity:
     """Return (last_activity, size_tokens) for *session_id*'s native transcript."""
     if not session_id:
         return SessionActivity(None, None)
     normalized_provider = (provider or "").strip().lower()
-    if normalized_provider == "claude":
-        return _claude_activity(session_id)
-    if normalized_provider == "codex":
-        return _codex_activity(session_id)
-    if normalized_provider == "copilot":
-        return _copilot_activity(session_id)
-    return SessionActivity(None, None)
+    lookup = _ACTIVITY_LOOKUP.get(normalized_provider)
+    if lookup is None:
+        return SessionActivity(None, None)
+    return lookup(session_id)
 
 
 def gap_seconds_since(last_activity: Optional[datetime]) -> Optional[float]:

@@ -781,6 +781,45 @@ def test_claude_priming_session_creation_runs_read_only(monkeypatch):
     assert "bypassPermissions" not in args
 
 
+def test_codex_priming_session_creation_runs_read_only(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "prime me", priming_only=True)
+
+    args = calls[0][0]
+    assert "approval_policy=never" in args
+    assert "sandbox_mode=read-only" in args
+    assert "sandbox_mode=workspace-write" not in args
+
+
+def test_codex_session_creation_with_real_prompt_keeps_configured_sandbox_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="on-failure",
+        sandbox_mode="workspace-write",
+    )
+
+    # The replacement-session path passes the real user request here, so it must not
+    # be downgraded to read-only.
+    runner.create_session("codex", Path("/tmp/project"), "fix the bug")
+
+    args = calls[0][0]
+    assert "sandbox_mode=workspace-write" in args
+    assert "approval_policy=on-failure" in args
+
+
 def test_claude_session_creation_with_real_prompt_keeps_configured_permission_mode(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))

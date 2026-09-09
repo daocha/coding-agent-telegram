@@ -739,18 +739,27 @@ class MultiAgentRunner:
         user_message: str,
         skip_git_repo_check: bool,
         image_paths: Sequence[Path] = (),
+        *,
+        for_session_creation: bool = False,
     ) -> list[str]:
         args = []
         if self.codex_model:
             args.extend(["-m", self.codex_model])
         for image_path in image_paths:
             args.extend(["--image", str(image_path)])
+        # Session creation only primes the CLI to hand back a session ID, so it runs
+        # read-only regardless of the operator's configured approval/sandbox settings.
+        # Without this the priming prompt inherits full autopilot permissions and the
+        # agent may act on it (e.g. running commands from a compaction "next steps"
+        # summary) behind the bot's back.
+        approval_policy = "never" if for_session_creation else self.approval_policy
+        sandbox_mode = "read-only" if for_session_creation else self.sandbox_mode
         args.extend(
             [
             "-c",
-            f"approval_policy={self.approval_policy}",
+            f"approval_policy={approval_policy}",
             "-c",
-            f"sandbox_mode={self.sandbox_mode}",
+            f"sandbox_mode={sandbox_mode}",
             "--json",
             "--cd",
             str(project_path),
@@ -884,7 +893,13 @@ class MultiAgentRunner:
             args = [
                 self.codex_bin,
                 "exec",
-                *self._codex_base(project_path, user_message, skip_git_repo_check, image_paths),
+                *self._codex_base(
+                    project_path,
+                    user_message,
+                    skip_git_repo_check,
+                    image_paths,
+                    for_session_creation=priming_only,
+                ),
             ]
             return self._run_with_output_file(
                 args,
