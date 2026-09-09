@@ -4076,6 +4076,70 @@ def test_long_gap_cache_skips_repeat_lookup_within_safe_window(tmp_path: Path, m
     assert store.get_chat_state("bot-a", 123).get("pending_action") is None
 
 
+def _run_two_messages_concurrently(router, context) -> None:
+    """Telegram handlers are registered with block=False, so two messages arriving
+    together in one chat run as concurrent tasks."""
+
+    async def both() -> None:
+        await asyncio.gather(
+            router.handle_message(make_update(text="first", message_id=1), context),
+            router.handle_message(make_update(text="second", message_id=2), context),
+        )
+
+    asyncio.run(both())
+
+
+def test_concurrent_messages_on_idle_session_warn_once_and_queue_the_loser(tmp_path: Path, monkeypatch):
+    """The long-gap check awaits provider I/O between "nothing else is handling this
+    chat" and this message claiming it. Without a re-check afterwards both messages
+    warn, and the second's pending action overwrites the first's -- two sets of buttons
+    in the chat and the first message silently dropped."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    router, store, runner = _long_gap_router(
+        tmp_path, home, backend, session_id="sess_idle_race", updated_at=int(time.time()) - 7200
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    _run_two_messages_concurrently(router, context)
+
+    warnings = [text for _chat, text, _parse, _markup in bot.messages if "idle for" in str(text)]
+    assert len(warnings) == 1, "the second message overwrote the first message's held confirmation"
+    assert runner.resume_calls == []
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["kind"] == "long_gap_confirm"
+    assert pending["user_message"] == "first"
+    # The loser must be queued, not dropped, so it still runs after the button is tapped.
+    assert any("queued" in str(text).lower() for _chat, text, _parse, _markup in bot.messages)
+
+
+def test_concurrent_messages_on_active_session_dispatch_once(tmp_path: Path, monkeypatch):
+    """The same await window exists on the no-warning path, where the idle check passes
+    and the message goes straight to dispatch. There _is_project_busy is the primary
+    serializer, so this is an invariant check rather than a regression test for a
+    reproduced failure: neither message may run twice, whichever order they interleave
+    in."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    router, store, runner = _long_gap_router(
+        tmp_path, home, backend, session_id="sess_active_race", updated_at=int(time.time()) - 30
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    _run_two_messages_concurrently(router, context)
+
+    dispatched = [call["user_message"] for call in runner.resume_calls]
+    assert len(dispatched) == len(set(dispatched)), f"a message ran twice: {dispatched}"
+    assert "first" in dispatched, dispatched
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
 def test_long_gap_proceed_anyway_dispatches_held_message(tmp_path: Path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))

@@ -60,32 +60,60 @@ class MessageCommandMixin:
             and not isinstance(pending_action, dict)
         )
         if self._should_queue_incoming_message(chat_id):
-            _queue_file, question_number = self._enqueue_chat_message(
-                chat_id,
-                user_message,
-                reply_to_message_id=getattr(update.message, "message_id", None),
-                separate_batch=should_prioritize_existing_queue,
-            )
-            logger.info(
-                "Queued user message for chat %s as Q%s. Preview: %.120r",
-                chat_id,
-                question_number,
-                user_message,
-            )
-            await send_text(
+            await self._queue_incoming_message(
                 update,
                 context,
-                self._t(update, "message.question_queued", question_number=question_number),
-                reply_to_message_id=getattr(update.message, "message_id", None),
+                user_message,
+                separate_batch=should_prioritize_existing_queue,
+                drain_after=should_prioritize_existing_queue,
             )
-            if should_prioritize_existing_queue:
-                await self._drain_chat_message_queue(chat_id, context)
             return
         if await self._maybe_warn_long_gap(update, context, user_message, suppress_working_notice):
+            return
+        # Handlers run concurrently (block=False), and _maybe_warn_long_gap may have
+        # awaited provider I/O above. That await is the only gap between "nothing else
+        # is handling this chat" and this message claiming it below, so another message
+        # for the same chat can have claimed it meanwhile -- queue behind it instead of
+        # racing it. Everything from here to the claim inside
+        # _dispatch_pending_message_now is synchronous, so this re-check holds.
+        if self._should_queue_incoming_message(chat_id):
+            await self._queue_incoming_message(update, context, user_message, separate_batch=False)
             return
         await self._dispatch_pending_message_now(
             update, context, user_message, suppress_working_notice=suppress_working_notice
         )
+
+    async def _queue_incoming_message(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_message: str,
+        *,
+        separate_batch: bool,
+        drain_after: bool = False,
+    ) -> None:
+        chat_id = update.effective_chat.id
+        reply_to_message_id = getattr(update.message, "message_id", None)
+        _queue_file, question_number = self._enqueue_chat_message(
+            chat_id,
+            user_message,
+            reply_to_message_id=reply_to_message_id,
+            separate_batch=separate_batch,
+        )
+        logger.info(
+            "Queued user message for chat %s as Q%s. Preview: %.120r",
+            chat_id,
+            question_number,
+            user_message,
+        )
+        await send_text(
+            update,
+            context,
+            self._t(update, "message.question_queued", question_number=question_number),
+            reply_to_message_id=reply_to_message_id,
+        )
+        if drain_after:
+            await self._drain_chat_message_queue(chat_id, context)
 
     async def _dispatch_pending_message_now(
         self,
@@ -261,6 +289,20 @@ class MessageCommandMixin:
             )
             return False
 
+        # The activity lookup above awaited, so a concurrently-handled message for this
+        # chat may have claimed it in the meantime. Storing our own pending action now
+        # would overwrite whatever it is holding -- orphaning that message and its
+        # buttons, and putting a second warning in the chat. Bail out instead; the
+        # caller re-checks and queues this message behind the winner.
+        if self._pending_action(chat_id) is not None:
+            logger.info(
+                "Skipping long-gap warning for chat %s session '%s': another message claimed the "
+                "chat while the idle check was running.",
+                chat_id,
+                session.get("name"),
+            )
+            return False
+
         logger.info(
             "Long idle gap detected for chat %s on session '%s' (%s): %.0fs since last activity "
             "(threshold %ss, ~%s tokens accumulated, provider %s). Asking user to compact or proceed.",
@@ -430,6 +472,13 @@ class MessageCommandMixin:
         if await self._maybe_warn_long_gap(
             update, context, prompt, suppress_working_notice=False, image_paths=(attachment_path,)
         ):
+            return
+        # Downloading the photo and running the idle check both awaited, so re-run the
+        # guard from the top of this handler: a pending action may have appeared since.
+        # A photo can't be queued, so blocking is the only way not to run it behind
+        # another message's back (see the top of this handler).
+        if self._pending_action(chat_id) is not None:
+            await send_text(update, context, self._t(update, "message.photo_blocked_by_pending_action"))
             return
         await self._dispatch_active_session_message(update, context, prompt, image_paths=(attachment_path,))
 
