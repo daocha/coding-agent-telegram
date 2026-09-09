@@ -78,7 +78,17 @@ def _claude_last_assistant_usage_tokens(path: Path) -> Optional[int]:
             continue
         if entry.get("type") != "assistant":
             continue
-        usage = (entry.get("message") or {}).get("usage")
+        message = entry.get("message") or {}
+        # Claude Code fabricates client-side "assistant" entries for cases where it
+        # never called the API at all -- hitting the rate limit, being logged out, or
+        # skipping a priming/continuation nudge that needed no reply -- tagged with
+        # this synthetic model marker and an all-zero usage block. Treating that zero
+        # as the session's real size would hide a genuinely large, expensive-to-resume
+        # session behind a stub that cost nothing to produce, so keep scanning past it
+        # for the last turn that actually hit the API.
+        if message.get("model") == "<synthetic>":
+            continue
+        usage = message.get("usage")
         if not isinstance(usage, dict):
             continue
         total = 0
