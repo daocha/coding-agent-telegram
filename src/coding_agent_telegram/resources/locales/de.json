@@ -98,6 +98,8 @@
   "switch.imported_into_state_json": "In state.json importiert.",
   "switch.status_active": "aktiv",
   "switch.status_idle": "inaktiv",
+  "switch.last_active_ago": "Zuletzt aktiv: vor {duration}",
+  "switch.tokens_used": "~{tokens} Tokens verwendet",
   "bootstrap.env_created_locale_line": "{env_path} wurde erstellt. APP_LOCALE wurde entsprechend der Systemsprache auf {app_locale} gesetzt.",
   "bootstrap.env_created_change_line": "Wenn du später eine andere Sprache verwenden möchtest, ändere APP_LOCALE in {env_path}.",
   "queue.button_cancel": "Abbrechen",

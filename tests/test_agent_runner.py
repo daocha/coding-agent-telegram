@@ -667,6 +667,69 @@ def test_claude_runner_reports_failure_from_result_event(monkeypatch):
     assert result.success is False
     assert result.error_message == "error_max_turns"
     assert result.session_id == "sess_claude"
+    assert result.error_code is None
+
+
+def test_claude_runner_prefers_errors_array_over_generic_subtype(monkeypatch):
+    """A resume against a session ID Claude has no local transcript for fails with an
+    empty "result" and the generic subtype "error_during_execution" -- the actual reason
+    only shows up in the "errors" array. That's the message worth surfacing/matching
+    against for resume-failure recovery, not the opaque subtype."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"",'
+                '"session_id":"sess_claude","errors":["No conversation found with session ID: sess_claude"]}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "No conversation found with session ID: sess_claude"
+    assert result.error_code == "session_not_found"
+
+
+def test_claude_runner_does_not_set_session_not_found_code_for_other_errors(monkeypatch):
+    """error_code="session_not_found" is a precise signal, not a generic is_error flag --
+    a failure for some other reason (even one that also lacks "result" text) must not be
+    mistaken for an unresumable session, or _replace_invalid_session_if_needed would
+    discard a perfectly resumable session over an unrelated failure."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"",'
+                '"session_id":"sess_claude","errors":["Network error while contacting the API"]}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "Network error while contacting the API"
+    assert result.error_code is None
 
 
 def test_claude_runner_extracts_assistant_message_text_as_progress(monkeypatch):

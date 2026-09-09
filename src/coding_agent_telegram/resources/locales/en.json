@@ -103,6 +103,8 @@
   "switch.imported_into_state_json": "Imported into state.json.",
   "switch.status_active": "active",
   "switch.status_idle": "idle",
+  "switch.last_active_ago": "Last active: {duration} ago",
+  "switch.tokens_used": "~{tokens} tokens used",
   "bootstrap.env_created_locale_line": "Created {env_path}. APP_LOCALE was initialized to {app_locale} based on this system language.",
   "bootstrap.env_created_change_line": "To use another language later, edit APP_LOCALE in {env_path}.",
   "project.branch_switch_requires_source": "Switching branch to {new_branch} requires choosing a source first.",

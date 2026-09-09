@@ -2159,6 +2159,69 @@ def test_switch_lists_mixed_bot_and_native_project_sessions_with_legend(tmp_path
     assert "initialized: Native codex review" in message
 
 
+def test_switch_listing_shows_last_active_and_tokens_for_native_session(tmp_path: Path, monkeypatch):
+    """/switch should surface each session's real native activity (session_gap.py),
+    not just the bot's own state.json bookkeeping -- that's the only way to see how
+    stale/expensive-to-resume a session actually is before picking one."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="Native codex review",
+        branch="enhancement",
+        created_at=1_700_000_000,
+        updated_at=int(time.time()) - 3600,
+        tokens_used=12_345,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Last active:" in message and "ago" in message
+    assert "~12.3k tokens used" in message
+
+
+def test_switch_listing_omits_activity_line_when_no_native_data_exists(tmp_path: Path, monkeypatch):
+    """A bot-managed session with no matching native transcript/db row (e.g. one seeded
+    straight into state.json, or one whose transcript already got cleaned up) has no
+    real activity to report -- the line should be omitted rather than showing a bogus
+    zero/unknown value."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_no_native_data", "orphan-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "orphan-session" in message
+    assert "Last active:" not in message
+    assert "tokens used" not in message
+
+
 def test_switch_lists_only_current_provider_native_sessions(tmp_path: Path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
@@ -4583,6 +4646,131 @@ def test_invalid_resume_recovery_uses_next_available_suffix_for_new_session_name
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_abc123"
     assert state["sessions"]["sess_abc123"]["name"] == "recover-session-2"
+
+
+def test_invalid_resume_recovery_recognizes_claude_session_not_found_error_code(tmp_path: Path):
+    """Claude's CLI reports an unresumable session ID as "No conversation found with
+    session ID: ..." (see agent_runner._claude_events_report_session_not_found), which
+    MultiAgentRunner surfaces as error_code="session_not_found" -- a structured signal
+    rather than a substring match on error_message, since that text can also be a
+    genuine (if failed) turn's model-generated output. The recovery check has to honor
+    that error_code, or a session with no local transcript fails identically forever
+    instead of ever recovering."""
+
+    class ClaudeNoConversationRunner(DummyRunner):
+        def resume_session(
+            self,
+            provider,
+            session_id,
+            project_path,
+            user_message,
+            *,
+            skip_git_repo_check=False,
+            image_paths=(),
+            on_stall=None,
+            on_progress=None,
+        ):
+            self.resume_calls.append(
+                {
+                    "provider": provider,
+                    "session_id": session_id,
+                    "project_path": project_path,
+                    "user_message": user_message,
+                    "skip_git_repo_check": skip_git_repo_check,
+                    "image_paths": image_paths,
+                    "on_stall": on_stall,
+                }
+            )
+            return AgentRunResult(
+                session_id=None,
+                success=False,
+                assistant_text="",
+                error_message=f"No conversation found with session ID: {session_id}",
+                raw_events=[],
+                error_code="session_not_found",
+            )
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ClaudeNoConversationRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert "sess_original" in state["sessions"]
+    assert "Resume failed, so a new session was created." in bot.messages[1][1]
+
+
+def test_invalid_resume_recovery_ignores_resume_substring_in_claude_error_without_error_code(
+    tmp_path: Path,
+):
+    """A Claude failure whose error_message happens to contain "resume" for an unrelated
+    reason (e.g. a genuine model turn discussing a file called resume.pdf) must NOT be
+    treated as an unresumable session -- only error_code == "session_not_found" (a
+    structured signal, not a substring guess) should trigger replacing it. Doing
+    otherwise would discard a perfectly good session over unrelated content."""
+
+    class ClaudeUnrelatedFailureRunner(DummyRunner):
+        def resume_session(
+            self,
+            provider,
+            session_id,
+            project_path,
+            user_message,
+            *,
+            skip_git_repo_check=False,
+            image_paths=(),
+            on_stall=None,
+            on_progress=None,
+        ):
+            self.resume_calls.append(
+                {
+                    "provider": provider,
+                    "session_id": session_id,
+                    "project_path": project_path,
+                    "user_message": user_message,
+                    "skip_git_repo_check": skip_git_repo_check,
+                    "image_paths": image_paths,
+                    "on_stall": on_stall,
+                }
+            )
+            return AgentRunResult(
+                session_id=session_id,
+                success=False,
+                assistant_text="",
+                error_message="I couldn't finish reviewing resume.pdf before running out of turns.",
+                raw_events=[],
+                error_code=None,
+            )
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ClaudeUnrelatedFailureRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_original"
+    assert "resume.pdf" in bot.messages[-1][1]
 
 
 def test_active_session_reports_stalled_agent_process(tmp_path: Path):

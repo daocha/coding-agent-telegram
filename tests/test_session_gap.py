@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from coding_agent_telegram.session_gap import native_session_activity
+from coding_agent_telegram.session_gap import humanize_token_count, native_session_activity
 
 
 def _write_jsonl(path: Path, entries: list[dict]) -> None:
@@ -95,3 +95,21 @@ def test_claude_size_is_none_when_only_synthetic_entries_exist(tmp_path: Path):
         _last_activity, size_tokens = native_session_activity("claude", "sess-3")
 
     assert size_tokens is None
+
+
+def test_humanize_token_count_examples():
+    assert humanize_token_count(0) == "0"
+    assert humanize_token_count(800) == "800"
+    assert humanize_token_count(999) == "999"
+    assert humanize_token_count(1_000) == "1k"
+    assert humanize_token_count(200_000) == "200k"
+    assert humanize_token_count(1_000_000) == "1M"
+    assert humanize_token_count(11_000_000) == "11M"
+    assert humanize_token_count(1_000_000_000) == "1B"
+
+
+def test_humanize_token_count_rounds_down_instead_of_rolling_over_the_unit():
+    """A count just under a unit boundary should read as e.g. "999.9k", not round up
+    to a misleading "1000k" that looks like a typo for 1M."""
+    assert humanize_token_count(999_999) == "999.9k"
+    assert humanize_token_count(12_345) == "12.3k"

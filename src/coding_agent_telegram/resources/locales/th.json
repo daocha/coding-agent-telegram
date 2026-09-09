@@ -98,6 +98,8 @@
   "switch.imported_into_state_json": "นำเข้าไปยัง state.json แล้ว",
   "switch.status_active": "กำลังใช้งาน",
   "switch.status_idle": "ว่าง",
+  "switch.last_active_ago": "ใช้งานล่าสุด: {duration} ที่แล้ว",
+  "switch.tokens_used": "ใช้ไปแล้วประมาณ {tokens} โทเคน",
   "bootstrap.env_created_locale_line": "สร้าง {env_path} แล้ว และตั้งค่า APP_LOCALE เป็น {app_locale} ตามภาษาของระบบนี้",
   "bootstrap.env_created_change_line": "หากต้องการเปลี่ยนภาษาในภายหลัง ให้แก้ค่า APP_LOCALE ใน {env_path}",
   "queue.button_cancel": "ยกเลิก",

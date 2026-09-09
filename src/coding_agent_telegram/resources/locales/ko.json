@@ -98,6 +98,8 @@
   "switch.imported_into_state_json": "state.json으로 가져왔습니다.",
   "switch.status_active": "사용 중",
   "switch.status_idle": "대기 중",
+  "switch.last_active_ago": "마지막 활동: {duration} 전",
+  "switch.tokens_used": "~{tokens} 토큰 사용",
   "bootstrap.env_created_locale_line": "{env_path} 파일을 만들었고, 시스템 언어에 따라 APP_LOCALE 을 {app_locale} 로 설정했습니다.",
   "bootstrap.env_created_change_line": "나중에 다른 언어로 바꾸려면 {env_path} 에서 APP_LOCALE 값을 수정하세요.",
   "queue.button_cancel": "취소",

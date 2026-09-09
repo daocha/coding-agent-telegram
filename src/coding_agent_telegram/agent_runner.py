@@ -281,6 +281,25 @@ class MultiAgentRunner:
             return result_text if isinstance(result_text, str) else ""
         return "\n".join(self._unique_text_fragments(self._collect_text_fragments(event)))
 
+    @staticmethod
+    def _claude_events_report_session_not_found(events: list[dict]) -> bool:
+        """True if a Claude "result" event's own "errors" array says the resumed
+        session ID has no local transcript. Checked against that structured field
+        directly -- not against whatever text ends up in error_message, since that can
+        also be a genuine (if failed) turn's model-generated output, which shouldn't be
+        substring-matched for control decisions like "should this session be replaced."
+        """
+        for ev in events:
+            if not isinstance(ev, dict) or ev.get("type") != "result" or not ev.get("is_error"):
+                continue
+            errors_list = ev.get("errors")
+            if not isinstance(errors_list, list):
+                continue
+            for error in errors_list:
+                if isinstance(error, str) and error.lower().startswith("no conversation found"):
+                    return True
+        return False
+
     def _parse_claude_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
         events = self._parse_json_lines(stdout)
 
@@ -303,9 +322,21 @@ class MultiAgentRunner:
                 if isinstance(result_text, str) and result_text:
                     assistant_text = result_text
                 if is_error:
+                    # A resume against a session ID the CLI has no local transcript for
+                    # fails before any turn runs: "result" is empty and "subtype" is just
+                    # the generic "error_during_execution", but the actual reason (e.g.
+                    # "No conversation found with session ID: ...") is in "errors".
+                    errors_list = ev.get("errors")
+                    first_error = (
+                        next((e for e in errors_list if isinstance(e, str) and e), None)
+                        if isinstance(errors_list, list)
+                        else None
+                    )
                     subtype = str(ev.get("subtype") or "").strip()
                     error_message = (
-                        result_text if isinstance(result_text, str) and result_text else (subtype or "Claude run failed.")
+                        result_text
+                        if isinstance(result_text, str) and result_text
+                        else (first_error or subtype or "Claude run failed.")
                     )
             else:
                 extracted_text = self._extract_claude_assistant_text(ev)
@@ -646,6 +677,8 @@ class MultiAgentRunner:
                     error_message = stripped_stderr
                 else:
                     error_code = "agent_command_failed"
+            if not success and provider == "claude" and self._claude_events_report_session_not_found(events):
+                error_code = "session_not_found"
 
         return AgentRunResult(
             session_id=session_id,

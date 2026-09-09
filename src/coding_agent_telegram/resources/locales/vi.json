@@ -98,6 +98,8 @@
   "switch.imported_into_state_json": "Đã nhập vào state.json.",
   "switch.status_active": "đang dùng",
   "switch.status_idle": "nhàn rỗi",
+  "switch.last_active_ago": "Hoạt động gần nhất: {duration} trước",
+  "switch.tokens_used": "~{tokens} token đã dùng",
   "bootstrap.env_created_locale_line": "Đã tạo {env_path}. APP_LOCALE đã được đặt thành {app_locale} theo ngôn ngữ hệ thống.",
   "bootstrap.env_created_change_line": "Nếu muốn đổi sang ngôn ngữ khác sau này, hãy sửa APP_LOCALE trong {env_path}.",
   "queue.button_cancel": "Hủy",

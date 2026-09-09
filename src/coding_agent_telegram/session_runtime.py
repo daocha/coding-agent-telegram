@@ -71,6 +71,17 @@ _RESUME_SUFFIX_RE = re.compile(r"-resume\d+$", re.IGNORECASE)
 # the number instead of stacking suffixes.
 _NEW_SUFFIX_RE = re.compile(r"-new\d+$", re.IGNORECASE)
 
+# Fallback substring marking an agent-run failure as "this session ID can't be resumed"
+# for providers without a structured signal for it, so _replace_invalid_session_if_needed
+# knows to create a replacement session instead of just reporting the failure. Claude has
+# its own precise signal (AgentRunResult.error_code == "session_not_found", set from the
+# CLI's structured "errors" field -- see agent_runner._claude_events_report_session_not_found)
+# and is checked separately below; this generic "resume" substring is the only fallback
+# available for Codex/Copilot, none of which have a documented, stable error string, so it's
+# kept broad and is only ever matched against a failure's error_message, never used to
+# override a success.
+_UNRESUMABLE_SESSION_FALLBACK_PHRASE = "resume"
+
 # Matches a numbered/lettered list line, e.g. "1. Do X" or "a) Do Y".
 _OPTION_LINE_RE = re.compile(r"^\s*(?:[0-9]{1,2}[.)]|[A-Za-z][.)])\s+(.{2,140}?)\s*$")
 # Requires an explicit "which one do you want" style cue near the option list,
@@ -717,7 +728,17 @@ class SessionRuntime:
         user_message: str,
         image_paths: Sequence[Path],
     ):
-        if result.success or not result.error_message or "resume" not in result.error_message.lower():
+        if result.success or not result.error_message:
+            return result, active_id, session_name
+        # Claude has its own precise, structured signal (checked first); the substring
+        # fallback only kicks in for other providers, since for Claude it would also
+        # match a genuine (if failed) turn's model-generated result text that happens to
+        # mention "resume" for an unrelated reason -- exactly the false-positive this
+        # structured signal exists to avoid.
+        is_unresumable = getattr(result, "error_code", None) == "session_not_found" or (
+            provider != "claude" and _UNRESUMABLE_SESSION_FALLBACK_PHRASE in result.error_message.lower()
+        )
+        if not is_unresumable:
             return result, active_id, session_name
 
         logger.info(

@@ -29,6 +29,7 @@ every incoming message:
 """
 
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional
@@ -79,15 +80,6 @@ def _claude_last_assistant_usage_tokens(path: Path) -> Optional[int]:
         if entry.get("type") != "assistant":
             continue
         message = entry.get("message") or {}
-        # Claude Code fabricates client-side "assistant" entries for cases where it
-        # never called the API at all -- hitting the rate limit, being logged out, or
-        # skipping a priming/continuation nudge that needed no reply -- tagged with
-        # this synthetic model marker and an all-zero usage block. Treating that zero
-        # as the session's real size would hide a genuinely large, expensive-to-resume
-        # session behind a stub that cost nothing to produce, so keep scanning past it
-        # for the last turn that actually hit the API.
-        if message.get("model") == "<synthetic>":
-            continue
         usage = message.get("usage")
         if not isinstance(usage, dict):
             continue
@@ -96,6 +88,17 @@ def _claude_last_assistant_usage_tokens(path: Path) -> Optional[int]:
             value = usage.get(key)
             if isinstance(value, (int, float)):
                 total += int(value)
+        if total == 0:
+            # Claude Code fabricates client-side "assistant" entries for cases where it
+            # never called the API at all -- hitting the rate limit, being logged out,
+            # or skipping a priming/continuation nudge that needed no reply (tagged with
+            # a "<synthetic>" model marker). Every one of those reports zero usage, and a
+            # genuine API turn never does (even a minimal one bills a couple of baseline
+            # input tokens), so treat an all-zero usage block as a stub regardless of the
+            # model marker's exact spelling -- which keeps this working even if Claude
+            # Code renames that marker -- and keep scanning for the last turn that
+            # actually hit the API.
+            continue
         return total
     return None
 
@@ -181,3 +184,26 @@ def humanize_gap_seconds(seconds: float) -> str:
     if minutes or not parts:
         parts.append(f"{minutes}m")
     return " ".join(parts[:2])
+
+
+# Largest-to-smallest so the first divisor a count actually reaches wins.
+_TOKEN_COUNT_UNITS: tuple[tuple[int, str], ...] = (
+    (1_000_000_000, "B"),
+    (1_000_000, "M"),
+    (1_000, "k"),
+)
+
+
+def humanize_token_count(tokens: int) -> str:
+    """Render a token count as a short human string, e.g. "800", "1k", "200k", "1M",
+    "11M". Rounds down to one decimal place rather than to nearest, so a count just
+    under a unit's boundary (e.g. 999,999) reads as "999.9k" rather than rolling over
+    to a misleading "1000k"."""
+    if tokens < 1000:
+        return str(tokens)
+    for divisor, suffix in _TOKEN_COUNT_UNITS:
+        if tokens < divisor:
+            continue
+        value = math.floor((tokens / divisor) * 10) / 10
+        return f"{value:g}{suffix}"
+    return str(tokens)
