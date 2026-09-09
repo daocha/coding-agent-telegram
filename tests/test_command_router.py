@@ -3940,6 +3940,114 @@ def test_long_gap_warning_skipped_when_native_session_recently_active(tmp_path: 
     assert store.get_chat_state("bot-a", 123).get("pending_action") is None
 
 
+def _set_codex_thread_updated_at(home: Path, session_id: str, updated_at: int) -> None:
+    conn = sqlite3.connect(home / ".codex" / "state_5.sqlite")
+    try:
+        conn.execute("UPDATE threads SET updated_at = ? WHERE id = ?", (updated_at, session_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _install_fake_monotonic(monkeypatch, clock: list[float]) -> None:
+    """Swap only message_commands' view of ``time`` so the gap cache can be aged
+    deterministically without touching the real clock everything else reads."""
+    from coding_agent_telegram.router import message_commands
+
+    monkeypatch.setattr(message_commands, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+
+
+def _long_gap_router(tmp_path: Path, home: Path, backend: Path, *, session_id: str, updated_at: int):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, session_id, "gap-cache-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id=session_id,
+        cwd=backend,
+        title="gap-cache-session",
+        branch="",
+        created_at=updated_at,
+        updated_at=updated_at,
+        tokens_used=100_000,  # above the size gate
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    return router, store, runner
+
+
+def test_long_gap_cache_expires_when_gap_would_cross_threshold(tmp_path: Path, monkeypatch):
+    """A session checked just *under* the threshold must not stay cached past it.
+
+    Caching the check time and trusting it for a full threshold window let a session
+    checked at 590s idle (threshold 600s) skip the real check until 1190s idle -- nearly
+    double the threshold with no warning. The cache stores the crossing time instead."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    clock = [1000.0]
+    _install_fake_monotonic(monkeypatch, clock)
+    router, store, runner = _long_gap_router(
+        tmp_path,
+        home,
+        backend,
+        session_id="sess_edge",
+        updated_at=int(time.time()) - 590,  # 10s short of the 600s threshold
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="first"), context))
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "first"
+
+    # The session goes quiet past the threshold, and only 60s of bot uptime elapses --
+    # far less than the 600s a check-time cache would have held for.
+    _set_codex_thread_updated_at(home, "sess_edge", int(time.time()) - 1200)
+    clock[0] += 60
+
+    asyncio.run(router.handle_message(make_update(text="second"), context))
+
+    assert runner.resume_calls[-1]["user_message"] == "first", "second message should be held, not dispatched"
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["kind"] == "long_gap_confirm"
+    assert pending["user_message"] == "second"
+
+
+def test_long_gap_cache_skips_repeat_lookup_within_safe_window(tmp_path: Path, monkeypatch):
+    """The flip side: while the gap provably can't have crossed the threshold, the
+    check short-circuits instead of re-reading the provider's db on every message."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    clock = [1000.0]
+    _install_fake_monotonic(monkeypatch, clock)
+    router, store, runner = _long_gap_router(
+        tmp_path,
+        home,
+        backend,
+        session_id="sess_active",
+        updated_at=int(time.time()) - 30,  # freshly active: cached for ~570s
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="first"), context))
+
+    # Backdate the row well past the threshold. Within the safe window the cache must
+    # win, so this rewrite is invisible until the window lapses.
+    _set_codex_thread_updated_at(home, "sess_active", int(time.time()) - 99_999)
+    clock[0] += 5
+
+    asyncio.run(router.handle_message(make_update(text="second"), context))
+
+    assert runner.resume_calls[-1]["user_message"] == "second"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
 def test_long_gap_proceed_anyway_dispatches_held_message(tmp_path: Path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))

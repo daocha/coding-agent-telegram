@@ -21,6 +21,8 @@ from .base import require_allowed_chat
 
 logger = logging.getLogger(__name__)
 MAX_STT_AUDIO_BYTES = 20 * 1024 * 1024
+# Size at which the long-gap cache is swept for expired entries before the next insert.
+_GAP_CACHE_PRUNE_AT_ENTRIES = 256
 
 
 class _LongGapProviderConfig(NamedTuple):
@@ -165,6 +167,21 @@ class MessageCommandMixin:
         finally:
             await self._drain_chat_message_queue(chat_id, context)
 
+    def _prune_session_gap_cache(self, now_monotonic: float) -> None:
+        """Drop expired entries so a long-lived bot's cache can't grow without bound.
+
+        Only runs once the dict is big enough for the scan to be worth it; entries are
+        tiny, so the cap is about keeping memory flat over months of uptime, not about
+        the check itself being hot.
+        """
+        if len(self._session_gap_safe_until) < _GAP_CACHE_PRUNE_AT_ENTRIES:
+            return
+        self._session_gap_safe_until = {
+            key: safe_until
+            for key, safe_until in self._session_gap_safe_until.items()
+            if safe_until > now_monotonic
+        }
+
     def _long_gap_threshold_seconds(self, provider: str) -> int:
         provider_config = _LONG_GAP_PROVIDER_CONFIG.get(provider)
         if provider_config is None:
@@ -199,24 +216,30 @@ class MessageCommandMixin:
             return False
 
         # A burst of quick messages on an already-active session would otherwise hit
-        # native_session_activity's filesystem/sqlite lookup on every single one; if we
-        # already confirmed this session's gap was below the threshold recently enough
-        # that it can't have crossed the threshold since, trust that instead of
-        # re-reading disk. Only ever short-circuits *below* the threshold, so a session
-        # that's genuinely gone idle still gets the real check once its cache entry
-        # ages out.
+        # native_session_activity's filesystem/sqlite lookup on every single one. Skip
+        # it only while the session provably *cannot* have crossed the threshold yet:
+        # the cached value is the monotonic time the gap measured last check would
+        # reach the threshold, so a session checked at (threshold - 1s) idle is cached
+        # for 1s, not for another full threshold. Fresh activity only pushes that
+        # crossing time further out, so the shortcut can never hide a real long gap.
         cache_key = f"{provider}:{active_id}"
         now_monotonic = time.monotonic()
-        checked_at = self._session_gap_checked_at.get(cache_key)
-        if checked_at is not None and (now_monotonic - checked_at) < threshold_seconds:
+        safe_until = self._session_gap_safe_until.get(cache_key)
+        if safe_until is not None and now_monotonic < safe_until:
             return False
 
         # native_session_activity does blocking filesystem/sqlite I/O; keep it off the
         # event loop so one chat's check can't stall every other chat's bot.
         last_activity, size_tokens = await asyncio.to_thread(native_session_activity, provider, active_id)
         gap_seconds = gap_seconds_since(last_activity)
-        if gap_seconds is None or gap_seconds < threshold_seconds:
-            self._session_gap_checked_at[cache_key] = now_monotonic
+        if gap_seconds is None:
+            # Activity is unknowable (no transcript/db row), so no warning can ever fire
+            # for it. Deliberately not cached: a future check may find the session once
+            # its native files appear.
+            return False
+        if gap_seconds < threshold_seconds:
+            self._prune_session_gap_cache(now_monotonic)
+            self._session_gap_safe_until[cache_key] = now_monotonic + (threshold_seconds - gap_seconds)
             return False
 
         # Avoid nagging about sessions too small for a full reprocess to matter, when

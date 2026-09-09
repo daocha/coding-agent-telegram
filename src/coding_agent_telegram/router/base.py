@@ -137,12 +137,14 @@ class CommandRouterBase:
         self._chat_next_queue_file_index: dict[int, int] = {}
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}
-        # Monotonic timestamp of the last time _maybe_warn_long_gap confirmed a
-        # session's idle gap was below its provider's threshold, keyed by
-        # "provider:session_id". Lets a burst of quick messages on an active session
-        # skip the filesystem/sqlite lookup entirely instead of repeating it on every
-        # message -- see _maybe_warn_long_gap in message_commands.py.
-        self._session_gap_checked_at: dict[str, float] = {}
+        # Monotonic deadline before which a session's idle gap provably cannot have
+        # crossed its provider's long-gap threshold, keyed by "provider:session_id".
+        # Lets a burst of quick messages on an active session skip the
+        # filesystem/sqlite lookup instead of repeating it on every message. Stores the
+        # crossing time rather than the check time so a session checked just *under*
+        # the threshold can't stay cached past it -- see _maybe_warn_long_gap in
+        # message_commands.py.
+        self._session_gap_safe_until: dict[str, float] = {}
         self._branch_source_tokens: dict[str, tuple[str, str, str]] = {}
         self._agent_reply_option_tokens: dict[str, tuple[int, tuple[str, ...]]] = {}
 
