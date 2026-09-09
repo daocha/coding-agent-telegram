@@ -734,11 +734,15 @@ Codex 和 Copilot 在自己的 resume/list 指令中並不會做這種互動式�
 
 當閒置門檻與 size gate 同時滿足時，它會先保留你的訊息並詢問：
 
-> ⏳ 這個 session 已經閒置了 {gap}。現在恢復很可能會把整段對話從頭重新處理一次（provider 的回覆 cache 很可能已經過期），可能會比平常多消耗不少 token。要先 compact 開啟一個較小、較省 token 的 session，還是直接繼續？
+> ⏳ 這個 session 已經閒置了 {gap}。現在恢復很可能會把整段對話從頭重新處理一次（provider 的回覆 cache 很可能已經過期），可能會比平常多消耗不少 token。compact 同樣需要重新處理一次目前的內容來寫摘要，所以如果這個 session 已經很大，也可能消耗不少 token。切換到新 session 可以完全略過這次重新處理，但會失去這段對話的所有記憶。要切換到新 session、先 compact，還是直接繼續？
 >
-> [✅ 先 compact] [⚠️ 直接繼續]
+> [🆕 切換到新 session]
+> [🔄 先 compact]
+> [⚠️ 直接繼續]
 
-選擇**先 compact**會先總結目前的 session，再根據該摘要開啟一個新 session，接著在新 session 上繼續處理你的訊息——新 session 會以舊 session 名稱加上遞增的 `-resumeN` 後綴命名（例如 `fix-bug` → `fix-bug-resume1` → 下次 compact 時變成 `fix-bug-resume2`），讓你在 `/switch` 中仍能與原始 session 區分開來。選擇**直接繼續**則只會照常在現有的 session 上繼續。可以用 `LONG_GAP_WARNING_ENABLED=false` 關閉整個檢查機制。
+請注意，`/compact` 本身也無法免除這項開銷：它的原理是恢復目前（可能已經冷卻的）session，要求它為自己撰寫摘要，因此仍須付出與直接回覆相同的一次性全量 transcript 重新處理成本——分別只在於之後只需付一次，而不是每一輪都要付，因為新產生的 session 會以較小的規模開始。**切換到新 session** 是唯一能完全避免這次重新處理的選項：它不會恢復舊 session，而是直接放棄其內容、完全重新開始——代價是徹底失去那部分內容，而不是將它壓縮成摘要。
+
+選擇**切換到新 session** 會開啟一個全新的空 session，並在其上繼續處理你的訊息——新 session 會以舊 session 名稱加上遞增的 `-newN` 後綴命名（例如 `fix-bug` → `fix-bug-new1` → 再次切換後變成 `fix-bug-new2`），讓你在 `/switch` 中仍能與原始 session 區分開來。選擇**先 compact**會先總結目前的 session，再根據該摘要開啟一個新 session，接著在新 session 上繼續處理你的訊息——命名方式類似，但改用 `-resumeN` 後綴（例如 `fix-bug` → `fix-bug-resume1` → 下次 compact 時變成 `fix-bug-resume2`）。選擇**直接繼續**則只會照常在現有的 session 上繼續。可以用 `LONG_GAP_WARNING_ENABLED=false` 關閉整個檢查機制。
 </details>
 
 ## 📌 備註

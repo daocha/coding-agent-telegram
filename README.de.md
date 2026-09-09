@@ -736,11 +736,15 @@ Die App tut das inzwischen auch automatisch, indem sie pro Anbieter zwei Signale
 
 Sind sowohl die Schwelle als auch das Größen-Gate erreicht, hält sie deine Nachricht zurück und fragt:
 
-> ⏳ Diese Sitzung war {gap} im Leerlauf. Sie jetzt fortzusetzen, verarbeitet die gesamte Unterhaltung wahrscheinlich komplett neu (der Antwort-Cache des Anbieters ist vermutlich abgelaufen), was deutlich mehr Tokens als üblich verbrauchen kann. Erst komprimieren, um eine kleinere, günstigere Sitzung zu starten, oder trotzdem fortsetzen?
+> ⏳ Diese Sitzung war {gap} im Leerlauf. Sie jetzt fortzusetzen, verarbeitet die gesamte Unterhaltung wahrscheinlich komplett neu (der Antwort-Cache des Anbieters ist vermutlich abgelaufen), was deutlich mehr Tokens als üblich verbrauchen kann. Auch das Komprimieren verarbeitet den aktuellen Kontext einmal neu, um die Zusammenfassung zu erstellen, und kann daher ebenfalls viele Tokens kosten, wenn diese Sitzung bereits groß ist. Zu einer neuen Sitzung zu wechseln, umgeht diese Neuverarbeitung vollständig, startet dann aber ohne jede Erinnerung an diese Unterhaltung. Zu einer neuen Sitzung wechseln, erst komprimieren oder trotzdem fortsetzen?
 >
-> [✅ Erst komprimieren] [⚠️ Trotzdem fortsetzen]
+> [🆕 Zu neuer Sitzung wechseln]
+> [🔄 Erst komprimieren]
+> [⚠️ Trotzdem fortsetzen]
 
-Wählst du **Erst komprimieren**, wird die Sitzung zusammengefasst, eine neue Sitzung aus dieser Zusammenfassung gestartet und deine Nachricht anschließend auf der neuen Sitzung fortgesetzt — benannt nach der alten Sitzung mit einem fortlaufenden `-resumeN`-Suffix (z. B. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bei der nächsten Komprimierung), damit du sie in `/switch` weiterhin von der ursprünglichen unterscheiden kannst. Wählst du **Trotzdem fortsetzen**, wird ganz normal auf der bestehenden Sitzung weitergemacht. Die gesamte Prüfung lässt sich mit `LONG_GAP_WARNING_ENABLED=false` deaktivieren.
+Zu beachten ist, dass `/compact` selbst nicht kostenlos ist: Es funktioniert, indem die aktuelle (möglicherweise kalte) Sitzung fortgesetzt wird und diese gebeten wird, sich selbst zusammenzufassen — es fällt also derselbe einmalige Neuverarbeitungsaufwand für das gesamte Transkript an wie beim einfachen Antworten. Der Unterschied ist nur, dass du ihn danach nur einmal statt bei jeder weiteren Runde zahlst, da die entstehende Sitzung klein beginnt. **Zu neuer Sitzung wechseln** ist die einzige Option, die diese Neuverarbeitung vollständig vermeidet: Sie verlässt den Kontext der alten Sitzung, ohne sie je fortzusetzen, und startet komplett neu — auf Kosten davon, diesen Kontext vollständig zu verlieren, statt ihn in eine Zusammenfassung zu verdichten.
+
+Wählst du **Zu neuer Sitzung wechseln**, wird eine brandneue, leere Sitzung gestartet und deine Nachricht dort fortgesetzt — benannt nach der alten Sitzung mit einem fortlaufenden `-newN`-Suffix (z. B. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` beim nächsten Wechsel), damit du sie in `/switch` weiterhin von der ursprünglichen unterscheiden kannst. Wählst du **Erst komprimieren**, wird die Sitzung zusammengefasst, eine neue Sitzung aus dieser Zusammenfassung gestartet und deine Nachricht anschließend auf der neuen Sitzung fortgesetzt — ähnlich benannt, aber mit einem `-resumeN`-Suffix (z. B. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bei der nächsten Komprimierung). Wählst du **Trotzdem fortsetzen**, wird ganz normal auf der bestehenden Sitzung weitergemacht. Die gesamte Prüfung lässt sich mit `LONG_GAP_WARNING_ENABLED=false` deaktivieren.
 </details>
 
 ## 📌 Hinweise

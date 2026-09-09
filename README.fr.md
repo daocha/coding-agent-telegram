@@ -732,11 +732,15 @@ L'app le fait désormais aussi automatiquement, en combinant deux signaux par fo
 
 Quand le seuil et le filtre de taille sont tous deux atteints, elle retient votre message et demande :
 
-> ⏳ Cette session est inactive depuis {gap}. La reprendre maintenant va probablement retraiter toute la conversation depuis le début (le cache de réponses du fournisseur a sans doute expiré), ce qui peut consommer bien plus de tokens que d'habitude. Compacter d'abord pour démarrer une session plus petite et moins coûteuse, ou continuer quand même ?
+> ⏳ Cette session est inactive depuis {gap}. La reprendre maintenant va probablement retraiter toute la conversation depuis le début (le cache de réponses du fournisseur a sans doute expiré), ce qui peut consommer bien plus de tokens que d'habitude. Compacter retraite aussi le contexte actuel une fois pour rédiger son résumé, donc cela peut aussi consommer beaucoup de tokens si cette session est déjà volumineuse. Basculer vers une nouvelle session évite complètement ce retraitement, mais démarre sans aucune mémoire de cette conversation. Basculer vers une nouvelle session, compacter d'abord, ou continuer quand même ?
 >
-> [✅ Compacter d'abord] [⚠️ Continuer quand même]
+> [🆕 Basculer vers une nouvelle session]
+> [🔄 Compacter d'abord]
+> [⚠️ Continuer quand même]
 
-Choisir **Compacter d'abord** résume la session, en démarre une nouvelle à partir de ce résumé, puis poursuit avec votre message sur la nouvelle session — nommée d'après l'ancienne avec un suffixe `-resumeN` incrémental (par ex. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` à la compaction suivante), pour pouvoir toujours la distinguer de l'originale dans `/switch`. Choisir **Continuer quand même** poursuit simplement sur la session existante comme d'habitude. Désactivez tout le mécanisme avec `LONG_GAP_WARNING_ENABLED=false`.
+Notez que `/compact` lui-même n'est pas exempt de ce coût : il fonctionne en reprenant la session actuelle (potentiellement froide) et en lui demandant de se résumer elle-même, donc il paie le même retraitement complet et ponctuel du transcript que le simple fait de répondre — la différence est que vous ne le payez alors qu'une seule fois plutôt qu'à chaque tour suivant, puisque la session résultante démarre petite. **Basculer vers une nouvelle session** est la seule option qui évite entièrement ce retraitement : elle abandonne le contexte de l'ancienne session sans jamais la reprendre et repart entièrement à zéro, au prix de perdre ce contexte entièrement plutôt que de le condenser en résumé.
+
+Choisir **Basculer vers une nouvelle session** démarre une session toute neuve et vide, puis y poursuit avec votre message — nommée d'après l'ancienne session avec un suffixe `-newN` incrémental (par ex. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` si vous basculez à nouveau), pour pouvoir toujours la distinguer de l'originale dans `/switch`. Choisir **Compacter d'abord** résume la session, en démarre une nouvelle à partir de ce résumé, puis poursuit avec votre message sur la nouvelle session — nommée de façon similaire mais avec un suffixe `-resumeN` (par ex. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` à la compaction suivante). Choisir **Continuer quand même** poursuit simplement sur la session existante comme d'habitude. Désactivez tout le mécanisme avec `LONG_GAP_WARNING_ENABLED=false`.
 </details>
 
 ## 📌 Remarques

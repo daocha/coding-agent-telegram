@@ -728,11 +728,15 @@ Codex 와 Copilot 은 자체 resume/list 명령에서 이런 대화형 vs headle
 
 임계값과 size gate 를 모두 충족하면, 메시지를 보류하고 다음과 같이 묻습니다.
 
-> ⏳ 이 session 은 {gap} 동안 idle 상태였습니다. 지금 재개하면 대화 전체를 처음부터 다시 처리할 가능성이 높아(provider 의 응답 cache 가 만료되었을 가능성이 큼) 평소보다 훨씬 많은 token 을 소모할 수 있습니다. 더 작고 저렴한 session 을 새로 시작하도록 먼저 compact 할까요, 아니면 그대로 진행할까요?
+> ⏳ 이 session 은 {gap} 동안 idle 상태였습니다. 지금 재개하면 대화 전체를 처음부터 다시 처리할 가능성이 높아(provider 의 응답 cache 가 만료되었을 가능성이 큼) 평소보다 훨씬 많은 token 을 소모할 수 있습니다. compact 역시 요약을 작성하기 위해 현재 컨텍스트를 한 번 다시 처리하므로, 이 session 이 이미 큰 경우 마찬가지로 많은 token 을 소모할 수 있습니다. 새 session 으로 전환하면 이 재처리를 완전히 건너뛸 수 있지만, 대신 이 대화에 대한 기억 없이 새로 시작합니다. 새 session 으로 전환할까요, 먼저 compact 할까요, 아니면 그대로 진행할까요?
 >
-> [✅ 먼저 compact] [⚠️ 그대로 진행]
+> [🆕 새 session 으로 전환]
+> [🔄 먼저 compact]
+> [⚠️ 그대로 진행]
 
-**먼저 compact** 를 선택하면 session 을 요약하고 그 요약으로 새 session 을 시작한 뒤, 새 session 에서 메시지를 이어서 진행합니다 — 이름은 기존 session 이름에 증가하는 `-resumeN` 접미사를 붙인 형태(예: `fix-bug` → `fix-bug-resume1` → 다음 compaction 에서 `fix-bug-resume2`)이므로 `/switch` 에서도 원본과 구분할 수 있습니다. **그대로 진행** 을 선택하면 기존 session 에서 평소처럼 계속 진행합니다. 전체 검사는 `LONG_GAP_WARNING_ENABLED=false` 로 비활성화할 수 있습니다.
+`/compact` 자체도 이 비용에서 자유롭지 않다는 점에 유의하세요: 현재의 (아마도 식어버린) session 을 재개해서 스스로를 요약해 달라고 요청하는 방식으로 동작하므로, 그냥 답장하는 것과 동일한 1회성 전체 transcript 재처리 비용을 여전히 지불합니다 — 다만 결과 session 이 작게 시작되므로, 매 턴마다가 아니라 한 번만 그 비용을 지불하게 될 뿐입니다. **새 session 으로 전환** 은 이 재처리를 완전히 피할 수 있는 유일한 선택지입니다: 이전 session 을 한 번도 재개하지 않고 그 컨텍스트를 그대로 버린 뒤 완전히 새로 시작하며, 그 대가로 컨텍스트를 요약으로 압축하는 대신 완전히 잃게 됩니다.
+
+**새 session 으로 전환** 을 선택하면 완전히 새로운 빈 session 을 시작하고 그곳에서 메시지를 이어서 진행합니다 — 이름은 기존 session 이름에 증가하는 `-newN` 접미사를 붙인 형태(예: `fix-bug` → `fix-bug-new1` → 다시 전환하면 `fix-bug-new2`)이므로 `/switch` 에서도 원본과 구분할 수 있습니다. **먼저 compact** 를 선택하면 session 을 요약하고 그 요약으로 새 session 을 시작한 뒤, 새 session 에서 메시지를 이어서 진행합니다 — 비슷하게 이름이 붙지만 `-resumeN` 접미사를 사용합니다(예: `fix-bug` → `fix-bug-resume1` → 다음 compaction 에서 `fix-bug-resume2`). **그대로 진행** 을 선택하면 기존 session 에서 평소처럼 계속 진행합니다. 전체 검사는 `LONG_GAP_WARNING_ENABLED=false` 로 비활성화할 수 있습니다.
 </details>
 
 ## 📌 참고

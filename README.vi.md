@@ -726,11 +726,15 @@ Giờ đây app cũng tự động làm việc này, bằng cách kết hợp ha
 
 Khi cả ngưỡng idle và size gate đều thỏa mãn, app sẽ giữ tin nhắn của bạn lại và hỏi:
 
-> ⏳ Session này đã idle {gap}. Resume ngay bây giờ nhiều khả năng sẽ xử lý lại toàn bộ cuộc hội thoại từ đầu (cache phản hồi của provider có lẽ đã hết hạn), có thể tốn token nhiều hơn đáng kể so với bình thường. Compact trước để bắt đầu một session nhỏ hơn, rẻ hơn, hay cứ tiếp tục?
+> ⏳ Session này đã idle {gap}. Resume ngay bây giờ nhiều khả năng sẽ xử lý lại toàn bộ cuộc hội thoại từ đầu (cache phản hồi của provider có lẽ đã hết hạn), có thể tốn token nhiều hơn đáng kể so với bình thường. Compact cũng phải xử lý lại context hiện tại một lần để viết bản tóm tắt, nên cũng có thể tốn nhiều token nếu session này đã lớn. Chuyển sang session mới sẽ bỏ qua hoàn toàn việc xử lý lại đó, nhưng sẽ bắt đầu mà không có bất kỳ ký ức nào về cuộc hội thoại này. Chuyển sang session mới, compact trước, hay cứ tiếp tục?
 >
-> [✅ Compact trước] [⚠️ Cứ tiếp tục]
+> [🆕 Chuyển sang session mới]
+> [🔄 Compact trước]
+> [⚠️ Cứ tiếp tục]
 
-Chọn **Compact trước** sẽ tóm tắt session, khởi tạo một session mới từ bản tóm tắt đó, rồi tiếp tục với tin nhắn của bạn trên session mới — được đặt tên theo session cũ với hậu tố `-resumeN` tăng dần (ví dụ `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` ở lần compact tiếp theo), để bạn vẫn phân biệt được với bản gốc trong `/switch`. Chọn **Cứ tiếp tục** thì chỉ đơn giản là tiếp tục trên session hiện có như bình thường. Có thể tắt toàn bộ cơ chế kiểm tra này bằng `LONG_GAP_WARNING_ENABLED=false`.
+Lưu ý rằng bản thân `/compact` cũng không miễn phí chi phí này: nó hoạt động bằng cách resume session hiện tại (có thể đã nguội) và yêu cầu nó tự tóm tắt, nên vẫn phải trả chi phí xử lý lại toàn bộ transcript một lần giống như khi trả lời bình thường — điểm khác là bạn chỉ phải trả chi phí đó một lần thay vì ở mỗi lượt tiếp theo, vì session kết quả bắt đầu nhỏ. **Chuyển sang session mới** là lựa chọn duy nhất tránh hoàn toàn việc xử lý lại đó: nó từ bỏ context của session cũ mà không bao giờ resume nó, rồi bắt đầu hoàn toàn mới — đánh đổi bằng việc mất hoàn toàn context đó thay vì nén nó thành bản tóm tắt.
+
+Chọn **Chuyển sang session mới** sẽ khởi tạo một session mới hoàn toàn trống, rồi tiếp tục với tin nhắn của bạn ở đó — được đặt tên theo session cũ với hậu tố `-newN` tăng dần (ví dụ `fix-bug` → `fix-bug-new1` → `fix-bug-new2` nếu chuyển lần nữa), để bạn vẫn phân biệt được với bản gốc trong `/switch`. Chọn **Compact trước** sẽ tóm tắt session, khởi tạo một session mới từ bản tóm tắt đó, rồi tiếp tục với tin nhắn của bạn trên session mới — được đặt tên tương tự nhưng dùng hậu tố `-resumeN` (ví dụ `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` ở lần compact tiếp theo). Chọn **Cứ tiếp tục** thì chỉ đơn giản là tiếp tục trên session hiện có như bình thường. Có thể tắt toàn bộ cơ chế kiểm tra này bằng `LONG_GAP_WARNING_ENABLED=false`.
 </details>
 
 ## 📌 Ghi chú

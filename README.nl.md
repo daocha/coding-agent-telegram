@@ -732,11 +732,15 @@ De app doet dit inmiddels ook automatisch, door per provider twee signalen te co
 
 Als zowel de drempel als de omvangdrempel worden gehaald, houdt de app je bericht vast en vraagt:
 
-> ⏳ Deze sessie is {gap} inactief geweest. Hem nu hervatten zal waarschijnlijk het hele gesprek helemaal opnieuw verwerken (de responscache van de provider is vermoedelijk verlopen), wat aanzienlijk meer tokens kan kosten dan normaal. Eerst compacten om een kleinere, goedkopere sessie te starten, of toch doorgaan?
+> ⏳ Deze sessie is {gap} inactief geweest. Hem nu hervatten zal waarschijnlijk het hele gesprek helemaal opnieuw verwerken (de responscache van de provider is vermoedelijk verlopen), wat aanzienlijk meer tokens kan kosten dan normaal. Compacten verwerkt de huidige context ook één keer opnieuw om de samenvatting te schrijven, dus dat kan ook veel tokens kosten als deze sessie al groot is. Overschakelen naar een nieuwe sessie slaat die herverwerking helemaal over, maar begint dan zonder enige herinnering aan dit gesprek. Overschakelen naar een nieuwe sessie, eerst compacten, of toch doorgaan?
 >
-> [✅ Eerst compacten] [⚠️ Toch doorgaan]
+> [🆕 Overschakelen naar nieuwe sessie]
+> [🔄 Eerst compacten]
+> [⚠️ Toch doorgaan]
 
-Kies je **Eerst compacten**, dan wordt de sessie samengevat, wordt er een nieuwe sessie gestart op basis van die samenvatting, en gaat je bericht daarna verder op de nieuwe sessie — genoemd naar de oude sessie met een oplopend `-resumeN`-achtervoegsel (bv. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bij de volgende compactie), zodat je hem in `/switch` nog steeds van het origineel kunt onderscheiden. Kies je **Toch doorgaan**, dan gaat het gewoon verder op de bestaande sessie zoals normaal. Schakel de hele check uit met `LONG_GAP_WARNING_ENABLED=false`.
+Let op: `/compact` zelf is niet gratis wat deze kosten betreft: het werkt door de huidige (mogelijk koude) sessie te hervatten en te vragen zichzelf samen te vatten, dus het betaalt dezelfde eenmalige volledige herverwerking van de transcriptie als gewoon antwoorden — het enige verschil is dat je die kosten daarna maar één keer betaalt in plaats van bij elke volgende beurt, omdat de resulterende sessie klein begint. **Overschakelen naar nieuwe sessie** is de enige optie die die herverwerking helemaal vermijdt: ze laat de context van de oude sessie volledig los zonder hem ooit te hervatten en begint compleet opnieuw — ten koste van het volledig verliezen van die context in plaats van hem tot een samenvatting te comprimeren.
+
+Kies je **Overschakelen naar nieuwe sessie**, dan start er een gloednieuwe, lege sessie en gaat je bericht daar verder — genoemd naar de oude sessie met een oplopend `-newN`-achtervoegsel (bv. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` als je nog eens overschakelt), zodat je hem in `/switch` nog steeds van het origineel kunt onderscheiden. Kies je **Eerst compacten**, dan wordt de sessie samengevat, wordt er een nieuwe sessie gestart op basis van die samenvatting, en gaat je bericht daarna verder op de nieuwe sessie — vergelijkbaar genoemd, maar met een `-resumeN`-achtervoegsel (bv. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bij de volgende compactie). Kies je **Toch doorgaan**, dan gaat het gewoon verder op de bestaande sessie zoals normaal. Schakel de hele check uit met `LONG_GAP_WARNING_ENABLED=false`.
 </details>
 
 ## 📌 Opmerkingen

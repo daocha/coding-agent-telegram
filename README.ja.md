@@ -730,11 +730,15 @@ Codex と Copilot は自分たちの resume/list コマンドでこの「対話�
 
 しきい値と size gate の両方を満たすと、あなたのメッセージを保留してこう尋ねます。
 
-> ⏳ この session は {gap} の間 idle でした。今 resume すると会話全体をゼロから再処理する可能性が高く（provider の応答 cache はおそらく失効しています）、通常よりかなり多くの token を消費するおそれがあります。先に compact して小さく安価な session を始めますか、それともそのまま続行しますか？
+> ⏳ この session は {gap} の間 idle でした。今 resume すると会話全体をゼロから再処理する可能性が高く（provider の応答 cache はおそらく失効しています）、通常よりかなり多くの token を消費するおそれがあります。compact も要約を作成するために現在のコンテキストを一度再処理するため、この session がすでに大きい場合は同様に多くの token を消費する可能性があります。新しい session に切り替えれば、この再処理を完全に回避できますが、その代わりこれまでの会話の記憶は一切引き継がれません。新しい session に切り替えますか、先に compact しますか、それともそのまま続行しますか？
 >
-> [✅ 先に compact] [⚠️ そのまま続行]
+> [🆕 新しい session に切り替え]
+> [🔄 先に compact]
+> [⚠️ そのまま続行]
 
-**先に compact** を選ぶと、session を要約し、その要約から新しい session を開始したうえで、あなたのメッセージをその新しい session 上で続行します — 名前は元の session 名に `-resumeN` という連番のサフィックスを付けたもの（例: `fix-bug` → `fix-bug-resume1` → 次の compaction で `fix-bug-resume2`）になるので、`/switch` でも元の session と区別できます。**そのまま続行** を選ぶと、既存の session 上でいつもどおり続行するだけです。この仕組み全体は `LONG_GAP_WARNING_ENABLED=false` で無効化できます。
+`/compact` 自体もこのコストと無縁ではないことに注意してください: 現在の（おそらく冷えた）session を resume して自分自身を要約するよう求める仕組みなので、ただ返信する場合と同じ 1 回限りの transcript 全体の再処理コストを負います — 違いは、結果として得られる session が小さく始まるため、それ以降の毎ターンではなく一度だけそのコストを支払えばよいという点です。**新しい session に切り替え** は、その再処理を完全に回避できる唯一の選択肢です: 古い session を一度も resume せずにそのコンテキストを手放し、完全にゼロから始めます — その代償として、コンテキストを要約に圧縮するのではなく完全に失います。
+
+**新しい session に切り替え** を選ぶと、まったく新しい空の session を開始し、そこであなたのメッセージを続行します — 名前は元の session 名に `-newN` という連番のサフィックスを付けたもの（例: `fix-bug` → `fix-bug-new1` → 再度切り替えると `fix-bug-new2`）になるので、`/switch` でも元の session と区別できます。**先に compact** を選ぶと、session を要約し、その要約から新しい session を開始したうえで、あなたのメッセージをその新しい session 上で続行します — 同様に命名されますが、代わりに `-resumeN` サフィックスが付きます（例: `fix-bug` → `fix-bug-resume1` → 次の compaction で `fix-bug-resume2`）。**そのまま続行** を選ぶと、既存の session 上でいつもどおり続行するだけです。この仕組み全体は `LONG_GAP_WARNING_ENABLED=false` で無効化できます。
 </details>
 
 ## 📌 メモ
