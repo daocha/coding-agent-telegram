@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 
+from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.usage_status import (
     CLAUDE_WINDOW_EXPIRED_NOTE,
     CLAUDE_WINDOW_NEVER_OBSERVED_NOTE,
     ProviderUsage,
+    configure_persistence,
     fetch_copilot_usage,
     get_claude_usage,
     observe_claude_rate_limit_event,
@@ -18,9 +21,10 @@ from coding_agent_telegram.usage_status import (
 
 @pytest.fixture(autouse=True)
 def _reset_claude_rate_limit_cache(monkeypatch):
-    """The passive cache is process-wide module state; isolate each test from
-    whatever an earlier test left behind."""
+    """The passive cache and its optional persistence backing are process-wide
+    module state; isolate each test from whatever an earlier test left behind."""
     monkeypatch.setattr("coding_agent_telegram.usage_status._claude_rate_limit_cache", None)
+    monkeypatch.setattr("coding_agent_telegram.usage_status._claude_rate_limit_store", None)
     yield
 
 
@@ -210,3 +214,72 @@ def test_get_claude_usage_never_makes_a_subprocess_call(monkeypatch):
     usage = get_claude_usage()
     assert usage.five_hour is None
     assert usage.weekly is None
+
+
+def _make_store(tmp_path: Path) -> SessionStore:
+    return SessionStore(tmp_path / "state.json", tmp_path / "state.json.bak")
+
+
+def test_observed_rate_limit_survives_a_restart_via_persistence(tmp_path: Path):
+    """Reproduces the bug report: a real Claude turn observes usage, the bot
+    process restarts (wiping the in-memory-only cache), and /status should
+    still show the last-observed window instead of "no data yet"."""
+    store = _make_store(tmp_path)
+    configure_persistence(store)
+    now = time.time()
+    observe_claude_rate_limit_event(_rate_limit_events(five_hour_resets_at=now + 3600, weekly_resets_at=now + 86400))
+
+    # Simulate a process restart: fresh cache, fresh SessionStore instance
+    # pointed at the same state file, re-wired the same way cli.py does.
+    from coding_agent_telegram import usage_status as usage_status_module
+
+    usage_status_module._claude_rate_limit_cache = None
+    restarted_store = _make_store(tmp_path)
+    configure_persistence(restarted_store)
+
+    usage = get_claude_usage()
+    assert usage.five_hour.used_percent == 40.0
+    assert usage.five_hour_note is None
+    assert usage.weekly.used_percent == 10.0
+    assert usage.observed_at is not None
+
+
+def test_configure_persistence_with_no_prior_snapshot_leaves_cache_empty(tmp_path: Path):
+    store = _make_store(tmp_path)
+
+    configure_persistence(store)
+
+    usage = get_claude_usage()
+    assert usage.five_hour is None
+    assert usage.five_hour_note == CLAUDE_WINDOW_NEVER_OBSERVED_NOTE
+
+
+def test_persisted_rate_limit_snapshot_is_not_nested_under_chats(tmp_path: Path):
+    store = _make_store(tmp_path)
+    configure_persistence(store)
+    now = time.time()
+
+    observe_claude_rate_limit_event(_rate_limit_events(five_hour_resets_at=now + 3600, weekly_resets_at=now + 86400))
+
+    state = store.load()
+    assert "claude_rate_limit" in state
+    assert state.get("chats", {}) == {}
+
+
+def test_restart_after_window_rolled_over_reports_expired_not_stale_data(tmp_path: Path):
+    """A snapshot persisted just before its reset time should be reported as
+    expired after a restart, not served as if it were still live."""
+    store = _make_store(tmp_path)
+    configure_persistence(store)
+    now = time.time()
+    observe_claude_rate_limit_event(_rate_limit_events(five_hour_resets_at=now - 1, weekly_resets_at=now + 86400))
+
+    from coding_agent_telegram import usage_status as usage_status_module
+
+    usage_status_module._claude_rate_limit_cache = None
+    configure_persistence(_make_store(tmp_path))
+
+    usage = get_claude_usage()
+    assert usage.five_hour is None
+    assert usage.five_hour_note == CLAUDE_WINDOW_EXPIRED_NOTE
+    assert usage.weekly.used_percent == 10.0

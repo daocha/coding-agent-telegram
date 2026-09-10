@@ -34,11 +34,16 @@ always reports unavailable rather than inventing a window that doesn't exist.
 """
 
 import json
+import logging
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
+
+from coding_agent_telegram.session_store import SessionStore, SessionStoreError
+
+logger = logging.getLogger(__name__)
 
 CODEX_APP_SERVER_TIMEOUT_SECONDS = 15.0
 
@@ -83,9 +88,77 @@ class _ClaudeRateLimitSnapshot:
 
 # Process-wide: the underlying `claude` CLI's OAuth login is per-machine, not
 # per Telegram bot/chat, so one cache shared across every bot instance on this
-# host matches the actual scope of what it's caching.
+# host matches the actual scope of what it's caching. Optionally backed by a
+# SessionStore (see configure_persistence) so a bot restart doesn't throw away
+# a window that's still live -- without that, /status would misreport "no data
+# yet" for whatever's left of the window after every restart, not just report
+# genuinely fresh state.
 _claude_rate_limit_cache: Optional[_ClaudeRateLimitSnapshot] = None
 _claude_rate_limit_lock = threading.Lock()
+_claude_rate_limit_store: Optional[SessionStore] = None
+
+
+def _rate_window_to_dict(window: Optional[RateWindow]) -> Optional[dict]:
+    if window is None:
+        return None
+    return {"used_percent": window.used_percent, "resets_at": window.resets_at}
+
+
+def _rate_window_from_dict(data: object) -> Optional[RateWindow]:
+    if not isinstance(data, dict):
+        return None
+    used_percent = data.get("used_percent")
+    if not isinstance(used_percent, (int, float)):
+        return None
+    resets_at = data.get("resets_at")
+    return RateWindow(
+        used_percent=float(used_percent),
+        resets_at=resets_at if isinstance(resets_at, int) else None,
+    )
+
+
+def _snapshot_to_dict(snapshot: _ClaudeRateLimitSnapshot) -> dict:
+    return {
+        "five_hour": _rate_window_to_dict(snapshot.five_hour),
+        "weekly": _rate_window_to_dict(snapshot.weekly),
+        "observed_at": snapshot.observed_at,
+    }
+
+
+def _snapshot_from_dict(data: dict) -> Optional[_ClaudeRateLimitSnapshot]:
+    observed_at = data.get("observed_at")
+    if not isinstance(observed_at, (int, float)):
+        return None
+    return _ClaudeRateLimitSnapshot(
+        five_hour=_rate_window_from_dict(data.get("five_hour")),
+        weekly=_rate_window_from_dict(data.get("weekly")),
+        observed_at=float(observed_at),
+    )
+
+
+def configure_persistence(store: SessionStore) -> None:
+    """Back the passive rate-limit cache with *store* and seed it from disk.
+
+    Called once at startup, after the SessionStore exists. Loading here (rather
+    than lazily on first read) means the very first ``/status`` after a restart
+    can already show the last-observed window instead of "no data yet", as long
+    as that window hasn't rolled past its own reset time -- get_claude_usage's
+    existing expiry check handles that either way.
+    """
+    global _claude_rate_limit_store, _claude_rate_limit_cache
+    _claude_rate_limit_store = store
+    try:
+        data = store.load_claude_rate_limit()
+    except SessionStoreError:
+        logger.warning("Could not load persisted Claude rate-limit snapshot; starting empty.", exc_info=True)
+        return
+    if data is None:
+        return
+    snapshot = _snapshot_from_dict(data)
+    if snapshot is None:
+        return
+    with _claude_rate_limit_lock:
+        _claude_rate_limit_cache = snapshot
 
 
 def _claude_rate_window(window: Optional[dict]) -> Optional[RateWindow]:
@@ -125,12 +198,22 @@ def parse_claude_rate_limit_event(raw_events: list) -> Optional[ProviderUsage]:
 
 def _store_claude_snapshot(usage: ProviderUsage) -> None:
     global _claude_rate_limit_cache
+    snapshot = _ClaudeRateLimitSnapshot(
+        five_hour=usage.five_hour,
+        weekly=usage.weekly,
+        observed_at=time.time(),
+    )
     with _claude_rate_limit_lock:
-        _claude_rate_limit_cache = _ClaudeRateLimitSnapshot(
-            five_hour=usage.five_hour,
-            weekly=usage.weekly,
-            observed_at=time.time(),
-        )
+        _claude_rate_limit_cache = snapshot
+        store = _claude_rate_limit_store
+    if store is not None:
+        # Best-effort: a failed disk write must not lose the in-memory update
+        # above, which is what every real Claude call up to this point relied
+        # on already existing.
+        try:
+            store.save_claude_rate_limit(_snapshot_to_dict(snapshot))
+        except SessionStoreError:
+            logger.warning("Could not persist Claude rate-limit snapshot to disk.", exc_info=True)
 
 
 def observe_claude_rate_limit_event(raw_events: list) -> None:
