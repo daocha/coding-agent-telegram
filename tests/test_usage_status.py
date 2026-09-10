@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +10,7 @@ from coding_agent_telegram.usage_status import (
     CLAUDE_WINDOW_EXPIRED_NOTE,
     CLAUDE_WINDOW_NEVER_OBSERVED_NOTE,
     ProviderUsage,
+    configure_persistence,
     fetch_copilot_usage,
     get_claude_usage,
     observe_claude_rate_limit_event,
@@ -18,9 +21,10 @@ from coding_agent_telegram.usage_status import (
 
 @pytest.fixture(autouse=True)
 def _reset_claude_rate_limit_cache(monkeypatch):
-    """The passive cache is process-wide module state; isolate each test from
-    whatever an earlier test left behind."""
+    """The passive cache and its optional persistence backing are process-wide
+    module state; isolate each test from whatever an earlier test left behind."""
     monkeypatch.setattr("coding_agent_telegram.usage_status._claude_rate_limit_cache", None)
+    monkeypatch.setattr("coding_agent_telegram.usage_status._claude_rate_limit_path", None)
     yield
 
 
@@ -191,6 +195,56 @@ def test_get_claude_usage_reports_na_for_weekly_window_that_has_reset_but_keeps_
     assert usage.weekly_note == CLAUDE_WINDOW_EXPIRED_NOTE
 
 
+def test_resolve_window_treats_missing_resets_at_as_expired_past_max_age():
+    """A window with no resets_at (a malformed/partial rate_limit_event) must
+    still eventually expire -- otherwise a bad value could get stuck reading
+    as "fresh" forever, which matters more now that it survives a restart."""
+    from coding_agent_telegram.usage_status import _MAX_SNAPSHOT_AGE_SECONDS, RateWindow, _resolve_window
+
+    now = time.time()
+    window = RateWindow(used_percent=50.0, resets_at=None)
+
+    resolved, note = _resolve_window(window, now, now - _MAX_SNAPSHOT_AGE_SECONDS - 1)
+
+    assert resolved is None
+    assert note == CLAUDE_WINDOW_EXPIRED_NOTE
+
+
+def test_resolve_window_keeps_missing_resets_at_fresh_within_max_age():
+    from coding_agent_telegram.usage_status import RateWindow, _resolve_window
+
+    now = time.time()
+    window = RateWindow(used_percent=50.0, resets_at=None)
+
+    resolved, note = _resolve_window(window, now, now - 60)
+
+    assert resolved == window
+    assert note is None
+
+
+def test_get_claude_usage_expires_window_with_missing_resets_at_after_max_age(monkeypatch):
+    """Integration-level check: a stale, resets_at-less window doesn't get
+    reported as live, while its sibling (with its own valid resets_at) is
+    unaffected."""
+    from coding_agent_telegram import usage_status as usage_status_module
+    from coding_agent_telegram.usage_status import _MAX_SNAPSHOT_AGE_SECONDS, RateWindow, _ClaudeRateLimitSnapshot
+
+    now = time.time()
+    stale_snapshot = _ClaudeRateLimitSnapshot(
+        five_hour=RateWindow(used_percent=50.0, resets_at=None),
+        weekly=RateWindow(used_percent=20.0, resets_at=now + 86400),
+        observed_at=now - _MAX_SNAPSHOT_AGE_SECONDS - 1,
+    )
+    monkeypatch.setattr(usage_status_module, "_claude_rate_limit_cache", stale_snapshot)
+
+    usage = get_claude_usage()
+
+    assert usage.five_hour is None
+    assert usage.five_hour_note == CLAUDE_WINDOW_EXPIRED_NOTE
+    assert usage.weekly.used_percent == 20.0
+    assert usage.weekly_note is None
+
+
 def test_get_claude_usage_never_makes_a_subprocess_call(monkeypatch):
     """There is no live-probe fallback anymore -- get_claude_usage must be a
     pure, free cache read regardless of cache state."""
@@ -210,3 +264,75 @@ def test_get_claude_usage_never_makes_a_subprocess_call(monkeypatch):
     usage = get_claude_usage()
     assert usage.five_hour is None
     assert usage.weekly is None
+
+
+def _rate_limit_path(tmp_path: Path) -> Path:
+    return tmp_path / "claude_rate_limit.json"
+
+
+def test_observed_rate_limit_survives_a_restart_via_persistence(tmp_path: Path):
+    """Reproduces the bug report: a real Claude turn observes usage, the bot
+    process restarts (wiping the in-memory-only cache), and /status should
+    still show the last-observed window instead of "no data yet"."""
+    path = _rate_limit_path(tmp_path)
+    configure_persistence(path)
+    now = time.time()
+    observe_claude_rate_limit_event(_rate_limit_events(five_hour_resets_at=now + 3600, weekly_resets_at=now + 86400))
+
+    # Simulate a process restart: fresh cache, re-wired the same way cli.py
+    # does, pointed at the same file.
+    from coding_agent_telegram import usage_status as usage_status_module
+
+    usage_status_module._claude_rate_limit_cache = None
+    configure_persistence(path)
+
+    usage = get_claude_usage()
+    assert usage.five_hour.used_percent == 40.0
+    assert usage.five_hour_note is None
+    assert usage.weekly.used_percent == 10.0
+    assert usage.observed_at is not None
+
+
+def test_configure_persistence_with_no_prior_snapshot_leaves_cache_empty(tmp_path: Path):
+    configure_persistence(_rate_limit_path(tmp_path))
+
+    usage = get_claude_usage()
+    assert usage.five_hour is None
+    assert usage.five_hour_note == CLAUDE_WINDOW_NEVER_OBSERVED_NOTE
+
+
+def test_persisted_rate_limit_snapshot_lives_in_its_own_file(tmp_path: Path):
+    path = _rate_limit_path(tmp_path)
+    configure_persistence(path)
+    now = time.time()
+
+    observe_claude_rate_limit_event(_rate_limit_events(five_hour_resets_at=now + 3600, weekly_resets_at=now + 86400))
+
+    assert path.exists()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["five_hour"]["used_percent"] == 40.0
+    assert data["weekly"]["used_percent"] == 10.0
+    # No sibling state.json/backup churn from this write -- it's a standalone file.
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "claude_rate_limit.json",
+        "claude_rate_limit.json.lock",
+    ]
+
+
+def test_restart_after_window_rolled_over_reports_expired_not_stale_data(tmp_path: Path):
+    """A snapshot persisted just before its reset time should be reported as
+    expired after a restart, not served as if it were still live."""
+    path = _rate_limit_path(tmp_path)
+    configure_persistence(path)
+    now = time.time()
+    observe_claude_rate_limit_event(_rate_limit_events(five_hour_resets_at=now - 1, weekly_resets_at=now + 86400))
+
+    from coding_agent_telegram import usage_status as usage_status_module
+
+    usage_status_module._claude_rate_limit_cache = None
+    configure_persistence(path)
+
+    usage = get_claude_usage()
+    assert usage.five_hour is None
+    assert usage.five_hour_note == CLAUDE_WINDOW_EXPIRED_NOTE
+    assert usage.weekly.used_percent == 10.0

@@ -34,11 +34,17 @@ always reports unavailable rather than inventing a window that doesn't exist.
 """
 
 import json
+import logging
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
+
+import portalocker
+
+logger = logging.getLogger(__name__)
 
 CODEX_APP_SERVER_TIMEOUT_SECONDS = 15.0
 
@@ -83,9 +89,122 @@ class _ClaudeRateLimitSnapshot:
 
 # Process-wide: the underlying `claude` CLI's OAuth login is per-machine, not
 # per Telegram bot/chat, so one cache shared across every bot instance on this
-# host matches the actual scope of what it's caching.
+# host matches the actual scope of what it's caching. Optionally backed by its
+# own small file on disk (see configure_persistence) so a bot restart doesn't
+# throw away a window that's still live -- without that, /status would
+# misreport "no data yet" for whatever's left of the window after every
+# restart, not just report genuinely fresh state.
+#
+# Deliberately its own file rather than a key in the main session state.json:
+# this snapshot refreshes on every real Claude turn (not just rare
+# session-lifecycle events like /new or /switch), and it's disposable --
+# worst case a lost write just means one more "no data yet" until the next
+# Claude turn observes it again. Writing it into state.json would mean
+# re-copying the entire session/backup blob on every single turn just to
+# protect a few bytes of best-effort telemetry, and would serialize these
+# frequent writes against unrelated, rarer session-lifecycle writes sharing
+# that file's lock.
 _claude_rate_limit_cache: Optional[_ClaudeRateLimitSnapshot] = None
 _claude_rate_limit_lock = threading.Lock()
+_claude_rate_limit_path: Optional[Path] = None
+_RATE_LIMIT_LOCK_TIMEOUT_SECONDS = 5
+
+
+def _rate_window_to_dict(window: Optional[RateWindow]) -> Optional[dict]:
+    if window is None:
+        return None
+    return {"used_percent": window.used_percent, "resets_at": window.resets_at}
+
+
+def _rate_window_from_dict(data: object) -> Optional[RateWindow]:
+    if not isinstance(data, dict):
+        return None
+    used_percent = data.get("used_percent")
+    if not isinstance(used_percent, (int, float)):
+        return None
+    resets_at = data.get("resets_at")
+    return RateWindow(
+        used_percent=float(used_percent),
+        resets_at=resets_at if isinstance(resets_at, int) else None,
+    )
+
+
+def _snapshot_to_dict(snapshot: _ClaudeRateLimitSnapshot) -> dict:
+    return {
+        "five_hour": _rate_window_to_dict(snapshot.five_hour),
+        "weekly": _rate_window_to_dict(snapshot.weekly),
+        "observed_at": snapshot.observed_at,
+    }
+
+
+def _snapshot_from_dict(data: dict) -> Optional[_ClaudeRateLimitSnapshot]:
+    observed_at = data.get("observed_at")
+    if not isinstance(observed_at, (int, float)):
+        return None
+    return _ClaudeRateLimitSnapshot(
+        five_hour=_rate_window_from_dict(data.get("five_hour")),
+        weekly=_rate_window_from_dict(data.get("weekly")),
+        observed_at=float(observed_at),
+    )
+
+
+def _read_locked_json_file(path: Path) -> Optional[dict]:
+    """Return the parsed JSON object at *path*, or None if it doesn't exist,
+    is empty, or isn't a JSON object. Locked against other processes writing
+    the same file (see the module-level comment on why this isn't state.json)."""
+    lock_file = path.with_suffix(path.suffix + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with portalocker.Lock(str(lock_file), timeout=_RATE_LIMIT_LOCK_TIMEOUT_SECONDS):
+        if not path.exists():
+            return None
+        raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_locked_json_file(path: Path, data: dict) -> None:
+    """Atomically (temp file + rename) and lock-safely overwrite *path* with
+    *data*. No backup copy -- unlike state.json, this file's contents are
+    disposable/self-healing, so there's nothing worth preserving a prior
+    version of."""
+    lock_file = path.with_suffix(path.suffix + ".lock")
+    temp_file = path.with_suffix(path.suffix + ".tmp")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(data, indent=2, ensure_ascii=False)
+    with portalocker.Lock(str(lock_file), timeout=_RATE_LIMIT_LOCK_TIMEOUT_SECONDS):
+        temp_file.write_text(serialized + "\n", encoding="utf-8")
+        temp_file.replace(path)
+
+
+def configure_persistence(path: Path) -> None:
+    """Back the passive rate-limit cache with a dedicated JSON file at *path*
+    and seed the cache from it if present.
+
+    Called once at startup. Loading here (rather than lazily on first read)
+    means the very first ``/status`` after a restart can already show the
+    last-observed window instead of "no data yet", as long as that window
+    hasn't rolled past its own reset time -- get_claude_usage's existing
+    expiry check handles that either way.
+    """
+    global _claude_rate_limit_path, _claude_rate_limit_cache
+    _claude_rate_limit_path = path
+    try:
+        data = _read_locked_json_file(path)
+    except (OSError, portalocker.LockException):
+        logger.warning("Could not load persisted Claude rate-limit snapshot; starting empty.", exc_info=True)
+        return
+    if data is None:
+        return
+    snapshot = _snapshot_from_dict(data)
+    if snapshot is None:
+        return
+    with _claude_rate_limit_lock:
+        _claude_rate_limit_cache = snapshot
 
 
 def _claude_rate_window(window: Optional[dict]) -> Optional[RateWindow]:
@@ -125,12 +244,22 @@ def parse_claude_rate_limit_event(raw_events: list) -> Optional[ProviderUsage]:
 
 def _store_claude_snapshot(usage: ProviderUsage) -> None:
     global _claude_rate_limit_cache
+    snapshot = _ClaudeRateLimitSnapshot(
+        five_hour=usage.five_hour,
+        weekly=usage.weekly,
+        observed_at=time.time(),
+    )
     with _claude_rate_limit_lock:
-        _claude_rate_limit_cache = _ClaudeRateLimitSnapshot(
-            five_hour=usage.five_hour,
-            weekly=usage.weekly,
-            observed_at=time.time(),
-        )
+        _claude_rate_limit_cache = snapshot
+        path = _claude_rate_limit_path
+    if path is not None:
+        # Best-effort: a failed disk write must not lose the in-memory update
+        # above, which is what every real Claude call up to this point relied
+        # on already existing.
+        try:
+            _write_locked_json_file(path, _snapshot_to_dict(snapshot))
+        except (OSError, portalocker.LockException):
+            logger.warning("Could not persist Claude rate-limit snapshot to disk.", exc_info=True)
 
 
 def observe_claude_rate_limit_event(raw_events: list) -> None:
@@ -146,7 +275,21 @@ def observe_claude_rate_limit_event(raw_events: list) -> None:
         _store_claude_snapshot(usage)
 
 
-def _resolve_window(window: Optional[RateWindow], now: float) -> tuple[Optional[RateWindow], Optional[str]]:
+# Backstop for a window whose resets_at came back missing (a malformed or
+# partial API response -- see _claude_rate_window/_rate_window_from_dict,
+# both of which fall back to None rather than guessing) and would otherwise
+# never expire on its own below. Set comfortably past the longest real window
+# (7 days) so it never second-guesses a legitimately fresh weekly window that
+# *does* have a resets_at -- this only kicks in when that field is absent.
+# Matters more now than it would have before configure_persistence existed:
+# a bad value used to be bounded by the process's own lifetime, and now
+# persists across restarts until a fresh event happens to overwrite it.
+_MAX_SNAPSHOT_AGE_SECONDS = 8 * 24 * 3600
+
+
+def _resolve_window(
+    window: Optional[RateWindow], now: float, observed_at: Optional[float]
+) -> tuple[Optional[RateWindow], Optional[str]]:
     """Return the window if it's still trustworthy, else ``(None, reason)``.
 
     A cached window is trustworthy only until its own reported reset time --
@@ -156,7 +299,10 @@ def _resolve_window(window: Optional[RateWindow], now: float) -> tuple[Optional[
     """
     if window is None:
         return None, CLAUDE_WINDOW_NEVER_OBSERVED_NOTE
-    if window.resets_at is not None and now >= window.resets_at:
+    if window.resets_at is not None:
+        if now >= window.resets_at:
+            return None, CLAUDE_WINDOW_EXPIRED_NOTE
+    elif observed_at is not None and now - observed_at >= _MAX_SNAPSHOT_AGE_SECONDS:
         return None, CLAUDE_WINDOW_EXPIRED_NOTE
     return window, None
 
@@ -173,8 +319,9 @@ def get_claude_usage() -> ProviderUsage:
     with _claude_rate_limit_lock:
         snapshot = _claude_rate_limit_cache
 
-    five_hour, five_hour_note = _resolve_window(snapshot.five_hour if snapshot else None, now)
-    weekly, weekly_note = _resolve_window(snapshot.weekly if snapshot else None, now)
+    observed_at = snapshot.observed_at if snapshot else None
+    five_hour, five_hour_note = _resolve_window(snapshot.five_hour if snapshot else None, now, observed_at)
+    weekly, weekly_note = _resolve_window(snapshot.weekly if snapshot else None, now, observed_at)
 
     return ProviderUsage(
         provider="claude",
