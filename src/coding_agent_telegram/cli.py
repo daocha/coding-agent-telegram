@@ -15,6 +15,7 @@ from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.logging_utils import setup_logging
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.stt_setup import ensure_stt_runtime_or_exit, offer_stt_install_for_new_env
+from coding_agent_telegram.usage_status import configure_persistence
 
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,10 @@ def main() -> None:
         raise
 
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    # Its own small file, deliberately separate from state.json -- see the
+    # module-level comment in usage_status.py for why (write frequency and
+    # lock-contention mismatch with session bookkeeping).
+    configure_persistence(cfg.state_file.parent / "claude_rate_limit.json")
     cleared_pending_actions = store.clear_all_pending_actions()
     if cleared_pending_actions:
         logger.warning(
