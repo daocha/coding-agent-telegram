@@ -190,32 +190,6 @@ def test_trust_project_persists(tmp_path: Path):
     assert store.is_project_trusted("backend") is True
 
 
-def test_claude_rate_limit_persists_at_top_level_not_under_chats(tmp_path: Path):
-    state = tmp_path / "state.json"
-    backup = tmp_path / "state.json.bak"
-    store = SessionStore(state, backup)
-    snapshot = {
-        "five_hour": {"used_percent": 40.0, "resets_at": 1789005642},
-        "weekly": {"used_percent": 10.0, "resets_at": 1789446557},
-        "observed_at": 1789000000.0,
-    }
-
-    store.save_claude_rate_limit(snapshot)
-
-    assert store.load_claude_rate_limit() == snapshot
-    raw_state = store.load()
-    assert raw_state["claude_rate_limit"] == snapshot
-    assert raw_state.get("chats", {}) == {}
-
-
-def test_load_claude_rate_limit_returns_none_when_never_saved(tmp_path: Path):
-    state = tmp_path / "state.json"
-    backup = tmp_path / "state.json.bak"
-    store = SessionStore(state, backup)
-
-    assert store.load_claude_rate_limit() is None
-
-
 def test_replace_session_does_not_duplicate_entries(tmp_path: Path):
     state = tmp_path / "state.json"
     backup = tmp_path / "state.json.bak"

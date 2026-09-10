@@ -181,21 +181,6 @@ class SessionStore:
         trusted_projects = state.setdefault("trusted_projects", [])
         return project_folder in trusted_projects
 
-    def load_claude_rate_limit(self) -> Optional[dict[str, Any]]:
-        """Return the last-persisted Claude rate-limit snapshot, or None if none was
-        ever saved. Machine-wide like ``trusted_projects`` (the underlying claude CLI
-        login is per-machine, not per chat), so this lives at the top level of the
-        state file rather than inside ``chats``."""
-        state = self.load()
-        snapshot = state.get("claude_rate_limit")
-        return snapshot if isinstance(snapshot, dict) else None
-
-    def save_claude_rate_limit(self, snapshot: dict[str, Any]) -> None:
-        def mutate(state: dict[str, Any]) -> None:
-            state["claude_rate_limit"] = snapshot
-
-        self._mutate_state(mutate)
-
     def set_current_project_folder(self, bot_id: str, chat_id: int, project_folder: str) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
             chat_data["current_project_folder"] = project_folder

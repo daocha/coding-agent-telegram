@@ -39,9 +39,10 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from pathlib import Path
+from typing import Optional
 
-from coding_agent_telegram.session_store import SessionStore, SessionStoreError
+import portalocker
 
 logger = logging.getLogger(__name__)
 
@@ -88,14 +89,25 @@ class _ClaudeRateLimitSnapshot:
 
 # Process-wide: the underlying `claude` CLI's OAuth login is per-machine, not
 # per Telegram bot/chat, so one cache shared across every bot instance on this
-# host matches the actual scope of what it's caching. Optionally backed by a
-# SessionStore (see configure_persistence) so a bot restart doesn't throw away
-# a window that's still live -- without that, /status would misreport "no data
-# yet" for whatever's left of the window after every restart, not just report
-# genuinely fresh state.
+# host matches the actual scope of what it's caching. Optionally backed by its
+# own small file on disk (see configure_persistence) so a bot restart doesn't
+# throw away a window that's still live -- without that, /status would
+# misreport "no data yet" for whatever's left of the window after every
+# restart, not just report genuinely fresh state.
+#
+# Deliberately its own file rather than a key in the main session state.json:
+# this snapshot refreshes on every real Claude turn (not just rare
+# session-lifecycle events like /new or /switch), and it's disposable --
+# worst case a lost write just means one more "no data yet" until the next
+# Claude turn observes it again. Writing it into state.json would mean
+# re-copying the entire session/backup blob on every single turn just to
+# protect a few bytes of best-effort telemetry, and would serialize these
+# frequent writes against unrelated, rarer session-lifecycle writes sharing
+# that file's lock.
 _claude_rate_limit_cache: Optional[_ClaudeRateLimitSnapshot] = None
 _claude_rate_limit_lock = threading.Lock()
-_claude_rate_limit_store: Optional[SessionStore] = None
+_claude_rate_limit_path: Optional[Path] = None
+_RATE_LIMIT_LOCK_TIMEOUT_SECONDS = 5
 
 
 def _rate_window_to_dict(window: Optional[RateWindow]) -> Optional[dict]:
@@ -136,20 +148,54 @@ def _snapshot_from_dict(data: dict) -> Optional[_ClaudeRateLimitSnapshot]:
     )
 
 
-def configure_persistence(store: SessionStore) -> None:
-    """Back the passive rate-limit cache with *store* and seed it from disk.
-
-    Called once at startup, after the SessionStore exists. Loading here (rather
-    than lazily on first read) means the very first ``/status`` after a restart
-    can already show the last-observed window instead of "no data yet", as long
-    as that window hasn't rolled past its own reset time -- get_claude_usage's
-    existing expiry check handles that either way.
-    """
-    global _claude_rate_limit_store, _claude_rate_limit_cache
-    _claude_rate_limit_store = store
+def _read_locked_json_file(path: Path) -> Optional[dict]:
+    """Return the parsed JSON object at *path*, or None if it doesn't exist,
+    is empty, or isn't a JSON object. Locked against other processes writing
+    the same file (see the module-level comment on why this isn't state.json)."""
+    lock_file = path.with_suffix(path.suffix + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with portalocker.Lock(str(lock_file), timeout=_RATE_LIMIT_LOCK_TIMEOUT_SECONDS):
+        if not path.exists():
+            return None
+        raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return None
     try:
-        data = store.load_claude_rate_limit()
-    except SessionStoreError:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_locked_json_file(path: Path, data: dict) -> None:
+    """Atomically (temp file + rename) and lock-safely overwrite *path* with
+    *data*. No backup copy -- unlike state.json, this file's contents are
+    disposable/self-healing, so there's nothing worth preserving a prior
+    version of."""
+    lock_file = path.with_suffix(path.suffix + ".lock")
+    temp_file = path.with_suffix(path.suffix + ".tmp")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(data, indent=2, ensure_ascii=False)
+    with portalocker.Lock(str(lock_file), timeout=_RATE_LIMIT_LOCK_TIMEOUT_SECONDS):
+        temp_file.write_text(serialized + "\n", encoding="utf-8")
+        temp_file.replace(path)
+
+
+def configure_persistence(path: Path) -> None:
+    """Back the passive rate-limit cache with a dedicated JSON file at *path*
+    and seed the cache from it if present.
+
+    Called once at startup. Loading here (rather than lazily on first read)
+    means the very first ``/status`` after a restart can already show the
+    last-observed window instead of "no data yet", as long as that window
+    hasn't rolled past its own reset time -- get_claude_usage's existing
+    expiry check handles that either way.
+    """
+    global _claude_rate_limit_path, _claude_rate_limit_cache
+    _claude_rate_limit_path = path
+    try:
+        data = _read_locked_json_file(path)
+    except (OSError, portalocker.LockException):
         logger.warning("Could not load persisted Claude rate-limit snapshot; starting empty.", exc_info=True)
         return
     if data is None:
@@ -205,14 +251,14 @@ def _store_claude_snapshot(usage: ProviderUsage) -> None:
     )
     with _claude_rate_limit_lock:
         _claude_rate_limit_cache = snapshot
-        store = _claude_rate_limit_store
-    if store is not None:
+        path = _claude_rate_limit_path
+    if path is not None:
         # Best-effort: a failed disk write must not lose the in-memory update
         # above, which is what every real Claude call up to this point relied
         # on already existing.
         try:
-            store.save_claude_rate_limit(_snapshot_to_dict(snapshot))
-        except SessionStoreError:
+            _write_locked_json_file(path, _snapshot_to_dict(snapshot))
+        except (OSError, portalocker.LockException):
             logger.warning("Could not persist Claude rate-limit snapshot to disk.", exc_info=True)
 
 

@@ -154,7 +154,10 @@ def main() -> None:
         raise
 
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
-    configure_persistence(store)
+    # Its own small file, deliberately separate from state.json -- see the
+    # module-level comment in usage_status.py for why (write frequency and
+    # lock-contention mismatch with session bookkeeping).
+    configure_persistence(cfg.state_file.parent / "claude_rate_limit.json")
     cleared_pending_actions = store.clear_all_pending_actions()
     if cleared_pending_actions:
         logger.warning(
