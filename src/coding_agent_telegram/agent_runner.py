@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
+from coding_agent_telegram.usage_status import observe_claude_rate_limit_event
+
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +283,25 @@ class MultiAgentRunner:
             return result_text if isinstance(result_text, str) else ""
         return "\n".join(self._unique_text_fragments(self._collect_text_fragments(event)))
 
+    @staticmethod
+    def _claude_events_report_session_not_found(events: list[dict]) -> bool:
+        """True if a Claude "result" event's own "errors" array says the resumed
+        session ID has no local transcript. Checked against that structured field
+        directly -- not against whatever text ends up in error_message, since that can
+        also be a genuine (if failed) turn's model-generated output, which shouldn't be
+        substring-matched for control decisions like "should this session be replaced."
+        """
+        for ev in events:
+            if not isinstance(ev, dict) or ev.get("type") != "result" or not ev.get("is_error"):
+                continue
+            errors_list = ev.get("errors")
+            if not isinstance(errors_list, list):
+                continue
+            for error in errors_list:
+                if isinstance(error, str) and error.lower().startswith("no conversation found"):
+                    return True
+        return False
+
     def _parse_claude_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
         events = self._parse_json_lines(stdout)
 
@@ -303,9 +324,21 @@ class MultiAgentRunner:
                 if isinstance(result_text, str) and result_text:
                     assistant_text = result_text
                 if is_error:
+                    # A resume against a session ID the CLI has no local transcript for
+                    # fails before any turn runs: "result" is empty and "subtype" is just
+                    # the generic "error_during_execution", but the actual reason (e.g.
+                    # "No conversation found with session ID: ...") is in "errors".
+                    errors_list = ev.get("errors")
+                    first_error = (
+                        next((e for e in errors_list if isinstance(e, str) and e), None)
+                        if isinstance(errors_list, list)
+                        else None
+                    )
                     subtype = str(ev.get("subtype") or "").strip()
                     error_message = (
-                        result_text if isinstance(result_text, str) and result_text else (subtype or "Claude run failed.")
+                        result_text
+                        if isinstance(result_text, str) and result_text
+                        else (first_error or subtype or "Claude run failed.")
                     )
             else:
                 extracted_text = self._extract_claude_assistant_text(ev)
@@ -629,6 +662,10 @@ class MultiAgentRunner:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_codex_jsonl(stdout)
         elif provider == "claude":
             session_id, parsed_success, assistant_text, error_message, events = self._parse_claude_jsonl(stdout)
+            try:
+                observe_claude_rate_limit_event(events)
+            except Exception:
+                logger.exception("Failed to cache Claude rate-limit data from a completed run.")
         else:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_copilot_jsonl(stdout)
 
@@ -646,6 +683,8 @@ class MultiAgentRunner:
                     error_message = stripped_stderr
                 else:
                     error_code = "agent_command_failed"
+            if not success and provider == "claude" and self._claude_events_report_session_not_found(events):
+                error_code = "session_not_found"
 
         return AgentRunResult(
             session_id=session_id,
@@ -739,18 +778,27 @@ class MultiAgentRunner:
         user_message: str,
         skip_git_repo_check: bool,
         image_paths: Sequence[Path] = (),
+        *,
+        for_session_creation: bool = False,
     ) -> list[str]:
         args = []
         if self.codex_model:
             args.extend(["-m", self.codex_model])
         for image_path in image_paths:
             args.extend(["--image", str(image_path)])
+        # Session creation only primes the CLI to hand back a session ID, so it runs
+        # read-only regardless of the operator's configured approval/sandbox settings.
+        # Without this the priming prompt inherits full autopilot permissions and the
+        # agent may act on it (e.g. running commands from a compaction "next steps"
+        # summary) behind the bot's back.
+        approval_policy = "never" if for_session_creation else self.approval_policy
+        sandbox_mode = "read-only" if for_session_creation else self.sandbox_mode
         args.extend(
             [
             "-c",
-            f"approval_policy={self.approval_policy}",
+            f"approval_policy={approval_policy}",
             "-c",
-            f"sandbox_mode={self.sandbox_mode}",
+            f"sandbox_mode={sandbox_mode}",
             "--json",
             "--cd",
             str(project_path),
@@ -809,6 +857,13 @@ class MultiAgentRunner:
         *,
         for_session_creation: bool = False,
     ) -> list[str]:
+        # Session creation only primes the CLI to hand back a session ID, so the
+        # operator's permission grants are withheld and the throwaway prompt cannot be
+        # acted on. Copilot has no positive read-only switch like Claude's
+        # `--permission-mode plan` or Codex's `sandbox_mode=read-only`, so this is
+        # expressed by omission: with nothing allowed, Copilot falls back to asking
+        # before each tool use, and `--no-ask-user` (deliberately not gated here) turns
+        # that into a decline rather than a hang in this non-interactive run.
         args = []
         if self.copilot_model:
             args.extend(["--model", self.copilot_model])
@@ -884,7 +939,13 @@ class MultiAgentRunner:
             args = [
                 self.codex_bin,
                 "exec",
-                *self._codex_base(project_path, user_message, skip_git_repo_check, image_paths),
+                *self._codex_base(
+                    project_path,
+                    user_message,
+                    skip_git_repo_check,
+                    image_paths,
+                    for_session_creation=priming_only,
+                ),
             ]
             return self._run_with_output_file(
                 args,
@@ -897,7 +958,10 @@ class MultiAgentRunner:
         elif provider == "copilot":
             if image_paths:
                 return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
-            args = [self.copilot_bin, *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=True)]
+            args = [
+                self.copilot_bin,
+                *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=priming_only),
+            ]
             return self._run(
                 args,
                 provider="copilot",

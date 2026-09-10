@@ -155,3 +155,49 @@ def test_detect_reply_options_caps_at_max_options():
 
 def test_detect_reply_options_returns_empty_for_blank_text():
     assert _detect_reply_options("   ") == ()
+
+
+def test_detect_reply_options_ignores_multiple_independent_questions():
+    text = (
+        "I have a couple of questions before proceeding:\n"
+        "1. Should I use approach A or B for the caching layer?\n"
+        "2. Do you want unit tests included in this PR?"
+    )
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_ignores_multiple_questions_wrapped_in_markdown():
+    """Claude routinely bolds numbered questions, which puts the question mark inside
+    the emphasis markers. Matching on a bare trailing "?" missed exactly the formatting
+    the provider uses most."""
+    text = (
+        "I need a couple of decisions before I proceed - should I go ahead?\n"
+        "1. **Use Redis or in-memory for the cache?**\n"
+        "2. **Include unit tests in this PR?**"
+    )
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_ignores_multiple_questions_in_italics_or_code():
+    text = (
+        "Which do you want me to settle first?\n"
+        "1. *Should the cache be write-through?*\n"
+        "2. `Do we keep the legacy endpoint?`"
+    )
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_keeps_menu_with_a_single_trailing_escape_question():
+    """One question mark is an "or something else?" escape hatch on a real menu, not a
+    second independent question, so the menu must survive."""
+    text = (
+        "Which approach do you want?\n"
+        "1. Refactor the module first\n"
+        "2. Patch it in place\n"
+        "3. Something else?"
+    )
+    assert _detect_reply_options(text) == (
+        "Refactor the module first",
+        "Patch it in place",
+        "Something else?",
+    )

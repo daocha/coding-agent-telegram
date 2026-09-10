@@ -131,7 +131,9 @@ def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
         sandbox_mode="workspace-write",
     )
 
-    result = runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+    result = runner.create_session(
+        "copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False, priming_only=True
+    )
 
     assert calls[0][0] == [
         "copilot",
@@ -221,9 +223,12 @@ def test_copilot_runner_uses_native_home_when_copilot_home_is_unset(monkeypatch)
         sandbox_mode="workspace-write",
     )
 
-    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    runner.create_session(
+        "copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True, priming_only=True
+    )
 
     assert "COPILOT_HOME" not in calls[0][2]
+    # skip_git_repo_check must not smuggle a permission grant into a priming run.
     assert "--allow-all" not in calls[0][0]
     assert "--allow-all-tools" not in calls[0][0]
 
@@ -478,7 +483,9 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
         copilot_model="gpt-5",
     )
 
-    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+    runner.create_session(
+        "copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False, priming_only=True
+    )
 
     assert calls[0][0][:5] == [
         "copilot",
@@ -489,11 +496,8 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
     ]
 
 
-def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
-    calls = []
-    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
-
-    runner = MultiAgentRunner(
+def _copilot_tool_permission_runner() -> MultiAgentRunner:
+    return MultiAgentRunner(
         codex_bin="codex",
         copilot_bin="copilot",
         approval_policy="never",
@@ -507,12 +511,39 @@ def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
         copilot_available_tools=("shell", "apply_patch"),
     )
 
-    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+
+def test_copilot_priming_session_creation_withholds_tool_permission_flags(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = _copilot_tool_permission_runner()
+
+    runner.create_session(
+        "copilot", Path("/tmp/project"), "prime me", skip_git_repo_check=False, priming_only=True
+    )
 
     assert "--allow-all-tools" not in calls[0][0]
     assert "--allow-tool" not in calls[0][0]
     assert "--deny-tool" not in calls[0][0]
     assert "--available-tools" not in calls[0][0]
+
+
+def test_copilot_session_creation_with_real_prompt_passes_tool_permission_flags(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = _copilot_tool_permission_runner()
+
+    # The replacement-session path (a resume that failed) passes the real user request
+    # here, so it must run with the operator's configured permissions -- otherwise
+    # Copilot is left unable to act on a request Codex and Claude would have executed.
+    runner.create_session("copilot", Path("/tmp/project"), "fix the bug", skip_git_repo_check=False)
+
+    args = calls[0][0]
+    assert "--allow-all-tools" in args
+    assert args[args.index("--allow-tool") + 1] == "shell(git)"
+    assert args[args.index("--deny-tool") + 1] == "shell(rm)"
+    assert args[args.index("--available-tools") + 1] == "shell,apply_patch"
 
 
 # ---------------------------------------------------------------------------
@@ -636,6 +667,69 @@ def test_claude_runner_reports_failure_from_result_event(monkeypatch):
     assert result.success is False
     assert result.error_message == "error_max_turns"
     assert result.session_id == "sess_claude"
+    assert result.error_code is None
+
+
+def test_claude_runner_prefers_errors_array_over_generic_subtype(monkeypatch):
+    """A resume against a session ID Claude has no local transcript for fails with an
+    empty "result" and the generic subtype "error_during_execution" -- the actual reason
+    only shows up in the "errors" array. That's the message worth surfacing/matching
+    against for resume-failure recovery, not the opaque subtype."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"",'
+                '"session_id":"sess_claude","errors":["No conversation found with session ID: sess_claude"]}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "No conversation found with session ID: sess_claude"
+    assert result.error_code == "session_not_found"
+
+
+def test_claude_runner_does_not_set_session_not_found_code_for_other_errors(monkeypatch):
+    """error_code="session_not_found" is a precise signal, not a generic is_error flag --
+    a failure for some other reason (even one that also lacks "result" text) must not be
+    mistaken for an unresumable session, or _replace_invalid_session_if_needed would
+    discard a perfectly resumable session over an unrelated failure."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"",'
+                '"session_id":"sess_claude","errors":["Network error while contacting the API"]}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "Network error while contacting the API"
+    assert result.error_code is None
 
 
 def test_claude_runner_extracts_assistant_message_text_as_progress(monkeypatch):
@@ -779,6 +873,45 @@ def test_claude_priming_session_creation_runs_read_only(monkeypatch):
     args = calls[0][0]
     assert args[args.index("--permission-mode") + 1] == "plan"
     assert "bypassPermissions" not in args
+
+
+def test_codex_priming_session_creation_runs_read_only(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "prime me", priming_only=True)
+
+    args = calls[0][0]
+    assert "approval_policy=never" in args
+    assert "sandbox_mode=read-only" in args
+    assert "sandbox_mode=workspace-write" not in args
+
+
+def test_codex_session_creation_with_real_prompt_keeps_configured_sandbox_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="on-failure",
+        sandbox_mode="workspace-write",
+    )
+
+    # The replacement-session path passes the real user request here, so it must not
+    # be downgraded to read-only.
+    runner.create_session("codex", Path("/tmp/project"), "fix the bug")
+
+    args = calls[0][0]
+    assert "sandbox_mode=workspace-write" in args
+    assert "approval_policy=on-failure" in args
 
 
 def test_claude_session_creation_with_real_prompt_keeps_configured_permission_mode(monkeypatch):

@@ -288,6 +288,10 @@ Der Bot akzeptiert derzeit:
     <td>Die aktive Session für den aktuellen Bot und Chat anzeigen.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Zeigt die Kontingentnutzung jedes Providers: 5-Stunden- und wöchentliche Nutzungsprozentsätze mit Reset-Zeiten. Verursacht nie einen kostenpflichtigen API-Aufruf: Codex ist immer eine kostenlose lokale Abfrage, und Claudes Zahlen werden ausschließlich aus deiner letzten echten Claude-Aktivität über den Bot wiederverwendet, angezeigt als „zuletzt beobachtet vor X” (nur für Pro/Max-Konten, die per OAuth angemeldet sind). Die beiden Fenster werden getrennt verfolgt – ist eines bereits über seine Reset-Zeit hinaus (oder wurde noch nie beobachtet), zeigt es N/A an, bis dein nächster Claude-Zug es aktualisiert, selbst wenn das andere Fenster noch aktuelle Daten hat. Für Copilot gibt es keine unterstützte API dafür, daher wird es als nicht verfügbar gemeldet.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>Eine neue Session für das aktuelle Projekt erstellen. Wenn du keinen Namen angibst, verwendet der Bot die echte Session-ID. Fehlen Provider, Projekt oder branch, führt dich der Bot durch den fehlenden Schritt.</td>
   </tr>
@@ -435,6 +439,22 @@ Der Bot akzeptiert derzeit:
   <tr>
     <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Hartes Zeitlimit für einen einzelnen Agentenlauf. Standard: <code>0</code> (deaktiviert).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>Warnt, bevor eine Sitzung fortgesetzt wird, die lange im Leerlauf war <em>und</em> genug Kontext angesammelt hat, dass ein erneutes Verarbeiten teuer wäre, dass der Prompt-Cache des Anbieters wahrscheinlich abgelaufen ist — mit Schaltflächen zum vorherigen Komprimieren oder trotzdem Fortsetzen. Standard: <code>true</code>. Siehe FAQ weiter unten.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Claude-Code-Sitzungen ausgelöst wird. Standard: <code>3600</code> (1 Stunde, entsprechend dem erweiterten Prompt-Cache-Fenster von Claude Code).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Codex-Sitzungen ausgelöst wird. Standard: <code>3600</code> (1 Stunde, wie bei Claude; OpenAI dokumentiert für Codex keine cache-verfallszeit basierend auf Leerlauf, und Codex' eigener Cache ist ohnehin meist kurzlebiger als der von Claude, sodass ein Angleichen an Claudes Schwelle keine Genauigkeit kostet — kombiniert mit dem Größen-Gate, damit kleine Sitzungen nicht nerven).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Leerlaufschwelle in Sekunden, ab der die Warnung für Copilot-Sitzungen ausgelöst wird. Standard: <code>0</code> (deaktiviert). GitHubs eigene Dokumentation besagt, dass die Copilot-CLI kein Inaktivitäts-Timeout hat und ihren Kontext bereits nativ selbst komprimiert (bei ~80–95 % Auslastung) — hier gibt es kein leerlaufbezogenes Risiko zu warnen, daher verlässt sich diese App auf Copilots eigenen Mechanismus, statt einen zu erfinden, der nicht existiert. Setze einen positiven Wert, um trotzdem einen leerlaufbasierten Hinweis für Copilot zu aktivieren.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -685,6 +705,51 @@ Paketversionen werden aus Git-Tags abgeleitet.
 - TestPyPI/Testen: `v2026.3.26.dev1`
 - PyPI-Prerelease: `v2026.3.26rc1`
 - PyPI-Stable: `v2026.3.26`
+
+## ❓ FAQ / Fehlerbehebung
+
+<details>
+<summary><b>Warum zeigt <code>claude --resume</code> in einem normalen Terminal keine von Telegram erstellten Sitzungen an?</b></summary>
+
+Das ist erwartetes Verhalten der Claude-Code-CLI, kein Fehler in dieser App.
+
+Von diesem Bot erstellte Sitzungen laufen über den Headless-Modus `-p`/print von Claude Code. Claude Code markiert jede so gestartete Sitzung im Transkript mit `entrypoint: "sdk-cli"`, im Gegensatz zu `entrypoint: "cli"` für eine Sitzung, die du direkt im Terminal durch Eingabe von `claude` startest. Der interaktive `claude --resume`-Picker (ohne Sitzungs-ID) listet nur Sitzungen mit `cli`-Entrypoint auf — er blendet Headless-/SDK-gesteuerte Läufe bewusst aus und behandelt sie als Automatisierungs-Output statt als Unterhaltungen, die von Hand fortgesetzt werden sollen.
+
+Die Sitzungsdaten selbst sind weder verloren noch anders — es handelt sich um eine ganz normale, vollständig fortsetzbare Claude-Code-Sitzung, gespeichert unter `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`. Sobald du die ID hast, kannst du sie direkt fortsetzen:
+
+```bash
+claude --resume <session-id>
+```
+
+Genau deshalb bringt diese App eine eigene Sitzungserkennung mit (verwendet von `/switch`), statt sich auf den nativen Picker zu verlassen — sie durchsucht die JSONL-Dateien direkt und gleicht sie über den Projektpfad ab, sodass von Telegram erstellte Sitzungen dort auftauchen, obwohl sie in einem einfachen `claude --resume` nie erscheinen.
+
+Codex und Copilot machen diesen Unterschied zwischen interaktiv und Headless in ihren eigenen Resume-/Listenbefehlen nicht, weshalb Sitzungen dieser Anbieter in einem normalen Terminal weiterhin ganz normal auftauchen.
+</details>
+
+<details>
+<summary><b>Verbraucht diese App mehr Tokens als die direkte Nutzung des Claude-Code-Terminals?</b></summary>
+
+Nicht wegen eines grundsätzlichen Unterschieds im Overhead pro Aufruf — Headless (`-p`) und interaktives Claude Code nutzen dasselbe zugrunde liegende Protokoll und dieselbe Preisgestaltung. In der Praxis kann 24/7-Telegram-Nutzung aber spürbar mehr Tokens verbrauchen als typische Terminal-Nutzung, aus zwei sich verstärkenden Gründen:
+
+- **Sitzungen können unbegrenzt wachsen.** Da der Bot bequem dieselbe Sitzung über Stunden oder Tage hinweg fortsetzt, kann eine Sitzung Hunderte von Turns und Megabytes an Transkript ansammeln, wenn du sie nie rotierst. In einem interaktiven Terminal würdest du eher eine Aufgabe abschließen und beim nächsten Mal neu anfangen, wodurch der Kontext kleiner bleibt.
+- **Leerlaufphasen zwischen Telegram-Nachrichten lassen den Prompt-Cache ablaufen.** Claudes Prompt-Cache hat eine kurze TTL. Antwortest du innerhalb dieses Fensters, sind Folge-Turns günstige Cache-Reads. Gibt es eine lange Pause (z. B. du schläfst und antwortest erst am nächsten Morgen), muss der *gesamte* angesammelte Kontext bei deiner nächsten Nachricht als deutlich teurerer Cache-Write komplett neu verarbeitet werden — und diese Kosten wachsen mit der bisherigen Größe der Sitzung. Deshalb kann der Verbrauch genau dann in die Höhe schnellen, wenn du deine erste Nachricht des Tages schickst, sogar vor den „Hauptzeiten“.
+
+**Abhilfe:** Führe bei langlebigen Sitzungen regelmäßig `/compact` aus (dieser Telegram-Befehl wird von der App unterstützt), statt eine Sitzung unbegrenzt weiterlaufen zu lassen — besonders, wenn sie länger im Leerlauf war. Auch eine neue `/new`-Sitzung für nicht zusammenhängende Arbeit hilft, Kontext — und Kosten — begrenzt zu halten.
+
+Die App tut das inzwischen auch automatisch, indem sie pro Anbieter zwei Signale kombiniert, damit sie dich nur dann unterbricht, wenn es wirklich wichtig ist: eine Leerlaufzeit-Schwelle (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *und* wie viel Kontext die Sitzung bereits angesammelt hat (die Warnung wird für kleine/günstige Sitzungen übersprungen, selbst wenn sie eine Weile im Leerlauf waren, da ein erneutes Verarbeiten dann vernachlässigbar wäre). Standardwerte: 1 Stunde sowohl für Claude Code als auch für Codex — Claudes Wert ist durch echte Daten belegt (siehe oben), und obwohl OpenAI für Codex keinen dokumentiert, ist Codex' eigener Prompt-Cache ohnehin meist kurzlebiger als der von Claude, sodass ein Angleichen an Claudes Schwelle keine Genauigkeit kostet und einfach zu weniger Unterbrechungen führt, besonders jetzt kombiniert mit dem Größen-Gate; für Copilot ist es standardmäßig deaktiviert, weil [GitHubs eigene Dokumentation](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) besagt, dass die Copilot-CLI überhaupt kein Inaktivitäts-Timeout hat und ihren Kontext bereits nativ selbst komprimiert (bei etwa 80–95 % Auslastung) — dort gibt es nichts Leerlaufbezogenes zu warnen, daher verlässt sich diese App auf Copilots eigenen Mechanismus, statt einen zu erfinden. Setze `COPILOT_LONG_GAP_SECONDS` auf einen positiven Wert, wenn du trotzdem einen leerlaufbasierten Hinweis für Copilot möchtest.
+
+Sind sowohl die Schwelle als auch das Größen-Gate erreicht, hält sie deine Nachricht zurück und fragt:
+
+> ⏳ Diese Sitzung war {gap} im Leerlauf. Sie jetzt fortzusetzen, verarbeitet die gesamte Unterhaltung wahrscheinlich komplett neu (der Antwort-Cache des Anbieters ist vermutlich abgelaufen), was deutlich mehr Tokens als üblich verbrauchen kann. Auch das Komprimieren verarbeitet den aktuellen Kontext einmal neu, um die Zusammenfassung zu erstellen, und kann daher ebenfalls viele Tokens kosten, wenn diese Sitzung bereits groß ist. Zu einer neuen Sitzung zu wechseln, umgeht diese Neuverarbeitung vollständig, startet dann aber ohne jede Erinnerung an diese Unterhaltung. Zu einer neuen Sitzung wechseln, erst komprimieren oder trotzdem fortsetzen?
+>
+> [🆕 Zu neuer Sitzung wechseln]
+> [🔄 Erst komprimieren]
+> [⚠️ Trotzdem fortsetzen]
+
+Zu beachten ist, dass `/compact` selbst nicht kostenlos ist: Es funktioniert, indem die aktuelle (möglicherweise kalte) Sitzung fortgesetzt wird und diese gebeten wird, sich selbst zusammenzufassen — es fällt also derselbe einmalige Neuverarbeitungsaufwand für das gesamte Transkript an wie beim einfachen Antworten. Der Unterschied ist nur, dass du ihn danach nur einmal statt bei jeder weiteren Runde zahlst, da die entstehende Sitzung klein beginnt. **Zu neuer Sitzung wechseln** ist die einzige Option, die diese Neuverarbeitung vollständig vermeidet: Sie verlässt den Kontext der alten Sitzung, ohne sie je fortzusetzen, und startet komplett neu — auf Kosten davon, diesen Kontext vollständig zu verlieren, statt ihn in eine Zusammenfassung zu verdichten.
+
+Wählst du **Zu neuer Sitzung wechseln**, wird eine brandneue, leere Sitzung gestartet und deine Nachricht dort fortgesetzt — benannt nach der alten Sitzung mit einem fortlaufenden `-newN`-Suffix (z. B. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` beim nächsten Wechsel), damit du sie in `/switch` weiterhin von der ursprünglichen unterscheiden kannst. Wählst du **Erst komprimieren**, wird die Sitzung zusammengefasst, eine neue Sitzung aus dieser Zusammenfassung gestartet und deine Nachricht anschließend auf der neuen Sitzung fortgesetzt — ähnlich benannt, aber mit einem `-resumeN`-Suffix (z. B. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bei der nächsten Komprimierung). Wählst du **Trotzdem fortsetzen**, wird ganz normal auf der bestehenden Sitzung weitergemacht. Die gesamte Prüfung lässt sich mit `LONG_GAP_WARNING_ENABLED=false` deaktivieren.
+</details>
 
 ## 📌 Hinweise
 
