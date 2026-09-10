@@ -195,6 +195,56 @@ def test_get_claude_usage_reports_na_for_weekly_window_that_has_reset_but_keeps_
     assert usage.weekly_note == CLAUDE_WINDOW_EXPIRED_NOTE
 
 
+def test_resolve_window_treats_missing_resets_at_as_expired_past_max_age():
+    """A window with no resets_at (a malformed/partial rate_limit_event) must
+    still eventually expire -- otherwise a bad value could get stuck reading
+    as "fresh" forever, which matters more now that it survives a restart."""
+    from coding_agent_telegram.usage_status import _MAX_SNAPSHOT_AGE_SECONDS, RateWindow, _resolve_window
+
+    now = time.time()
+    window = RateWindow(used_percent=50.0, resets_at=None)
+
+    resolved, note = _resolve_window(window, now, now - _MAX_SNAPSHOT_AGE_SECONDS - 1)
+
+    assert resolved is None
+    assert note == CLAUDE_WINDOW_EXPIRED_NOTE
+
+
+def test_resolve_window_keeps_missing_resets_at_fresh_within_max_age():
+    from coding_agent_telegram.usage_status import RateWindow, _resolve_window
+
+    now = time.time()
+    window = RateWindow(used_percent=50.0, resets_at=None)
+
+    resolved, note = _resolve_window(window, now, now - 60)
+
+    assert resolved == window
+    assert note is None
+
+
+def test_get_claude_usage_expires_window_with_missing_resets_at_after_max_age(monkeypatch):
+    """Integration-level check: a stale, resets_at-less window doesn't get
+    reported as live, while its sibling (with its own valid resets_at) is
+    unaffected."""
+    from coding_agent_telegram import usage_status as usage_status_module
+    from coding_agent_telegram.usage_status import _MAX_SNAPSHOT_AGE_SECONDS, RateWindow, _ClaudeRateLimitSnapshot
+
+    now = time.time()
+    stale_snapshot = _ClaudeRateLimitSnapshot(
+        five_hour=RateWindow(used_percent=50.0, resets_at=None),
+        weekly=RateWindow(used_percent=20.0, resets_at=now + 86400),
+        observed_at=now - _MAX_SNAPSHOT_AGE_SECONDS - 1,
+    )
+    monkeypatch.setattr(usage_status_module, "_claude_rate_limit_cache", stale_snapshot)
+
+    usage = get_claude_usage()
+
+    assert usage.five_hour is None
+    assert usage.five_hour_note == CLAUDE_WINDOW_EXPIRED_NOTE
+    assert usage.weekly.used_percent == 20.0
+    assert usage.weekly_note is None
+
+
 def test_get_claude_usage_never_makes_a_subprocess_call(monkeypatch):
     """There is no live-probe fallback anymore -- get_claude_usage must be a
     pure, free cache read regardless of cache state."""

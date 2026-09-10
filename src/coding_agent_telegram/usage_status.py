@@ -275,7 +275,21 @@ def observe_claude_rate_limit_event(raw_events: list) -> None:
         _store_claude_snapshot(usage)
 
 
-def _resolve_window(window: Optional[RateWindow], now: float) -> tuple[Optional[RateWindow], Optional[str]]:
+# Backstop for a window whose resets_at came back missing (a malformed or
+# partial API response -- see _claude_rate_window/_rate_window_from_dict,
+# both of which fall back to None rather than guessing) and would otherwise
+# never expire on its own below. Set comfortably past the longest real window
+# (7 days) so it never second-guesses a legitimately fresh weekly window that
+# *does* have a resets_at -- this only kicks in when that field is absent.
+# Matters more now than it would have before configure_persistence existed:
+# a bad value used to be bounded by the process's own lifetime, and now
+# persists across restarts until a fresh event happens to overwrite it.
+_MAX_SNAPSHOT_AGE_SECONDS = 8 * 24 * 3600
+
+
+def _resolve_window(
+    window: Optional[RateWindow], now: float, observed_at: Optional[float]
+) -> tuple[Optional[RateWindow], Optional[str]]:
     """Return the window if it's still trustworthy, else ``(None, reason)``.
 
     A cached window is trustworthy only until its own reported reset time --
@@ -285,7 +299,10 @@ def _resolve_window(window: Optional[RateWindow], now: float) -> tuple[Optional[
     """
     if window is None:
         return None, CLAUDE_WINDOW_NEVER_OBSERVED_NOTE
-    if window.resets_at is not None and now >= window.resets_at:
+    if window.resets_at is not None:
+        if now >= window.resets_at:
+            return None, CLAUDE_WINDOW_EXPIRED_NOTE
+    elif observed_at is not None and now - observed_at >= _MAX_SNAPSHOT_AGE_SECONDS:
         return None, CLAUDE_WINDOW_EXPIRED_NOTE
     return window, None
 
@@ -302,8 +319,9 @@ def get_claude_usage() -> ProviderUsage:
     with _claude_rate_limit_lock:
         snapshot = _claude_rate_limit_cache
 
-    five_hour, five_hour_note = _resolve_window(snapshot.five_hour if snapshot else None, now)
-    weekly, weekly_note = _resolve_window(snapshot.weekly if snapshot else None, now)
+    observed_at = snapshot.observed_at if snapshot else None
+    five_hour, five_hour_note = _resolve_window(snapshot.five_hour if snapshot else None, now, observed_at)
+    weekly, weekly_note = _resolve_window(snapshot.weekly if snapshot else None, now, observed_at)
 
     return ProviderUsage(
         provider="claude",
