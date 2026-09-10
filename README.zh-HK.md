@@ -288,6 +288,10 @@ bot 目前接受：
     <td>顯示目前 bot 與 chat 的作用中工作階段。</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>顯示各 provider 的配額使用情況：5小時與每週使用率百分比，以及重置時間。絕不會產生付費 API 呼叫：Codex 一律是免費的本機查詢，Claude 的數據也只會重複使用你最近一次透過 bot 產生的真實 Claude 使用紀錄，顯示為「最近一次觀測於 X 前」（僅適用於透過 OAuth 登入的 Pro/Max 帳戶）。兩個視窗分別獨立追蹤：如果其中一個已經過了重置時間（或從未被觀測到），即使另一個視窗仍有最新數據，它也會顯示為 N/A，直到你下一次使用 Claude 時才會更新。Copilot 沒有支援此功能的 API，因此會顯示為不可用。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>為目前的專案建立新工作階段。如果省略名稱，bot 會使用真實工作階段 ID。若缺少提供者、專案或 branch，bot 會引導你完成缺少的步驟。</td>
   </tr>

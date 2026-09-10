@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
+from coding_agent_telegram.usage_status import observe_claude_rate_limit_event
+
 
 logger = logging.getLogger(__name__)
 
@@ -660,6 +662,10 @@ class MultiAgentRunner:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_codex_jsonl(stdout)
         elif provider == "claude":
             session_id, parsed_success, assistant_text, error_message, events = self._parse_claude_jsonl(stdout)
+            try:
+                observe_claude_rate_limit_event(events)
+            except Exception:
+                logger.exception("Failed to cache Claude rate-limit data from a completed run.")
         else:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_copilot_jsonl(stdout)
 

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.i18n import translate
+from coding_agent_telegram.providers import provider_label
+from coding_agent_telegram.session_gap import humanize_gap_seconds
 from coding_agent_telegram.telegram_sender import send_text
+from coding_agent_telegram.usage_status import (
+    ProviderUsage,
+    RateWindow,
+    fetch_codex_usage,
+    fetch_copilot_usage,
+    get_claude_usage,
+)
 
 from .base import logger, require_allowed_chat
 
@@ -39,6 +49,64 @@ class SessionStatusCommandMixin:
         if activity_line:
             details = f"{details}\n{activity_line}"
         await send_text(update, context, details)
+
+    @require_allowed_chat()
+    async def handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if context.args:
+            await send_text(update, context, self._t(update, "status.usage_status"))
+            return
+
+        def fetch_all() -> tuple[ProviderUsage, ProviderUsage, ProviderUsage]:
+            claude_usage = get_claude_usage()
+            codex_usage = fetch_codex_usage(self.deps.cfg.codex_bin)
+            copilot_usage = fetch_copilot_usage()
+            return claude_usage, codex_usage, copilot_usage
+
+        claude_usage, codex_usage, copilot_usage = await self._run_with_typing(update, context, fetch_all)
+
+        locale = self._chat_locale(update.effective_chat.id)
+        lines = [self._t(update, "status.usage_title")]
+        for usage in (claude_usage, codex_usage, copilot_usage):
+            lines.append("")
+            lines.append(self._format_provider_usage(locale, usage))
+
+        logger.info(
+            "Reported provider usage status for chat %s (claude=%s, codex=%s, copilot=%s).",
+            update.effective_chat.id,
+            claude_usage.available,
+            codex_usage.available,
+            copilot_usage.available,
+        )
+        await send_text(update, context, "\n".join(lines))
+
+    def _format_provider_usage(self, locale: str, usage: ProviderUsage) -> str:
+        label = provider_label(usage.provider)
+        if usage.plan:
+            label = f"{label} ({usage.plan})"
+        if not usage.available:
+            detail = usage.error or translate(locale, "status.usage_unknown")
+            return f"{label}\n  {translate(locale, 'status.usage_unavailable', detail=detail)}"
+
+        five_hour_label = translate(locale, "status.usage_five_hour")
+        weekly_label = translate(locale, "status.usage_weekly")
+        lines = [label]
+        if usage.observed_at is not None:
+            age = max(0.0, time.time() - usage.observed_at)
+            lines.append(f"  {translate(locale, 'status.usage_last_observed', duration=humanize_gap_seconds(age))}")
+        lines.append(f"  {self._format_rate_window(locale, five_hour_label, usage.five_hour, usage.five_hour_note)}")
+        lines.append(f"  {self._format_rate_window(locale, weekly_label, usage.weekly, usage.weekly_note)}")
+        return "\n".join(lines)
+
+    def _format_rate_window(self, locale: str, label: str, window: RateWindow | None, note: str | None) -> str:
+        if window is None:
+            detail = note or translate(locale, "status.usage_unknown")
+            return f"{label}: {translate(locale, 'status.usage_na', detail=detail)}"
+        text = f"{label}: {window.used_percent:g}%"
+        if window.resets_at:
+            remaining = window.resets_at - time.time()
+            if remaining > 0:
+                text += f" ({translate(locale, 'status.usage_resets_in', duration=humanize_gap_seconds(remaining))})"
+        return text
 
     @require_allowed_chat()
     async def handle_abort(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

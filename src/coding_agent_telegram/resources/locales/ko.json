@@ -220,5 +220,15 @@
   "runtime.long_gap_proceed_button": "⚠️ 그대로 진행",
   "runtime.long_gap_proceeding": "기존 session 에서 계속 진행합니다...",
   "runtime.long_gap_compacting": "계속하기 전에 compact 중입니다...",
-  "runtime.long_gap_switching": "새 session 으로 전환하는 중입니다..."
+  "runtime.long_gap_switching": "새 session 으로 전환하는 중입니다...",
+  "bot.command.status": "provider quota 사용량(5시간/주간)을 표시합니다",
+  "status.usage_status": "사용법: /status",
+  "status.usage_title": "provider 사용량:",
+  "status.usage_five_hour": "5시간 사용량",
+  "status.usage_weekly": "주간 사용량",
+  "status.usage_unknown": "알 수 없음",
+  "status.usage_na": "N/A ({detail})",
+  "status.usage_resets_in": "{duration} 후 초기화",
+  "status.usage_unavailable": "사용 불가: {detail}",
+  "status.usage_last_observed": "({duration} 전에 확인됨)"
 }

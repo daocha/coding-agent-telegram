@@ -288,6 +288,10 @@ De bot accepteert momenteel:
     <td>Toon de actieve sessie voor de huidige bot en chat.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Toont het quotagebruik per provider: 5-uurs- en wekelijkse gebruikspercentages, met reset-tijden. Veroorzaakt nooit een betaalde API-aanroep: Codex is altijd een gratis lokale query, en Claudes cijfers worden alleen hergebruikt van je meest recente echte Claude-activiteit via de bot, getoond als "laatst waargenomen X geleden" (alleen Pro/Max-accounts die via OAuth zijn ingelogd). De twee vensters worden apart bijgehouden: als er een al voorbij zijn reset-tijd is (of nog nooit is waargenomen), toont het N/A totdat je volgende Claude-beurt het bijwerkt, ook als het andere venster nog verse data heeft. Copilot heeft hiervoor geen ondersteunde API en wordt als niet beschikbaar gerapporteerd.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>Maak een nieuwe sessie voor het huidige project. Als je geen naam opgeeft, gebruikt de bot de echte sessie-ID. Als aanbieder, project of branch ontbreekt, begeleidt de bot je door de ontbrekende stap.</td>
   </tr>

@@ -288,6 +288,10 @@ Le bot accepte actuellement :
     <td>Afficher la session active pour le bot et le chat courants.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Affiche l'utilisation du quota de chaque fournisseur : pourcentages d'utilisation sur 5 heures et hebdomadaire, avec les heures de réinitialisation. Ne déclenche jamais un appel API payant : Codex est toujours une requête locale gratuite, et les chiffres de Claude sont réutilisés uniquement depuis votre dernière activité Claude réelle via le bot, affichés comme « observé pour la dernière fois il y a X » (comptes Pro/Max connectés via OAuth uniquement). Les deux fenêtres sont suivies séparément : si l'une a dépassé son heure de réinitialisation (ou n'a encore jamais été observée), elle affiche N/A jusqu'à ce que votre prochain tour Claude la rafraîchisse, même si l'autre fenêtre a encore des données à jour. Copilot n'a pas d'API prise en charge pour cela et est signalé comme indisponible.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>Créer une nouvelle session pour le projet courant. Si vous omettez le nom, le bot utilise le véritable ID de session. Si fournisseur, projet ou branch manque, le bot vous guide.</td>
   </tr>

@@ -220,5 +220,15 @@
   "runtime.long_gap_proceed_button": "⚠️ Cứ tiếp tục",
   "runtime.long_gap_proceeding": "Đang tiếp tục trên session hiện có...",
   "runtime.long_gap_compacting": "Đang compact trước khi tiếp tục...",
-  "runtime.long_gap_switching": "Đang chuyển sang session mới..."
+  "runtime.long_gap_switching": "Đang chuyển sang session mới...",
+  "bot.command.status": "Hiển thị mức sử dụng quota của từng provider (5 giờ/hàng tuần)",
+  "status.usage_status": "Cách dùng: /status",
+  "status.usage_title": "Mức sử dụng provider:",
+  "status.usage_five_hour": "Mức sử dụng 5 giờ",
+  "status.usage_weekly": "Mức sử dụng hàng tuần",
+  "status.usage_unknown": "không rõ",
+  "status.usage_na": "N/A ({detail})",
+  "status.usage_resets_in": "đặt lại sau {duration}",
+  "status.usage_unavailable": "Không khả dụng: {detail}",
+  "status.usage_last_observed": "(quan sát lần cuối {duration} trước)"
 }

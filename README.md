@@ -300,6 +300,10 @@ The bot currently accepts:
     <td>Show the active session for the current bot and chat.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Show each provider's quota usage: 5-hour and weekly usage percentages, with reset times. Never makes a paid API call: Codex is always a free local query, and Claude's numbers are reused only from your most recent real Claude activity through the bot, shown as "last observed X ago" (Pro/Max accounts logged in via OAuth only). The two windows are tracked separately, so if one has passed its reset time (or nothing's been observed yet) it shows N/A until your next Claude turn refreshes it, even while the other window still has fresh data. Copilot has no supported API for this and is reported as unavailable.</td>
+  </tr>
+  <tr>
     <td><code>/new [session_name]</code></td>
     <td>Create a new session for the current project. If you omit the name, the bot uses the real session ID. If provider, project, or branch is missing, the bot guides you through the missing step.</td>
   </tr>

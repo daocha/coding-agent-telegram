@@ -288,6 +288,10 @@ Hiện tại bot chấp nhận:
     <td>Hiển thị phiên hoạt động cho bot và chat hiện tại.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Hiển thị mức sử dụng quota của từng provider: phần trăm sử dụng trong 5 giờ và hàng tuần, kèm thời gian đặt lại. Không bao giờ tạo ra một lệnh gọi API có tính phí: Codex luôn là một truy vấn cục bộ miễn phí, còn số liệu của Claude chỉ được tái sử dụng từ hoạt động Claude thực gần nhất qua bot, hiển thị dạng "quan sát lần cuối X trước" (chỉ áp dụng cho tài khoản Pro/Max đăng nhập qua OAuth). Hai cửa sổ được theo dõi riêng biệt: nếu một cửa sổ đã qua thời gian đặt lại (hoặc chưa từng được quan sát), nó sẽ hiển thị N/A cho đến khi lượt Claude tiếp theo của bạn làm mới nó, ngay cả khi cửa sổ còn lại vẫn có dữ liệu mới. Copilot không có API được hỗ trợ cho việc này nên sẽ báo là không khả dụng.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>Tạo phiên mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng mã định danh phiên thật. Nếu thiếu nhà cung cấp, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>

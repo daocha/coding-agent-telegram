@@ -220,5 +220,15 @@
   "runtime.long_gap_proceed_button": "⚠️ Continuer quand même",
   "runtime.long_gap_proceeding": "Poursuite sur la session existante...",
   "runtime.long_gap_compacting": "Compression avant de continuer...",
-  "runtime.long_gap_switching": "Bascule vers une nouvelle session..."
+  "runtime.long_gap_switching": "Bascule vers une nouvelle session...",
+  "bot.command.status": "Afficher l'utilisation du quota par fournisseur (5h/hebdomadaire)",
+  "status.usage_status": "Utilisation : /status",
+  "status.usage_title": "Utilisation par fournisseur :",
+  "status.usage_five_hour": "Utilisation sur 5h",
+  "status.usage_weekly": "Utilisation hebdomadaire",
+  "status.usage_unknown": "inconnu",
+  "status.usage_na": "N/A ({detail})",
+  "status.usage_resets_in": "réinitialisation dans {duration}",
+  "status.usage_unavailable": "Non disponible : {detail}",
+  "status.usage_last_observed": "(observé pour la dernière fois il y a {duration})"
 }

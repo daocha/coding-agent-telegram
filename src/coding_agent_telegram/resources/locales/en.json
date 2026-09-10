@@ -223,5 +223,15 @@
   "runtime.long_gap_proceed_button": "⚠️ Proceed anyway",
   "runtime.long_gap_proceeding": "Proceeding on the existing session...",
   "runtime.long_gap_compacting": "Compacting before continuing...",
-  "runtime.long_gap_switching": "Switching to a new session..."
+  "runtime.long_gap_switching": "Switching to a new session...",
+  "bot.command.status": "Show provider quota usage (5h/weekly)",
+  "status.usage_status": "Usage: /status",
+  "status.usage_title": "Provider usage:",
+  "status.usage_five_hour": "5h usage",
+  "status.usage_weekly": "Weekly usage",
+  "status.usage_unknown": "unknown",
+  "status.usage_na": "N/A ({detail})",
+  "status.usage_resets_in": "resets in {duration}",
+  "status.usage_unavailable": "Not available: {detail}",
+  "status.usage_last_observed": "(last observed {duration} ago)"
 }

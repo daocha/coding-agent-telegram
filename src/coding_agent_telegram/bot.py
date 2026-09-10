@@ -46,6 +46,7 @@ def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_L
         BotCommand("project", translate(locale, "bot.command.project")),
         BotCommand("branch", translate(locale, "bot.command.branch")),
         BotCommand("current", translate(locale, "bot.command.current")),
+        BotCommand("status", translate(locale, "bot.command.status")),
         BotCommand("new", translate(locale, "bot.command.new")),
         BotCommand("switch", translate(locale, "bot.command.switch")),
         BotCommand("compact", translate(locale, "bot.command.compact")),
@@ -153,6 +154,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CommandHandler("project", router.handle_project, filters=allowed_private))
     app.add_handler(CommandHandler("branch", router.handle_branch, filters=allowed_private))
     app.add_handler(CommandHandler("current", router.handle_current, filters=allowed_private))
+    app.add_handler(CommandHandler("status", router.handle_status, filters=allowed_private))
     app.add_handler(CommandHandler("new", router.handle_new, filters=allowed_private, block=False))
     app.add_handler(CommandHandler("switch", router.handle_switch, filters=allowed_private))
     app.add_handler(CommandHandler("compact", router.handle_compact, filters=allowed_private))

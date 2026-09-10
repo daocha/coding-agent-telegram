@@ -220,5 +220,15 @@
   "runtime.long_gap_proceed_button": "⚠️ ดำเนินการต่อเลย",
   "runtime.long_gap_proceeding": "กำลังดำเนินการต่อบน session เดิม...",
   "runtime.long_gap_compacting": "กำลัง compact ก่อนดำเนินการต่อ...",
-  "runtime.long_gap_switching": "กำลังสลับไปยัง session ใหม่..."
+  "runtime.long_gap_switching": "กำลังสลับไปยัง session ใหม่...",
+  "bot.command.status": "แสดงปริมาณการใช้โควตาของแต่ละ provider (5 ชั่วโมง/รายสัปดาห์)",
+  "status.usage_status": "วิธีใช้: /status",
+  "status.usage_title": "การใช้งานของ provider:",
+  "status.usage_five_hour": "การใช้งาน 5 ชั่วโมง",
+  "status.usage_weekly": "การใช้งานรายสัปดาห์",
+  "status.usage_unknown": "ไม่ทราบ",
+  "status.usage_na": "N/A ({detail})",
+  "status.usage_resets_in": "รีเซ็ตใน {duration}",
+  "status.usage_unavailable": "ไม่พร้อมใช้งาน: {detail}",
+  "status.usage_last_observed": "(ตรวจพบล่าสุดเมื่อ {duration} ที่แล้ว)"
 }

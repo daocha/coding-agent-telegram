@@ -288,6 +288,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>現在の bot と chat の アクティブなセッション を表示します。</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>各 provider の quota 使用状況（5時間・週次の使用率とリセット時刻）を表示します。有料の API 呼び出しは一切発生しません：Codex は常に無料のローカルクエリであり、Claude の数値は bot 経由の直近の実際の Claude 利用からのみ再利用され、「X前に確認」と表示されます（対象は OAuth でログインした Pro/Max アカウントのみ）。2つのウィンドウは個別に管理されるため、一方がすでにリセット時刻を過ぎている場合（またはまだ一度も観測されていない場合）、もう一方に新しいデータがあっても、次の Claude のやり取りで更新されるまで N/A と表示されます。Copilot にはこれに対応する API がないため、利用不可として表示されます。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>現在のプロジェクトに新しいセッションを作成します。名前を省略すると実際のセッション ID を使います。プロバイダー、プロジェクト、branch が不足している場合は bot が不足分を案内します。</td>
   </tr>

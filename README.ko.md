@@ -290,6 +290,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>현재 bot/chat 의 활성 세션 을 보여줍니다.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>각 provider 의 quota 사용량(5시간/주간 사용률과 초기화 시각)을 보여줍니다. 유료 API 호출은 전혀 발생하지 않습니다: Codex 는 항상 무료 로컬 조회이며, Claude 의 수치는 bot 을 통한 가장 최근의 실제 Claude 사용 내역에서만 재사용되어 "X 전에 확인됨"으로 표시됩니다(OAuth 로 로그인한 Pro/Max 계정만 해당). 두 창은 각각 별도로 추적되므로, 한쪽이 이미 초기화 시각을 지났다면(또는 아직 한 번도 관측되지 않았다면) 다른 쪽에 최신 데이터가 있어도 다음 Claude turn 에서 갱신될 때까지 N/A 로 표시됩니다. Copilot 은 이를 지원하는 API 가 없어 사용 불가로 표시됩니다.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>현재 프로젝트에 새 세션을 만듭니다. 이름을 생략하면 실제 세션 ID를 사용합니다. 제공자, 프로젝트, branch 가 없으면 bot 이 필요한 단계를 안내합니다.</td>
   </tr>

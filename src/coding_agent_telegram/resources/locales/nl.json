@@ -220,5 +220,15 @@
   "runtime.long_gap_proceed_button": "⚠️ Toch doorgaan",
   "runtime.long_gap_proceeding": "Doorgaan op de bestaande sessie...",
   "runtime.long_gap_compacting": "Compacten voordat we doorgaan...",
-  "runtime.long_gap_switching": "Overschakelen naar een nieuwe sessie..."
+  "runtime.long_gap_switching": "Overschakelen naar een nieuwe sessie...",
+  "bot.command.status": "Toon quotagebruik per provider (5u/wekelijks)",
+  "status.usage_status": "Gebruik: /status",
+  "status.usage_title": "Providergebruik:",
+  "status.usage_five_hour": "5u-gebruik",
+  "status.usage_weekly": "Wekelijks gebruik",
+  "status.usage_unknown": "onbekend",
+  "status.usage_na": "N/A ({detail})",
+  "status.usage_resets_in": "reset over {duration}",
+  "status.usage_unavailable": "Niet beschikbaar: {detail}",
+  "status.usage_last_observed": "(laatst waargenomen {duration} geleden)"
 }

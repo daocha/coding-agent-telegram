@@ -3211,6 +3211,35 @@ def test_agent_reply_option_callback_ignores_unknown_token(tmp_path: Path):
     assert runner.resume_calls == []
 
 
+def test_agent_reply_option_tokens_are_capped_with_fifo_eviction(tmp_path: Path):
+    """Regression: a button the user never taps used to leave its token in the dict
+    forever, letting it grow without bound over a long-lived bot's uptime. Registering
+    past the cap must evict the oldest entries instead."""
+    from coding_agent_telegram.router.base import MAX_AGENT_REPLY_OPTION_TOKENS
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    first_token = router._register_agent_reply_options(123, ("a",))
+    tokens = [first_token]
+    for _ in range(MAX_AGENT_REPLY_OPTION_TOKENS - 1):
+        tokens.append(router._register_agent_reply_options(123, ("a",)))
+
+    assert len(router._agent_reply_option_tokens) == MAX_AGENT_REPLY_OPTION_TOKENS
+    assert first_token in router._agent_reply_option_tokens
+
+    overflow_token = router._register_agent_reply_options(123, ("a",))
+
+    assert len(router._agent_reply_option_tokens) == MAX_AGENT_REPLY_OPTION_TOKENS
+    assert first_token not in router._agent_reply_option_tokens, "oldest entry should be evicted first"
+    assert overflow_token in router._agent_reply_option_tokens
+    assert tokens[-1] in router._agent_reply_option_tokens
+
+
 def test_message_reports_missing_project_folder_before_running_agent(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -4034,6 +4063,56 @@ def test_long_gap_warning_skipped_for_small_session_despite_long_idle(tmp_path: 
     asyncio.run(router.handle_message(update, context))
 
     assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_size_gate_skip_is_cached_to_avoid_repeated_lookups(tmp_path: Path, monkeypatch):
+    """Regression: a session sitting under the size gate but past the idle threshold
+    used to repeat the blocking native_session_activity lookup on every single message,
+    since the gap-crossing cache above only helps while the gap hasn't crossed the
+    threshold yet. The size-gate skip must cache too."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle_small", "small-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle_small",
+        cwd=backend,
+        title="small-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,  # well past the idle threshold
+        tokens_used=500,  # well below the size gate
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    from coding_agent_telegram.router import message_commands
+    from coding_agent_telegram.session_gap import native_session_activity as real_native_session_activity
+
+    call_count = 0
+
+    def counting_native_session_activity(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return real_native_session_activity(*args, **kwargs)
+
+    monkeypatch.setattr(message_commands, "native_session_activity", counting_native_session_activity)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="first"), context))
+    asyncio.run(router.handle_message(make_update(text="second"), context))
+
+    assert call_count == 1, "size-gate skip should be cached, not re-checked on every message"
+    assert runner.resume_calls[-1]["user_message"] == "second"
     assert store.get_chat_state("bot-a", 123).get("pending_action") is None
 
 
@@ -11095,3 +11174,108 @@ def test_drain_queue_stops_dispatch_returns_false_batch_single_mode(tmp_path: Pa
     bot = FakeBot()
     context = SimpleNamespace(args=[], bot=bot)
     asyncio.run(router._drain_chat_message_queue(123, context))  # should return without error
+
+
+def test_status_command_reports_each_provider_usage(tmp_path: Path, monkeypatch):
+    from coding_agent_telegram.usage_status import ProviderUsage, RateWindow
+
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    claude_calls = []
+
+    def fake_get_claude_usage():
+        claude_calls.append(True)
+        return ProviderUsage(
+            provider="claude",
+            available=True,
+            five_hour=RateWindow(used_percent=53.0, resets_at=int(time.time()) + 3600),
+            weekly=RateWindow(used_percent=5.0, resets_at=int(time.time()) + 86400),
+        )
+
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.get_claude_usage",
+        fake_get_claude_usage,
+    )
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.fetch_codex_usage",
+        lambda codex_bin: ProviderUsage(
+            provider="codex",
+            available=True,
+            five_hour=RateWindow(used_percent=0.0, resets_at=int(time.time()) + 3600),
+            weekly=RateWindow(used_percent=23.0, resets_at=int(time.time()) + 86400),
+            plan="plus",
+        ),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_status(update, context))
+
+    assert claude_calls == [True]
+
+    text = bot.messages[-1][1]
+    assert "Claude" in text
+    assert "53%" in text
+    assert "5%" in text
+    assert "Codex (plus)" in text
+    assert "23%" in text
+    assert "Copilot" in text
+    assert "Not available" in text
+
+
+def test_status_command_shows_na_note_for_expired_claude_window(tmp_path: Path, monkeypatch):
+    from coding_agent_telegram.usage_status import CLAUDE_WINDOW_EXPIRED_NOTE, ProviderUsage, RateWindow
+
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.get_claude_usage",
+        lambda: ProviderUsage(
+            provider="claude",
+            available=True,
+            five_hour=None,
+            five_hour_note=CLAUDE_WINDOW_EXPIRED_NOTE,
+            weekly=RateWindow(used_percent=10.0, resets_at=int(time.time()) + 86400),
+            observed_at=time.time() - 3600,
+        ),
+    )
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.fetch_codex_usage",
+        lambda codex_bin: ProviderUsage(provider="codex", available=True),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_status(update, context))
+
+    text = bot.messages[-1][1]
+    assert "N/A" in text
+    assert CLAUDE_WINDOW_EXPIRED_NOTE in text
+    assert "10%" in text
+    assert "last observed" in text
+
+
+def test_status_command_rejects_extra_args(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["extra"], bot=bot)
+
+    asyncio.run(router.handle_status(update, context))
+
+    assert bot.messages[-1][1] == "Usage: /status"
+    assert not runner.create_calls

@@ -287,6 +287,14 @@ class MessageCommandMixin:
                 size_gate,
                 provider,
             )
+            # Without this, every message on a session stuck under the size gate would
+            # repeat the blocking native_session_activity lookup forever (the gap-crossing
+            # cache above never applies once the gap has already crossed the threshold).
+            # Reusing threshold_seconds as a cooldown means we accept missing a session
+            # that grows past the gate mid-cooldown, in exchange for not re-checking on
+            # every single message while it stays small.
+            self._prune_session_gap_cache(now_monotonic)
+            self._session_gap_safe_until[cache_key] = now_monotonic + threshold_seconds
             return False
 
         # The activity lookup above awaited, so a concurrently-handled message for this

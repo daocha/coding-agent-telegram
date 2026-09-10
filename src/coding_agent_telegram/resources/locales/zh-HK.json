@@ -220,5 +220,15 @@
   "runtime.long_gap_proceed_button": "⚠️ 直接繼續",
   "runtime.long_gap_proceeding": "繼續在現有 session 上...",
   "runtime.long_gap_compacting": "繼續前先 compact...",
-  "runtime.long_gap_switching": "正在切換到新 session..."
+  "runtime.long_gap_switching": "正在切換到新 session...",
+  "bot.command.status": "顯示各 provider 的配額使用情況（5小時/每週）",
+  "status.usage_status": "用法：/status",
+  "status.usage_title": "Provider 使用情況：",
+  "status.usage_five_hour": "5小時使用率",
+  "status.usage_weekly": "每週使用率",
+  "status.usage_unknown": "未知",
+  "status.usage_na": "N/A（{detail}）",
+  "status.usage_resets_in": "{duration}後重置",
+  "status.usage_unavailable": "不可用：{detail}",
+  "status.usage_last_observed": "（最近一次觀測於 {duration} 前）"
 }

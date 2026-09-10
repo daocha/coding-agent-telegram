@@ -288,6 +288,10 @@ Der Bot akzeptiert derzeit:
     <td>Die aktive Session für den aktuellen Bot und Chat anzeigen.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Zeigt die Kontingentnutzung jedes Providers: 5-Stunden- und wöchentliche Nutzungsprozentsätze mit Reset-Zeiten. Verursacht nie einen kostenpflichtigen API-Aufruf: Codex ist immer eine kostenlose lokale Abfrage, und Claudes Zahlen werden ausschließlich aus deiner letzten echten Claude-Aktivität über den Bot wiederverwendet, angezeigt als „zuletzt beobachtet vor X” (nur für Pro/Max-Konten, die per OAuth angemeldet sind). Die beiden Fenster werden getrennt verfolgt – ist eines bereits über seine Reset-Zeit hinaus (oder wurde noch nie beobachtet), zeigt es N/A an, bis dein nächster Claude-Zug es aktualisiert, selbst wenn das andere Fenster noch aktuelle Daten hat. Für Copilot gibt es keine unterstützte API dafür, daher wird es als nicht verfügbar gemeldet.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>Eine neue Session für das aktuelle Projekt erstellen. Wenn du keinen Namen angibst, verwendet der Bot die echte Session-ID. Fehlen Provider, Projekt oder branch, führt dich der Bot durch den fehlenden Schritt.</td>
   </tr>

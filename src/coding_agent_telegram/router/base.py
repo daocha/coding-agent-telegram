@@ -38,6 +38,12 @@ from coding_agent_telegram.telegram_sender import (
 logger = logging.getLogger(__name__)
 TYPING_REFRESH_TIMEOUT_SECONDS = 4
 PROGRESS_PREVIEW_MAX_CHARS = 600
+# Cap on pending agent-reply-option tokens. Consumed tokens are popped in
+# message_commands.py, but a button the user never taps leaves its token behind
+# forever -- bound the dict so an idle bot serving many chats can't grow it without
+# limit. Dicts preserve insertion order, so evicting the oldest entries is a cheap
+# approximation of "least likely to still be tapped".
+MAX_AGENT_REPLY_OPTION_TOKENS = 500
 
 
 def require_allowed_chat(*, answer_callback: bool = False):
@@ -158,6 +164,9 @@ class CommandRouterBase:
         return self._branch_source_tokens.get(token)
 
     def _register_agent_reply_options(self, chat_id: int, options: tuple[str, ...]) -> str:
+        if len(self._agent_reply_option_tokens) >= MAX_AGENT_REPLY_OPTION_TOKENS:
+            oldest_token = next(iter(self._agent_reply_option_tokens))
+            del self._agent_reply_option_tokens[oldest_token]
         token = secrets.token_hex(6)
         self._agent_reply_option_tokens[token] = (chat_id, options)
         return token

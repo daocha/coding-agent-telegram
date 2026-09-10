@@ -290,6 +290,10 @@ bot 当前接受：
     <td>显示当前 bot 和 chat 的活动会话。</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>显示各 provider 的配额使用情况：5小时和每周使用率百分比，以及重置时间。绝不会产生付费 API 调用：Codex 始终是免费的本地查询，Claude 的数据也只会复用你最近一次通过 bot 产生的真实 Claude 使用记录，显示为”最近一次观测于 X 前”（仅适用于通过 OAuth 登录的 Pro/Max 账户）。两个窗口分别独立追踪：如果某个窗口已经过了重置时间（或从未被观测到），即使另一个窗口仍有最新数据，它也会显示为 N/A，直到你下一次使用 Claude 时才会刷新。Copilot 没有支持此功能的 API，因此会显示为不可用。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>为当前项目创建新会话。如果省略名称，bot 会使用真实的会话 ID。若缺少提供方、项目或 branch，bot 会引导你完成缺失步骤。</td>
   </tr>
