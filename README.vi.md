@@ -288,6 +288,10 @@ Hiện tại bot chấp nhận:
     <td>Hiển thị phiên hoạt động cho bot và chat hiện tại.</td>
   </tr>
   <tr>
+    <td><code>/status</code></td>
+    <td>Hiển thị mức sử dụng quota của từng provider: phần trăm sử dụng trong 5 giờ và hàng tuần, kèm thời gian đặt lại. Không bao giờ tạo ra một lệnh gọi API có tính phí: Codex luôn là một truy vấn cục bộ miễn phí, còn số liệu của Claude chỉ được tái sử dụng từ hoạt động Claude thực gần nhất qua bot, hiển thị dạng "quan sát lần cuối X trước" (chỉ áp dụng cho tài khoản Pro/Max đăng nhập qua OAuth). Hai cửa sổ được theo dõi riêng biệt: nếu một cửa sổ đã qua thời gian đặt lại (hoặc chưa từng được quan sát), nó sẽ hiển thị N/A cho đến khi lượt Claude tiếp theo của bạn làm mới nó, ngay cả khi cửa sổ còn lại vẫn có dữ liệu mới. Copilot không có API được hỗ trợ cho việc này nên sẽ báo là không khả dụng.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/new [session_name]</code></td>
     <td>Tạo phiên mới cho project hiện tại. Nếu bỏ qua tên, bot sẽ dùng mã định danh phiên thật. Nếu thiếu nhà cung cấp, project hoặc branch, bot sẽ hướng dẫn bước còn thiếu.</td>
   </tr>
@@ -431,6 +435,22 @@ Hiện tại bot chấp nhận:
   <tr>
     <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Timeout cứng cho một lần lần chạy tác nhân. Mặc định: <code>0</code> (tắt).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>Trước khi resume một session đã idle một thời gian <em>và</em> đã tích lũy đủ context khiến việc xử lý lại tốn kém, cảnh báo rằng prompt cache của provider có thể đã hết hạn — kèm các nút để compact trước hoặc cứ tiếp tục. Mặc định: <code>true</code>. Xem FAQ bên dưới.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Claude Code. Mặc định: <code>3600</code> (1 giờ, khớp với cửa sổ prompt-cache mở rộng của Claude Code).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Codex. Mặc định: <code>3600</code> (1 giờ, giống Claude; OpenAI không tài liệu hóa số liệu hết hạn cache dựa trên idle cho Codex, và cache riêng của Codex nhìn chung cũng ngắn hạn hơn Claude, nên khớp với ngưỡng của Claude không làm giảm độ chính xác -- kết hợp với size gate để các session nhỏ không gây phiền).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Copilot. Mặc định: <code>0</code> (tắt). Tài liệu chính thức của GitHub nêu rõ Copilot CLI không có inactivity timeout và đã tự động nén (auto-compact) context của chính nó (quanh mức sử dụng 80-95%) -- không có rủi ro nào liên quan đến idle cần cảnh báo ở đây, nên phần này để cơ chế riêng của Copilot xử lý thay vì tự bịa ra một cái. Đặt giá trị dương nếu bạn vẫn muốn có nhắc nhở dựa trên idle cho Copilot.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -675,6 +695,51 @@ Phiên bản package được suy ra từ Git tags.
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ FAQ / Khắc phục sự cố
+
+<details>
+<summary><b>Vì sao <code>claude --resume</code> trong terminal thường không hiển thị các session tạo từ Telegram?</b></summary>
+
+Đây là hành vi bình thường của Claude Code CLI, không phải lỗi của app này.
+
+Các session do bot này tạo chạy qua chế độ headless `-p`/print của Claude Code. Claude Code gắn nhãn mọi session khởi động theo cách đó trong transcript là `entrypoint: "sdk-cli"`, khác với `entrypoint: "cli"` của một session bạn khởi động bằng cách gõ trực tiếp `claude` trong terminal. Bộ chọn `claude --resume` tương tác (không kèm session ID) chỉ liệt kê các session có entrypoint `cli` — nó cố tình ẩn các lần chạy headless/do SDK điều khiển, coi đó là output tự động hóa chứ không phải cuộc hội thoại được thiết kế để resume bằng tay.
+
+Bản thân dữ liệu session không hề mất hay khác đi — đó vẫn là một session Claude Code bình thường, resume được đầy đủ, lưu tại `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`. Khi đã có ID, bạn có thể resume trực tiếp:
+
+```bash
+claude --resume <session-id>
+```
+
+Đây chính là lý do app này có cơ chế dò session riêng (được `/switch` sử dụng) thay vì dựa vào bộ chọn native — nó quét trực tiếp các tệp JSONL và khớp theo project path, nên các session tạo từ Telegram vẫn xuất hiện ở đó dù không bao giờ xuất hiện trong `claude --resume` thông thường.
+
+Codex và Copilot không tạo ra sự phân biệt tương tác-so-với-headless này trong các lệnh resume/list riêng của chúng, đó là lý do session của các provider này vẫn hiển thị bình thường trong terminal thông thường.
+</details>
+
+<details>
+<summary><b>App này có tốn nhiều token hơn việc dùng trực tiếp terminal Claude Code không?</b></summary>
+
+Không phải do chênh lệch overhead cố hữu trên mỗi lần gọi — headless (`-p`) và Claude Code tương tác dùng cùng giao thức nền và cùng biểu giá. Nhưng trong thực tế, việc dùng Telegram 24/7 có thể tốn token nhiều hơn rõ rệt so với dùng terminal thông thường, vì hai lý do cộng dồn:
+
+- **Session có thể phình to không giới hạn.** Vì bot tiện lợi tiếp tục resume cùng một session qua nhiều giờ hoặc nhiều ngày, một session có thể tích lũy hàng trăm lượt và transcript nặng vài megabyte nếu bạn không bao giờ luân chuyển nó. Trong terminal tương tác, bạn thường sẽ hoàn thành một việc rồi bắt đầu mới ở lần sau, giữ context nhỏ hơn một cách tự nhiên.
+- **Khoảng idle giữa các tin nhắn Telegram làm hết hạn prompt cache.** Prompt cache của Claude có TTL ngắn. Nếu bạn trả lời trong khoảng đó, các lượt tiếp theo là cache read rẻ. Nếu có khoảng nghỉ dài (ví dụ bạn ngủ rồi trả lời vào sáng hôm sau), *toàn bộ* context đã tích lũy phải được xử lý lại từ đầu ở tin nhắn tiếp theo dưới dạng một lần cache write đắt hơn nhiều — và chi phí này tăng theo kích thước session đã đạt được tại thời điểm đó. Đó là lý do usage có thể tăng vọt ngay khi bạn gửi tin nhắn đầu tiên trong ngày, kể cả trước giờ "cao điểm".
+
+**Cách giảm thiểu:** định kỳ chạy `/compact` trên các session tồn tại lâu (app này hỗ trợ như một lệnh Telegram) thay vì để một session chạy vô thời hạn, đặc biệt nếu bạn nhận thấy nó đã idle một thời gian dài. Bắt đầu một session `/new` mới cho công việc không liên quan cũng giúp giữ context — và chi phí — trong tầm kiểm soát.
+
+Giờ đây app cũng tự động làm việc này, bằng cách kết hợp hai tín hiệu theo từng provider để chỉ làm gián đoạn bạn khi thực sự đáng: một ngưỡng idle (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *và* lượng context mà session đã tích lũy (bỏ qua cảnh báo cho các session nhỏ/rẻ ngay cả khi đã idle một lúc, vì xử lý lại từ đầu khi đó gần như không đáng kể). Mặc định: 1 giờ cho cả Claude Code lẫn Codex -- con số của Claude có bằng chứng thực tế hỗ trợ (xem ở trên), và dù OpenAI không tài liệu hóa cho Codex, cache riêng của Codex nhìn chung cũng ngắn hạn hơn Claude, nên khớp với ngưỡng của Claude không tốn gì về độ chính xác mà chỉ giúp giảm số lần gián đoạn, nhất là khi giờ đã kết hợp với size gate; và tắt theo mặc định cho Copilot, vì [tài liệu chính thức của GitHub](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) nêu rõ Copilot CLI hoàn toàn không có inactivity timeout và đã tự động nén context của chính nó (quanh mức sử dụng 80-95%) -- không có gì liên quan đến idle cần cảnh báo ở đó, nên phần này để cơ chế riêng của Copilot xử lý thay vì tự bịa ra một cái. Đặt `COPILOT_LONG_GAP_SECONDS` thành giá trị dương nếu bạn vẫn muốn có nhắc nhở dựa trên idle cho Copilot.
+
+Khi cả ngưỡng idle và size gate đều thỏa mãn, app sẽ giữ tin nhắn của bạn lại và hỏi:
+
+> ⏳ Session này đã idle {gap}. Resume ngay bây giờ nhiều khả năng sẽ xử lý lại toàn bộ cuộc hội thoại từ đầu (cache phản hồi của provider có lẽ đã hết hạn), có thể tốn token nhiều hơn đáng kể so với bình thường. Compact cũng phải xử lý lại context hiện tại một lần để viết bản tóm tắt, nên cũng có thể tốn nhiều token nếu session này đã lớn. Chuyển sang session mới sẽ bỏ qua hoàn toàn việc xử lý lại đó, nhưng sẽ bắt đầu mà không có bất kỳ ký ức nào về cuộc hội thoại này. Chuyển sang session mới, compact trước, hay cứ tiếp tục?
+>
+> [🆕 Chuyển sang session mới]
+> [🔄 Compact trước]
+> [⚠️ Cứ tiếp tục]
+
+Lưu ý rằng bản thân `/compact` cũng không miễn phí chi phí này: nó hoạt động bằng cách resume session hiện tại (có thể đã nguội) và yêu cầu nó tự tóm tắt, nên vẫn phải trả chi phí xử lý lại toàn bộ transcript một lần giống như khi trả lời bình thường — điểm khác là bạn chỉ phải trả chi phí đó một lần thay vì ở mỗi lượt tiếp theo, vì session kết quả bắt đầu nhỏ. **Chuyển sang session mới** là lựa chọn duy nhất tránh hoàn toàn việc xử lý lại đó: nó từ bỏ context của session cũ mà không bao giờ resume nó, rồi bắt đầu hoàn toàn mới — đánh đổi bằng việc mất hoàn toàn context đó thay vì nén nó thành bản tóm tắt.
+
+Chọn **Chuyển sang session mới** sẽ khởi tạo một session mới hoàn toàn trống, rồi tiếp tục với tin nhắn của bạn ở đó — được đặt tên theo session cũ với hậu tố `-newN` tăng dần (ví dụ `fix-bug` → `fix-bug-new1` → `fix-bug-new2` nếu chuyển lần nữa), để bạn vẫn phân biệt được với bản gốc trong `/switch`. Chọn **Compact trước** sẽ tóm tắt session, khởi tạo một session mới từ bản tóm tắt đó, rồi tiếp tục với tin nhắn của bạn trên session mới — được đặt tên tương tự nhưng dùng hậu tố `-resumeN` (ví dụ `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` ở lần compact tiếp theo). Chọn **Cứ tiếp tục** thì chỉ đơn giản là tiếp tục trên session hiện có như bình thường. Có thể tắt toàn bộ cơ chế kiểm tra này bằng `LONG_GAP_WARNING_ENABLED=false`.
+</details>
 
 ## 📌 Ghi chú
 

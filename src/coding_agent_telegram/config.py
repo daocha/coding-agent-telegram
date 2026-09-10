@@ -25,6 +25,30 @@ DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
 DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 DEFAULT_OPENAI_WHISPER_MODEL = "base"
 DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
+# How long a session can sit idle before resuming it risks a costly prompt-cache
+# miss (see README FAQ: "does this app burn more tokens than the terminal?"). This is
+# only the idle-time half of the check -- session_gap.py also reports accumulated
+# session size where a provider exposes one, and small/cheap sessions are gated out so
+# they don't nag even past this threshold (see _LONG_GAP_PROVIDER_CONFIG in
+# router/message_commands.py).
+#
+# Claude: no official idle-based cache-expiry number is published, but the extended
+# prompt-cache checkpoint was empirically confirmed (against real session transcripts)
+# to hold for about an hour before a full-context reprocess kicks in.
+DEFAULT_CLAUDE_LONG_GAP_SECONDS = 3600
+# Codex: OpenAI doesn't document an idle-based cache-expiry number either, and its API
+# prompt cache is generally shorter-lived than Claude's extended checkpoint anyway --
+# by the time either 30 or 60 minutes of idle has passed, the cache is almost
+# certainly gone regardless, so there's no accuracy cost to picking the larger number.
+# Matches Claude's threshold for a simpler mental model, now that the size gate above
+# already filters out small sessions that wouldn't be worth nagging about anyway.
+DEFAULT_CODEX_LONG_GAP_SECONDS = 3600
+# Copilot: GitHub's docs state Copilot CLI has no inactivity timeout at all, and it
+# already auto-compacts its own context (around ~80-95% usage) without any idle
+# involvement. There's nothing analogous to warn about here, so this defaults to
+# disabled (0) rather than inventing an idle-cache-expiry assumption that doesn't
+# apply to this provider. Set a positive value to opt into an idle-based nudge anyway.
+DEFAULT_COPILOT_LONG_GAP_SECONDS = 0
 
 
 @dataclass(frozen=True)
@@ -66,6 +90,10 @@ class AppConfig:
     default_agent_provider: str
     agent_hard_timeout_seconds: int
     app_internal_root: Path
+    long_gap_warning_enabled: bool
+    claude_long_gap_seconds: int
+    codex_long_gap_seconds: int
+    copilot_long_gap_seconds: int
     locale: str = DEFAULT_LOCALE
 
 
@@ -316,5 +344,15 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
         ),
         app_internal_root=app_internal_root,
+        long_gap_warning_enabled=_parse_bool(os.getenv("LONG_GAP_WARNING_ENABLED", "true"), default=True),
+        claude_long_gap_seconds=int(
+            os.getenv("CLAUDE_LONG_GAP_SECONDS", str(DEFAULT_CLAUDE_LONG_GAP_SECONDS))
+        ),
+        codex_long_gap_seconds=int(
+            os.getenv("CODEX_LONG_GAP_SECONDS", str(DEFAULT_CODEX_LONG_GAP_SECONDS))
+        ),
+        copilot_long_gap_seconds=int(
+            os.getenv("COPILOT_LONG_GAP_SECONDS", str(DEFAULT_COPILOT_LONG_GAP_SECONDS))
+        ),
         locale=locale,
     )

@@ -7,6 +7,7 @@ import sqlite3
 import shlex
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -44,6 +45,7 @@ class DummyRunner:
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "priming_only": priming_only,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -141,6 +143,7 @@ class CompactingRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "priming_only": priming_only,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -580,6 +583,10 @@ def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
         default_agent_provider="codex",
         agent_hard_timeout_seconds=0,
         app_internal_root=tmp_path / ".coding-agent-telegram",
+        long_gap_warning_enabled=False,
+        claude_long_gap_seconds=3600,
+        codex_long_gap_seconds=600,
+        copilot_long_gap_seconds=600,
         locale=locale,
     )
 
@@ -593,6 +600,7 @@ def seed_codex_native_session(
     branch: str,
     created_at: int,
     updated_at: int,
+    tokens_used: int = 0,
 ) -> None:
     codex_dir = home / ".codex"
     codex_dir.mkdir(parents=True, exist_ok=True)
@@ -609,16 +617,17 @@ def seed_codex_native_session(
                 git_branch TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
+                tokens_used INTEGER NOT NULL DEFAULT 0,
                 archived INTEGER NOT NULL DEFAULT 0
             )
             """
         )
         conn.execute(
             """
-            INSERT INTO threads (id, cwd, title, first_user_message, git_branch, created_at, updated_at, archived)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            INSERT INTO threads (id, cwd, title, first_user_message, git_branch, created_at, updated_at, tokens_used, archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
-            (session_id, str(cwd), title, title, branch, created_at, updated_at),
+            (session_id, str(cwd), title, title, branch, created_at, updated_at, tokens_used),
         )
         conn.commit()
     finally:
@@ -1570,6 +1579,7 @@ def test_new_without_name_uses_new_session_as_default_name(tmp_path: Path):
     assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
     assert "Session created successfully: sess_abc123" in bot.messages[-1][1]
     assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
+    assert runner.create_calls[-1]["priming_only"] is True
 
 
 def test_new_without_name_ignores_existing_new_session_labels(tmp_path: Path):
@@ -1615,6 +1625,7 @@ def test_plain_text_create_session_new_session_uses_unnamed_flow(tmp_path: Path)
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "sess_abc123"
     assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
+    assert runner.create_calls[-1]["priming_only"] is True
 
 
 def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path):
@@ -1637,6 +1648,7 @@ def test_plain_text_create_session_with_name_matches_new_command(tmp_path: Path)
     state = store.get_chat_state("bot-a", 123)
     assert state["sessions"]["sess_abc123"]["name"] == "release prep"
     assert runner.create_calls[-1]["user_message"] == SESSION_PRIMING_PROMPT
+    assert runner.create_calls[-1]["priming_only"] is True
 
 
 def test_provider_command_sends_inline_buttons(tmp_path: Path):
@@ -2147,6 +2159,69 @@ def test_switch_lists_mixed_bot_and_native_project_sessions_with_legend(tmp_path
     assert "initialized: Native codex review" in message
 
 
+def test_switch_listing_shows_last_active_and_tokens_for_native_session(tmp_path: Path, monkeypatch):
+    """/switch should surface each session's real native activity (session_gap.py),
+    not just the bot's own state.json bookkeeping -- that's the only way to see how
+    stale/expensive-to-resume a session actually is before picking one."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="Native codex review",
+        branch="enhancement",
+        created_at=1_700_000_000,
+        updated_at=int(time.time()) - 3600,
+        tokens_used=12_345,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Last active:" in message and "ago" in message
+    assert "~12.3k tokens used" in message
+
+
+def test_switch_listing_omits_activity_line_when_no_native_data_exists(tmp_path: Path, monkeypatch):
+    """A bot-managed session with no matching native transcript/db row (e.g. one seeded
+    straight into state.json, or one whose transcript already got cleaned up) has no
+    real activity to report -- the line should be omitted rather than showing a bogus
+    zero/unknown value."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_no_native_data", "orphan-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/switch")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_switch(update, context))
+
+    message = bot.messages[-1][1]
+    assert "orphan-session" in message
+    assert "Last active:" not in message
+    assert "tokens used" not in message
+
+
 def test_switch_lists_only_current_provider_native_sessions(tmp_path: Path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
@@ -2342,6 +2417,63 @@ def test_current_reports_active_session_details(tmp_path: Path):
     assert "Project: backend" in message
     assert "Provider: codex" in message
     assert "Branch: feature-1" in message
+
+
+def test_current_shows_last_active_and_tokens_for_native_session(tmp_path: Path, monkeypatch):
+    """/current should surface the session's real native activity (session_gap.py), the
+    same signal /switch shows, so a chat doesn't need to run /switch just to see how
+    stale/expensive-to-resume the active session actually is."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_native_codex", "session-a", "backend", "codex", branch_name="feature-1")
+    seed_codex_native_session(
+        home,
+        session_id="sess_native_codex",
+        cwd=backend,
+        title="session-a",
+        branch="feature-1",
+        created_at=1_700_000_000,
+        updated_at=int(time.time()) - 3600,
+        tokens_used=12_345,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Current session: session-a" in message
+    assert "Last active:" in message and "ago" in message
+    assert "~12.3k tokens used" in message
+
+
+def test_current_omits_activity_line_when_no_native_data_exists(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_no_native_data", "orphan-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_current(update, context))
+
+    message = bot.messages[-1][1]
+    assert "Current session: orphan-session" in message
+    assert "Last active:" not in message
+    assert "tokens used" not in message
 
 
 def test_switch_does_not_checkout_branch_immediately(tmp_path: Path):
@@ -3079,6 +3211,35 @@ def test_agent_reply_option_callback_ignores_unknown_token(tmp_path: Path):
     assert runner.resume_calls == []
 
 
+def test_agent_reply_option_tokens_are_capped_with_fifo_eviction(tmp_path: Path):
+    """Regression: a button the user never taps used to leave its token in the dict
+    forever, letting it grow without bound over a long-lived bot's uptime. Registering
+    past the cap must evict the oldest entries instead."""
+    from coding_agent_telegram.router.base import MAX_AGENT_REPLY_OPTION_TOKENS
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    first_token = router._register_agent_reply_options(123, ("a",))
+    tokens = [first_token]
+    for _ in range(MAX_AGENT_REPLY_OPTION_TOKENS - 1):
+        tokens.append(router._register_agent_reply_options(123, ("a",)))
+
+    assert len(router._agent_reply_option_tokens) == MAX_AGENT_REPLY_OPTION_TOKENS
+    assert first_token in router._agent_reply_option_tokens
+
+    overflow_token = router._register_agent_reply_options(123, ("a",))
+
+    assert len(router._agent_reply_option_tokens) == MAX_AGENT_REPLY_OPTION_TOKENS
+    assert first_token not in router._agent_reply_option_tokens, "oldest entry should be evicted first"
+    assert overflow_token in router._agent_reply_option_tokens
+    assert tokens[-1] in router._agent_reply_option_tokens
+
+
 def test_message_reports_missing_project_folder_before_running_agent(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -3768,7 +3929,7 @@ def test_compact_reports_usage_when_args_are_passed(tmp_path: Path):
     assert bot.messages[-1][1] == "Usage: /compact"
 
 
-@pytest.mark.parametrize("provider", ["codex", "copilot"])
+@pytest.mark.parametrize("provider", ["codex", "copilot", "claude"])
 def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: str):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -3790,10 +3951,743 @@ def test_compact_creates_fresh_session_from_summary(tmp_path: Path, provider: st
     assert "compact handoff summary" in runner.resume_calls[-1]["user_message"].lower()
     assert runner.create_calls[-1]["provider"] == provider
     assert "Use this compact handoff summary" in runner.create_calls[-1]["user_message"]
+    # The bootstrap prompt is a handoff summary that lists "next steps"; it must be
+    # marked priming-only so no provider starts executing them while merely seeding
+    # the replacement session.
+    assert runner.create_calls[-1]["priming_only"] is True
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_compacted"
-    assert state["sessions"]["sess_compacted"]["name"] == "current-session-1"
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume1"
     assert "Session compacted successfully." in bot.messages[-1][1]
+
+
+def test_compact_run_twice_increments_resume_suffix(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = CompactingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+    update = make_update(text="/compact")
+
+    asyncio.run(router.handle_compact(update, context))
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume1"
+
+    asyncio.run(router.handle_compact(update, context))
+    state = store.get_chat_state("bot-a", 123)
+    assert state["sessions"]["sess_compacted"]["name"] == "current-session-resume2"
+
+
+def test_long_gap_warning_sent_and_holds_message_when_native_session_idle_past_threshold(
+    tmp_path: Path, monkeypatch
+):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle", "idle-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle",
+        cwd=backend,
+        title="idle-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,  # 2h ago, well past the 10-minute threshold
+        tokens_used=100_000,  # above the size gate, so the warning isn't skipped as "too small to matter"
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls == []
+    chat_id, text, _parse_mode, reply_markup = bot.messages[-1]
+    assert chat_id == 123
+    assert "idle" in text.lower()
+    buttons = [button for row in reply_markup.inline_keyboard for button in row]
+    assert [button.callback_data for button in buttons] == ["longgap:switch", "longgap:compact", "longgap:proceed"]
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending == {
+        "kind": "long_gap_confirm",
+        "user_message": "keep going",
+        "suppress_working_notice": False,
+        "image_paths": [],
+    }
+
+
+def test_long_gap_warning_skipped_for_small_session_despite_long_idle(tmp_path: Path, monkeypatch):
+    """A session with little accumulated context shouldn't nag just because it sat idle
+    -- reprocessing it from scratch is cheap regardless, so the size gate should skip
+    the warning even though the idle threshold alone would have fired it."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle_small", "small-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle_small",
+        cwd=backend,
+        title="small-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,  # well past the idle threshold
+        tokens_used=500,  # well below the size gate
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_size_gate_skip_is_cached_to_avoid_repeated_lookups(tmp_path: Path, monkeypatch):
+    """Regression: a session sitting under the size gate but past the idle threshold
+    used to repeat the blocking native_session_activity lookup on every single message,
+    since the gap-crossing cache above only helps while the gap hasn't crossed the
+    threshold yet. The size-gate skip must cache too."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle_small", "small-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle_small",
+        cwd=backend,
+        title="small-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,  # well past the idle threshold
+        tokens_used=500,  # well below the size gate
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    from coding_agent_telegram.router import message_commands
+    from coding_agent_telegram.session_gap import native_session_activity as real_native_session_activity
+
+    call_count = 0
+
+    def counting_native_session_activity(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return real_native_session_activity(*args, **kwargs)
+
+    monkeypatch.setattr(message_commands, "native_session_activity", counting_native_session_activity)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="first"), context))
+    asyncio.run(router.handle_message(make_update(text="second"), context))
+
+    assert call_count == 1, "size-gate skip should be cached, not re-checked on every message"
+    assert runner.resume_calls[-1]["user_message"] == "second"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_warning_skipped_when_native_session_recently_active(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_fresh", "fresh-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_fresh",
+        cwd=backend,
+        title="fresh-session",
+        branch="",
+        created_at=int(time.time()) - 30,
+        updated_at=int(time.time()) - 30,  # 30s ago, well under the 10-minute threshold
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_provider_tables_stay_in_sync_with_providers_and_config():
+    """The long-gap check is table-driven, and both tables fail *silently* when a
+    provider is missing: an absent config entry disables the warning, and an absent
+    activity entry reports "unknown". A typo'd AppConfig field name would likewise turn
+    the feature off via getattr's default rather than raising. Pin all three."""
+    import dataclasses
+
+    from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
+    from coding_agent_telegram.router.message_commands import _LONG_GAP_PROVIDER_CONFIG
+    from coding_agent_telegram.session_gap import _ACTIVITY_LOOKUP
+
+    assert set(_LONG_GAP_PROVIDER_CONFIG) == set(SUPPORTED_PROVIDERS)
+    assert set(_ACTIVITY_LOOKUP) == set(SUPPORTED_PROVIDERS)
+
+    config_fields = {field.name for field in dataclasses.fields(AppConfig)}
+    for provider, provider_config in _LONG_GAP_PROVIDER_CONFIG.items():
+        assert provider_config.threshold_field in config_fields, provider
+
+
+def _set_codex_thread_updated_at(home: Path, session_id: str, updated_at: int) -> None:
+    conn = sqlite3.connect(home / ".codex" / "state_5.sqlite")
+    try:
+        conn.execute("UPDATE threads SET updated_at = ? WHERE id = ?", (updated_at, session_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _install_fake_monotonic(monkeypatch, clock: list[float]) -> None:
+    """Swap only message_commands' view of ``time`` so the gap cache can be aged
+    deterministically without touching the real clock everything else reads."""
+    from coding_agent_telegram.router import message_commands
+
+    monkeypatch.setattr(message_commands, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+
+
+def _long_gap_router(tmp_path: Path, home: Path, backend: Path, *, session_id: str, updated_at: int):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, session_id, "gap-cache-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id=session_id,
+        cwd=backend,
+        title="gap-cache-session",
+        branch="",
+        created_at=updated_at,
+        updated_at=updated_at,
+        tokens_used=100_000,  # above the size gate
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    return router, store, runner
+
+
+def test_long_gap_cache_expires_when_gap_would_cross_threshold(tmp_path: Path, monkeypatch):
+    """A session checked just *under* the threshold must not stay cached past it.
+
+    Caching the check time and trusting it for a full threshold window let a session
+    checked at 590s idle (threshold 600s) skip the real check until 1190s idle -- nearly
+    double the threshold with no warning. The cache stores the crossing time instead."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    clock = [1000.0]
+    _install_fake_monotonic(monkeypatch, clock)
+    router, store, runner = _long_gap_router(
+        tmp_path,
+        home,
+        backend,
+        session_id="sess_edge",
+        updated_at=int(time.time()) - 590,  # 10s short of the 600s threshold
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="first"), context))
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "first"
+
+    # The session goes quiet past the threshold, and only 60s of bot uptime elapses --
+    # far less than the 600s a check-time cache would have held for.
+    _set_codex_thread_updated_at(home, "sess_edge", int(time.time()) - 1200)
+    clock[0] += 60
+
+    asyncio.run(router.handle_message(make_update(text="second"), context))
+
+    assert runner.resume_calls[-1]["user_message"] == "first", "second message should be held, not dispatched"
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["kind"] == "long_gap_confirm"
+    assert pending["user_message"] == "second"
+
+
+def test_long_gap_cache_skips_repeat_lookup_within_safe_window(tmp_path: Path, monkeypatch):
+    """The flip side: while the gap provably can't have crossed the threshold, the
+    check short-circuits instead of re-reading the provider's db on every message."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    clock = [1000.0]
+    _install_fake_monotonic(monkeypatch, clock)
+    router, store, runner = _long_gap_router(
+        tmp_path,
+        home,
+        backend,
+        session_id="sess_active",
+        updated_at=int(time.time()) - 30,  # freshly active: cached for ~570s
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="first"), context))
+
+    # Backdate the row well past the threshold. Within the safe window the cache must
+    # win, so this rewrite is invisible until the window lapses.
+    _set_codex_thread_updated_at(home, "sess_active", int(time.time()) - 99_999)
+    clock[0] += 5
+
+    asyncio.run(router.handle_message(make_update(text="second"), context))
+
+    assert runner.resume_calls[-1]["user_message"] == "second"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def _run_two_messages_concurrently(router, context) -> None:
+    """Telegram handlers are registered with block=False, so two messages arriving
+    together in one chat run as concurrent tasks."""
+
+    async def both() -> None:
+        await asyncio.gather(
+            router.handle_message(make_update(text="first", message_id=1), context),
+            router.handle_message(make_update(text="second", message_id=2), context),
+        )
+
+    asyncio.run(both())
+
+
+def test_concurrent_messages_on_idle_session_warn_once_and_queue_the_loser(tmp_path: Path, monkeypatch):
+    """The long-gap check awaits provider I/O between "nothing else is handling this
+    chat" and this message claiming it. Without a re-check afterwards both messages
+    warn, and the second's pending action overwrites the first's -- two sets of buttons
+    in the chat and the first message silently dropped."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    router, store, runner = _long_gap_router(
+        tmp_path, home, backend, session_id="sess_idle_race", updated_at=int(time.time()) - 7200
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    _run_two_messages_concurrently(router, context)
+
+    warnings = [text for _chat, text, _parse, _markup in bot.messages if "idle for" in str(text)]
+    assert len(warnings) == 1, "the second message overwrote the first message's held confirmation"
+    assert runner.resume_calls == []
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["kind"] == "long_gap_confirm"
+    assert pending["user_message"] == "first"
+    # The loser must be queued, not dropped, so it still runs after the button is tapped.
+    assert any("queued" in str(text).lower() for _chat, text, _parse, _markup in bot.messages)
+
+
+def test_concurrent_messages_on_active_session_dispatch_once(tmp_path: Path, monkeypatch):
+    """The same await window exists on the no-warning path, where the idle check passes
+    and the message goes straight to dispatch. There _is_project_busy is the primary
+    serializer, so this is an invariant check rather than a regression test for a
+    reproduced failure: neither message may run twice, whichever order they interleave
+    in."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    router, store, runner = _long_gap_router(
+        tmp_path, home, backend, session_id="sess_active_race", updated_at=int(time.time()) - 30
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    _run_two_messages_concurrently(router, context)
+
+    dispatched = [call["user_message"] for call in runner.resume_calls]
+    assert len(dispatched) == len(set(dispatched)), f"a message ran twice: {dispatched}"
+    assert "first" in dispatched, dispatched
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_proceed_anyway_dispatches_held_message(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle", "idle-session", "backend", "codex")
+    # Deliberately still idle past the threshold: this reproduces the "Proceed anyway"
+    # regression where replaying the message re-triggered _maybe_warn_long_gap because
+    # the native transcript's mtime doesn't move until the agent actually runs a turn.
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle",
+        cwd=backend,
+        title="idle-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+        tokens_used=100_000,
+    )
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {"kind": "long_gap_confirm", "user_message": "keep going", "suppress_working_notice": False},
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:proceed", answer=None, edit_message_text=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(update, context))
+
+    assert edited == ["Proceeding on the existing session..."]
+    assert runner.resume_calls and runner.resume_calls[-1]["user_message"] == "keep going"
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_long_gap_compact_failure_still_dispatches_held_message(tmp_path: Path):
+    """If compaction fails (or the workspace is busy), the held message must still be
+    delivered instead of silently dropped -- it should fall back to running on the
+    original session rather than vanishing with no trace."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    # Plain DummyRunner's resume_session returns an empty assistant_text, so the
+    # compact summary step fails with "no usable handoff summary" -- exercising the
+    # compaction-failed path without a dedicated failing runner.
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {"kind": "long_gap_confirm", "user_message": "keep going", "suppress_working_notice": False},
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:compact", answer=None, edit_message_text=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(update, context))
+
+    # No new session was created since compaction failed before that step.
+    assert runner.create_calls == []
+    # The compact summary attempt happened, then -- instead of being dropped -- the
+    # original held message was dispatched on the still-current session.
+    assert [call["user_message"] for call in runner.resume_calls][-1] == "keep going"
+    assert runner.resume_calls[-1]["session_id"] == "sess_current"
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_current"
+    assert state.get("pending_action") is None
+
+
+def test_long_gap_switch_starts_fresh_session_without_resuming_old_one(tmp_path: Path):
+    """Unlike compact, switching must never resume the old session -- that resume is
+    exactly the full-transcript reprocess cost this button exists to avoid."""
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_current", "current-session", "backend", "codex")
+    store.set_pending_action(
+        "bot-a",
+        123,
+        {"kind": "long_gap_confirm", "user_message": "keep going", "suppress_working_notice": False},
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:switch", answer=None, edit_message_text=None),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(update, context))
+
+    assert edited == ["Switching to a new session..."]
+    # The old session is never resumed to generate a summary -- that resume is exactly
+    # the full-transcript reprocess this path exists to avoid. The only resume_session
+    # call is the replayed message running against the brand-new session afterward.
+    assert all(call["session_id"] != "sess_current" for call in runner.resume_calls)
+    assert runner.resume_calls[-1]["session_id"] == "sess_abc123"
+    assert runner.resume_calls[-1]["user_message"] == "keep going"
+    assert runner.create_calls[0]["priming_only"] is True
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert state["sessions"]["sess_abc123"]["name"] == "current-session-new1"
+    assert state.get("pending_action") is None
+
+
+def test_long_gap_replay_runs_before_messages_queued_during_the_wait(tmp_path: Path, monkeypatch):
+    """A message that arrives while the long-gap confirmation is pending gets queued
+    (as normal). Once the user resolves the prompt, the held (older) message must still
+    run first, then the queue drains -- not the other way around."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle_reorder", "reorder-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle_reorder",
+        cwd=backend,
+        title="reorder-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+        tokens_used=100_000,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    # First message triggers the warning and gets held.
+    asyncio.run(router.handle_message(make_update(text="first message"), context))
+    assert runner.resume_calls == []
+    assert store.get_chat_state("bot-a", 123)["pending_action"]["kind"] == "long_gap_confirm"
+
+    # A second message arrives before the user answers the prompt -- it must queue,
+    # not be dropped or jump ahead.
+    asyncio.run(router.handle_message(make_update(text="second message"), context))
+    assert runner.resume_calls == []
+
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:proceed", answer=None, edit_message_text=None),
+    )
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        return None
+
+    callback_update.callback_query.answer = fake_answer
+    callback_update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(callback_update, context))
+
+    dispatched_messages = [call["user_message"] for call in runner.resume_calls]
+    assert dispatched_messages == ["first message", "second message"]
+
+
+def test_long_gap_warning_also_applies_to_photo_messages(tmp_path: Path, monkeypatch):
+    """handle_photo must not bypass the long-gap check -- an image sent to a session
+    idle past its threshold should be held for confirmation just like a text message,
+    and the button reply should still deliver the image once resolved."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo_idle", "photo-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_photo_idle",
+        cwd=backend,
+        title="photo-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+        tokens_used=100_000,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="what is shown here?"),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_photo(update, context))
+
+    # Held, not dispatched.
+    assert runner.resume_calls == []
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["kind"] == "long_gap_confirm"
+    assert len(pending["image_paths"]) == 1
+    stored_image_path = Path(pending["image_paths"][0])
+    assert stored_image_path.is_file()
+
+    # Resolving with "proceed anyway" must still deliver the image.
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:proceed", answer=None, edit_message_text=None),
+    )
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        return None
+
+    callback_update.callback_query.answer = fake_answer
+    callback_update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(callback_update, context))
+
+    assert runner.resume_calls
+    dispatched_image_paths = runner.resume_calls[-1]["image_paths"]
+    assert dispatched_image_paths == (stored_image_path,)
+    assert "what is shown here?" in runner.resume_calls[-1]["user_message"]
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+
+
+def test_photo_does_not_clobber_pending_long_gap_confirmation(tmp_path: Path, monkeypatch):
+    """A photo sent while a text message's long-gap confirmation is still pending must
+    not silently overwrite it -- that would orphan the original warning's buttons and
+    lose the held text message when they're pressed."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle_clobber", "clobber-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle_clobber",
+        cwd=backend,
+        title="clobber-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+        tokens_used=100_000,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    # First, a text message triggers and holds the long-gap warning.
+    asyncio.run(router.handle_message(make_update(text="original text message"), context))
+    pending_after_text = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending_after_text["kind"] == "long_gap_confirm"
+    assert pending_after_text["user_message"] == "original text message"
+
+    # A photo arrives before the user answers -- it must be rejected, not silently
+    # replace the pending confirmation.
+    photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+    photo_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(text=None, photo=[photo], caption="ignore me"),
+    )
+    asyncio.run(router.handle_photo(photo_update, context))
+
+    pending_after_photo = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending_after_photo == pending_after_text  # untouched
+    assert runner.resume_calls == []
+
+    # Resolving the (still-original) prompt must run the original text, not the photo.
+    callback_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data="longgap:proceed", answer=None, edit_message_text=None),
+    )
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        return None
+
+    callback_update.callback_query.answer = fake_answer
+    callback_update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_long_gap_callback(callback_update, context))
+
+    assert runner.resume_calls
+    assert runner.resume_calls[-1]["user_message"] == "original text message"
+    assert runner.resume_calls[-1]["image_paths"] == ()
 
 
 def test_assistant_command_block_is_sent_separately(tmp_path: Path):
@@ -3888,6 +4782,131 @@ def test_invalid_resume_recovery_uses_next_available_suffix_for_new_session_name
     state = store.get_chat_state("bot-a", 123)
     assert state["active_session_id"] == "sess_abc123"
     assert state["sessions"]["sess_abc123"]["name"] == "recover-session-2"
+
+
+def test_invalid_resume_recovery_recognizes_claude_session_not_found_error_code(tmp_path: Path):
+    """Claude's CLI reports an unresumable session ID as "No conversation found with
+    session ID: ..." (see agent_runner._claude_events_report_session_not_found), which
+    MultiAgentRunner surfaces as error_code="session_not_found" -- a structured signal
+    rather than a substring match on error_message, since that text can also be a
+    genuine (if failed) turn's model-generated output. The recovery check has to honor
+    that error_code, or a session with no local transcript fails identically forever
+    instead of ever recovering."""
+
+    class ClaudeNoConversationRunner(DummyRunner):
+        def resume_session(
+            self,
+            provider,
+            session_id,
+            project_path,
+            user_message,
+            *,
+            skip_git_repo_check=False,
+            image_paths=(),
+            on_stall=None,
+            on_progress=None,
+        ):
+            self.resume_calls.append(
+                {
+                    "provider": provider,
+                    "session_id": session_id,
+                    "project_path": project_path,
+                    "user_message": user_message,
+                    "skip_git_repo_check": skip_git_repo_check,
+                    "image_paths": image_paths,
+                    "on_stall": on_stall,
+                }
+            )
+            return AgentRunResult(
+                session_id=None,
+                success=False,
+                assistant_text="",
+                error_message=f"No conversation found with session ID: {session_id}",
+                raw_events=[],
+                error_code="session_not_found",
+            )
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ClaudeNoConversationRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_abc123"
+    assert "sess_original" in state["sessions"]
+    assert "Resume failed, so a new session was created." in bot.messages[1][1]
+
+
+def test_invalid_resume_recovery_ignores_resume_substring_in_claude_error_without_error_code(
+    tmp_path: Path,
+):
+    """A Claude failure whose error_message happens to contain "resume" for an unrelated
+    reason (e.g. a genuine model turn discussing a file called resume.pdf) must NOT be
+    treated as an unresumable session -- only error_code == "session_not_found" (a
+    structured signal, not a substring guess) should trigger replacing it. Doing
+    otherwise would discard a perfectly good session over unrelated content."""
+
+    class ClaudeUnrelatedFailureRunner(DummyRunner):
+        def resume_session(
+            self,
+            provider,
+            session_id,
+            project_path,
+            user_message,
+            *,
+            skip_git_repo_check=False,
+            image_paths=(),
+            on_stall=None,
+            on_progress=None,
+        ):
+            self.resume_calls.append(
+                {
+                    "provider": provider,
+                    "session_id": session_id,
+                    "project_path": project_path,
+                    "user_message": user_message,
+                    "skip_git_repo_check": skip_git_repo_check,
+                    "image_paths": image_paths,
+                    "on_stall": on_stall,
+                }
+            )
+            return AgentRunResult(
+                session_id=session_id,
+                success=False,
+                assistant_text="",
+                error_message="I couldn't finish reviewing resume.pdf before running out of turns.",
+                raw_events=[],
+                error_code=None,
+            )
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = ClaudeUnrelatedFailureRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_original", "recover-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    update = make_update(text="keep going")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert state["active_session_id"] == "sess_original"
+    assert "resume.pdf" in bot.messages[-1][1]
 
 
 def test_active_session_reports_stalled_agent_process(tmp_path: Path):
@@ -10155,3 +11174,108 @@ def test_drain_queue_stops_dispatch_returns_false_batch_single_mode(tmp_path: Pa
     bot = FakeBot()
     context = SimpleNamespace(args=[], bot=bot)
     asyncio.run(router._drain_chat_message_queue(123, context))  # should return without error
+
+
+def test_status_command_reports_each_provider_usage(tmp_path: Path, monkeypatch):
+    from coding_agent_telegram.usage_status import ProviderUsage, RateWindow
+
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    claude_calls = []
+
+    def fake_get_claude_usage():
+        claude_calls.append(True)
+        return ProviderUsage(
+            provider="claude",
+            available=True,
+            five_hour=RateWindow(used_percent=53.0, resets_at=int(time.time()) + 3600),
+            weekly=RateWindow(used_percent=5.0, resets_at=int(time.time()) + 86400),
+        )
+
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.get_claude_usage",
+        fake_get_claude_usage,
+    )
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.fetch_codex_usage",
+        lambda codex_bin: ProviderUsage(
+            provider="codex",
+            available=True,
+            five_hour=RateWindow(used_percent=0.0, resets_at=int(time.time()) + 3600),
+            weekly=RateWindow(used_percent=23.0, resets_at=int(time.time()) + 86400),
+            plan="plus",
+        ),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_status(update, context))
+
+    assert claude_calls == [True]
+
+    text = bot.messages[-1][1]
+    assert "Claude" in text
+    assert "53%" in text
+    assert "5%" in text
+    assert "Codex (plus)" in text
+    assert "23%" in text
+    assert "Copilot" in text
+    assert "Not available" in text
+
+
+def test_status_command_shows_na_note_for_expired_claude_window(tmp_path: Path, monkeypatch):
+    from coding_agent_telegram.usage_status import CLAUDE_WINDOW_EXPIRED_NOTE, ProviderUsage, RateWindow
+
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.get_claude_usage",
+        lambda: ProviderUsage(
+            provider="claude",
+            available=True,
+            five_hour=None,
+            five_hour_note=CLAUDE_WINDOW_EXPIRED_NOTE,
+            weekly=RateWindow(used_percent=10.0, resets_at=int(time.time()) + 86400),
+            observed_at=time.time() - 3600,
+        ),
+    )
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.session_status_commands.fetch_codex_usage",
+        lambda codex_bin: ProviderUsage(provider="codex", available=True),
+    )
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_status(update, context))
+
+    text = bot.messages[-1][1]
+    assert "N/A" in text
+    assert CLAUDE_WINDOW_EXPIRED_NOTE in text
+    assert "10%" in text
+    assert "last observed" in text
+
+
+def test_status_command_rejects_extra_args(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update()
+    bot = FakeBot()
+    context = SimpleNamespace(args=["extra"], bot=bot)
+
+    asyncio.run(router.handle_status(update, context))
+
+    assert bot.messages[-1][1] == "Usage: /status"
+    assert not runner.create_calls
