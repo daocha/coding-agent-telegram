@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "Der Agent-Lauf ist fehlgeschlagen.",
   "runtime.live_agent_output": "Live-Ausgabe des Agenten",
   "runtime.photo_too_large": "Das Foto ist zu groß. Die maximal unterstützte Größe beträgt 5 MB.",
+  "runtime.photo_album_too_many": "Zu viele Fotos. Ein einzelnes Album darf höchstens {limit} Bilder enthalten.",
   "runtime.voice_audio_too_large": "Die Audiodatei ist zu groß für die lokale Spracherkennung. Die maximal unterstützte Größe beträgt {max_size_mb} MB.",
   "runtime.provider_output_index": "{provider}-Ausgabe {index}/{total}",
   "runtime.provider_output_single": "{provider}-Ausgabe",

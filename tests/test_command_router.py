@@ -2559,6 +2559,7 @@ def test_photo_message_is_saved_and_forwarded_to_codex(tmp_path: Path):
     image_paths = runner.resume_calls[-1]["image_paths"]
     assert len(image_paths) == 1
     assert image_paths[0].is_file()
+    assert len(image_paths[0].stem) == 8
     assert "/.coding-agent-telegram/telegram_attachments/backend/" in image_paths[0].as_posix()
     assert runner.resume_calls[-1]["user_message"].startswith("An image is attached at ../.coding-agent-telegram/telegram_attachments/backend/")
     assert "Open and inspect that image before answering." in runner.resume_calls[-1]["user_message"]
@@ -2591,7 +2592,7 @@ def test_photo_message_is_saved_and_forwarded_to_claude(tmp_path: Path):
     assert image_paths[0].is_file()
 
 
-def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
+def test_photo_message_is_saved_and_forwarded_to_copilot(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
     runner = DummyRunner()
@@ -2610,8 +2611,71 @@ def test_photo_message_rejected_for_copilot_session(tmp_path: Path):
 
     asyncio.run(router.handle_photo(update, context))
 
+    assert len(runner.resume_calls) == 1
+    assert len(runner.resume_calls[-1]["image_paths"]) == 1
+    assert "Open and inspect that image before answering." in runner.resume_calls[-1]["user_message"]
+
+
+def test_photo_album_is_forwarded_as_one_request(tmp_path: Path, monkeypatch):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    monkeypatch.setattr("coding_agent_telegram.router.message_commands.PHOTO_ALBUM_DEBOUNCE_SECONDS", 0.01)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def send_album():
+        for message_id, content in ((102, b"second"), (101, b"first")):
+            photo = FakePhotoSize(FakeTelegramFile(content, f"photos/{message_id}.png"))
+            update = SimpleNamespace(
+                effective_chat=SimpleNamespace(id=123, type="private"),
+                message=SimpleNamespace(
+                    text=None, photo=[photo], caption="compare these", message_id=message_id, media_group_id="album-1"
+                ),
+            )
+            await router.handle_photo(update, context)
+        await asyncio.sleep(0.03)
+
+    asyncio.run(send_album())
+
+    assert len(runner.resume_calls) == 1
+    call = runner.resume_calls[-1]
+    assert len(call["image_paths"]) == 2
+    assert "Images are attached at:" in call["user_message"]
+    assert "Open and inspect every image before answering." in call["user_message"]
+
+
+def test_photo_album_over_limit_is_rejected_before_running_agent(tmp_path: Path, monkeypatch):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    monkeypatch.setattr("coding_agent_telegram.router.message_commands.PHOTO_ALBUM_DEBOUNCE_SECONDS", 0.01)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def send_too_many():
+        for message_id in range(1, 7):
+            photo = FakePhotoSize(FakeTelegramFile(b"image", f"photos/{message_id}.png"))
+            update = SimpleNamespace(
+                effective_chat=SimpleNamespace(id=123, type="private"),
+                message=SimpleNamespace(text=None, photo=[photo], caption=None, message_id=message_id, media_group_id="album-2"),
+            )
+            await router.handle_photo(update, context)
+        await asyncio.sleep(0.03)
+
+    asyncio.run(send_too_many())
+
     assert runner.resume_calls == []
-    assert "Photo attachments are currently supported only for Codex and Claude sessions." in bot.messages[-1][1]
+    assert bot.messages[-1][1] == "Too many photos. A single album can contain at most 5 images."
 
 
 def test_voice_message_sends_transcript_preview_before_running_agent(tmp_path: Path):
@@ -2901,6 +2965,47 @@ def test_text_message_is_processed_after_photo_triggered_run_finishes(tmp_path: 
         assert started_second is True
         runner.release_next()
         await photo_task
+
+        assert len(runner.resume_calls) == 2
+        assert "Open and inspect that image before answering." in runner.resume_calls[0]["user_message"]
+        assert runner.resume_calls[1]["user_message"] == "follow-up text question"
+
+    asyncio.run(exercise())
+
+
+def test_text_after_photo_album_is_queued_behind_the_album(tmp_path: Path, monkeypatch):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = BlockingRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_photo", "photo-session", "backend", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    monkeypatch.setattr("coding_agent_telegram.router.message_commands.PHOTO_ALBUM_DEBOUNCE_SECONDS", 0.01)
+
+    async def exercise():
+        bot = FakeBot()
+        context = SimpleNamespace(args=[], bot=bot)
+        photo = FakePhotoSize(FakeTelegramFile(b"fake-image-bytes", "photos/pic.png"))
+        photo_update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            message=SimpleNamespace(
+                text=None, photo=[photo], caption="inspect this", message_id=101, media_group_id="album-before-text"
+            ),
+        )
+
+        await router.handle_photo(photo_update, context)
+        await router.handle_message(make_update(text="follow-up text question", message_id=202), context)
+        assert any("Question queued as Q1." in message for _, message, _, _ in bot.messages)
+
+        started = await asyncio.to_thread(runner.wait_started, 1, 1.0)
+        assert started is True
+        runner.release_next()
+        started_second = await asyncio.to_thread(runner.wait_started, 2, 1.0)
+        assert started_second is True
+        runner.release_next()
+        await asyncio.sleep(0)
 
         assert len(runner.resume_calls) == 2
         assert "Open and inspect that image before answering." in runner.resume_calls[0]["user_message"]
