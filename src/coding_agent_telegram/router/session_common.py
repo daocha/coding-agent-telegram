@@ -47,11 +47,13 @@ class SessionCommonMixin:
 
     def _should_queue_incoming_message(self, chat_id: int) -> bool:
         pending_action = self._pending_action(chat_id)
+        has_pending_photo_album = getattr(self, "_has_pending_photo_album", lambda _chat_id: False)
         return (
             self._is_project_busy(chat_id)
             or self._has_pending_queue_files(chat_id)
             or self._has_pending_queue_decision(chat_id)
             or isinstance(pending_action, dict)
+            or has_pending_photo_album(chat_id)
         )
 
     def _auto_session_name(self, project_folder: str, branch_name: str, provider: str, chat_id: int) -> str:

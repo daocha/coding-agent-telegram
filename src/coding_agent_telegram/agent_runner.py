@@ -956,8 +956,6 @@ class MultiAgentRunner:
                 on_progress=on_progress,
             )
         elif provider == "copilot":
-            if image_paths:
-                return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
             args = [
                 self.copilot_bin,
                 *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=priming_only),
@@ -1010,8 +1008,6 @@ class MultiAgentRunner:
                 on_progress=on_progress,
             )
         elif provider == "copilot":
-            if image_paths:
-                return AgentRunResult(None, False, "", "Image attachments are not supported for Copilot sessions.", [])
             args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message, skip_git_repo_check)]
             return self._run(
                 args,
