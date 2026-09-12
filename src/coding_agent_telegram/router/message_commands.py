@@ -21,6 +21,10 @@ from .base import require_allowed_chat
 
 logger = logging.getLogger(__name__)
 MAX_STT_AUDIO_BYTES = 20 * 1024 * 1024
+MAX_PHOTOS_PER_ALBUM = 5
+# Telegram delivers every item in an album as an individual update. A short
+# debounce gives the rest of that album time to arrive before dispatching it.
+PHOTO_ALBUM_DEBOUNCE_SECONDS = 0.75
 # Size at which the long-gap cache is swept for expired entries before the next insert.
 _GAP_CACHE_PRUNE_AT_ENTRIES = 256
 
@@ -43,6 +47,37 @@ _LONG_GAP_PROVIDER_CONFIG: dict[str, _LongGapProviderConfig] = {
 
 
 class MessageCommandMixin:
+    def _photo_albums(self) -> dict[tuple[int, str], list[tuple[Update, ContextTypes.DEFAULT_TYPE]]]:
+        albums = getattr(self, "_pending_photo_albums", None)
+        if albums is None:
+            albums = {}
+            self._pending_photo_albums = albums
+        return albums
+
+    def _reserved_photo_albums(self) -> dict[int, set[str]]:
+        reservations = getattr(self, "_reserved_photo_albums_by_chat", None)
+        if reservations is None:
+            reservations = {}
+            self._reserved_photo_albums_by_chat = reservations
+        return reservations
+
+    def _has_pending_photo_album(self, chat_id: int) -> bool:
+        return bool(self._reserved_photo_albums().get(chat_id))
+
+    def _is_photo_album_reservation(self, chat_id: int, media_group_id: str) -> bool:
+        return media_group_id in self._reserved_photo_albums().get(chat_id, set())
+
+    async def _release_photo_album_reservation(
+        self, chat_id: int, media_group_id: str, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        reservations = self._reserved_photo_albums()
+        media_group_ids = reservations.get(chat_id)
+        if media_group_ids is not None and media_group_id in media_group_ids:
+            media_group_ids.discard(media_group_id)
+            if not media_group_ids:
+                reservations.pop(chat_id, None)
+            await self._drain_chat_message_queue(chat_id, context)
+
     async def _process_user_message(
         self,
         update: Update,
@@ -470,7 +505,57 @@ class MessageCommandMixin:
         if update.message is None or not update.message.photo:
             return
 
+        media_group_id = getattr(update.message, "media_group_id", None)
+        if media_group_id:
+            key = (update.effective_chat.id, str(media_group_id))
+            chat_id = update.effective_chat.id
+            if not self._is_photo_album_reservation(chat_id, key[1]):
+                if isinstance(self._pending_action(chat_id), dict) or self._has_pending_photo_album(chat_id):
+                    await send_text(update, context, self._t(update, "message.photo_blocked_by_pending_action"))
+                    return
+                self._reserved_photo_albums().setdefault(chat_id, set()).add(key[1])
+            albums = self._photo_albums()
+            batch = albums.setdefault(key, [])
+            batch.append((update, context))
+            tasks = getattr(self, "_photo_album_tasks", None)
+            if tasks is None:
+                tasks = {}
+                self._photo_album_tasks = tasks
+            previous_task = tasks.get(key)
+            if previous_task is not None:
+                previous_task.cancel()
+            tasks[key] = asyncio.create_task(self._flush_photo_album(key, batch))
+            return
+
+        await self._process_photo_batch([(update, context)])
+
+    async def _flush_photo_album(
+        self, key: tuple[int, str], batch: list[tuple[Update, ContextTypes.DEFAULT_TYPE]]
+    ) -> None:
+        try:
+            await asyncio.sleep(PHOTO_ALBUM_DEBOUNCE_SECONDS)
+        except asyncio.CancelledError:
+            return
+        albums = self._photo_albums()
+        if albums.get(key) is not batch:
+            return
+        albums.pop(key, None)
+        getattr(self, "_photo_album_tasks", {}).pop(key, None)
+        # Telegram's delivery order is normally ordered, but message_id makes it
+        # deterministic if updates arrive out of order.
+        batch.sort(key=lambda item: getattr(item[0].message, "message_id", 0) or 0)
+        try:
+            await self._process_photo_batch(batch)
+        finally:
+            await self._release_photo_album_reservation(key[0], key[1], batch[0][1])
+
+    async def _process_photo_batch(self, batch: Sequence[tuple[Update, ContextTypes.DEFAULT_TYPE]]) -> None:
+        update, context = batch[0]
         chat_id = update.effective_chat.id
+        if len(batch) > MAX_PHOTOS_PER_ALBUM:
+            await send_text(update, context, self._t(update, "runtime.photo_album_too_many", limit=MAX_PHOTOS_PER_ALBUM))
+            return
+
         if isinstance(self._pending_action(chat_id), dict):
             # Unlike text (which routes through _process_user_message and queues
             # behind a pending action), a photo can't be queued -- _enqueue_chat_message
@@ -484,20 +569,23 @@ class MessageCommandMixin:
         if session is None or project_path is None:
             return
 
-        if session.get("provider", "codex") not in ("codex", "claude"):
-            await send_text(update, context, self._t(update, "message.photo_only_codex"))
-            return
-
-        caption = update.message.caption or ""
         try:
-            attachment_path = await self.photo_attachments.store_photo(update, session["project_folder"])
+            attachment_paths = []
+            for photo_update, _photo_context in batch:
+                attachment_paths.append(await self.photo_attachments.store_photo(photo_update, session["project_folder"]))
+            attachment_paths = tuple(attachment_paths)
         except PhotoAttachmentError as exc:
             error_text = self._t(update, "runtime.photo_too_large") if exc.code == "photo_too_large" else str(exc)
             await send_text(update, context, error_text)
             return
-        prompt = self.photo_attachments.build_prompt(attachment_path, project_path, caption)
+        captions = [photo_update.message.caption.strip() for photo_update, _photo_context in batch if photo_update.message.caption]
+        prompt = self.photo_attachments.build_prompt(attachment_paths, project_path, "\n".join(captions))
         if await self._maybe_warn_long_gap(
-            update, context, prompt, suppress_working_notice=False, image_paths=(attachment_path,)
+            update,
+            context,
+            prompt,
+            suppress_working_notice=False,
+            image_paths=attachment_paths,
         ):
             return
         # Downloading the photo and running the idle check both awaited, so re-run the
@@ -507,7 +595,9 @@ class MessageCommandMixin:
         if self._pending_action(chat_id) is not None:
             await send_text(update, context, self._t(update, "message.photo_blocked_by_pending_action"))
             return
-        await self._dispatch_active_session_message(update, context, prompt, image_paths=(attachment_path,))
+        await self._dispatch_active_session_message(
+            update, context, prompt, image_paths=attachment_paths
+        )
 
     async def _handle_audio_like(
         self,

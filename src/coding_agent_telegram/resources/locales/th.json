@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "การทำงานของเอเจนต์ล้มเหลว",
   "runtime.live_agent_output": "ผลลัพธ์สดของเอเจนต์",
   "runtime.photo_too_large": "รูปภาพมีขนาดใหญ่เกินไป ขนาดสูงสุดที่รองรับคือ 5 MB",
+  "runtime.photo_album_too_many": "มีรูปภาพมากเกินไป อัลบั้มหนึ่งสามารถมีรูปภาพได้สูงสุด {limit} รูป",
   "runtime.voice_audio_too_large": "ไฟล์เสียงมีขนาดใหญ่เกินไปสำหรับการถอดเสียงในเครื่อง ขนาดสูงสุดที่รองรับคือ {max_size_mb} MB",
   "runtime.provider_output_index": "ผลลัพธ์ {provider} {index}/{total}",
   "runtime.provider_output_single": "ผลลัพธ์ {provider}",

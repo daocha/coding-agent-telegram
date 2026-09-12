@@ -64,6 +64,7 @@
   "runtime.agent_run_failed": "Agent run failed.",
   "runtime.live_agent_output": "Live agent output",
   "runtime.photo_too_large": "Photo is too large. The maximum supported size is 5 MB.",
+  "runtime.photo_album_too_many": "Too many photos. A single album can contain at most {limit} images.",
   "runtime.provider_output_index": "{provider} output {index}/{total}",
   "runtime.provider_output_single": "{provider} output",
   "runtime.replacement_session_stall": "Replacement session creation appears stuck.\nThe local agent process is still running but has not produced output.\nOn macOS, this might be because a hidden permission dialog is waiting for confirmation on the machine running the bot.",

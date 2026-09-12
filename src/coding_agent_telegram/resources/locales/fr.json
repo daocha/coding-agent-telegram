@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "L’exécution de l’agent a échoué.",
   "runtime.live_agent_output": "Sortie en direct de l’agent",
   "runtime.photo_too_large": "La photo est trop volumineuse. La taille maximale prise en charge est de 5 Mo.",
+  "runtime.photo_album_too_many": "Trop de photos. Un album ne peut contenir que {limit} images au maximum.",
   "runtime.voice_audio_too_large": "L’audio est trop volumineux pour la transcription vocale locale. La taille maximale prise en charge est de {max_size_mb} Mo.",
   "runtime.provider_output_index": "Sortie {provider} {index}/{total}",
   "runtime.provider_output_single": "Sortie {provider}",

@@ -196,7 +196,9 @@ def test_codex_runner_attaches_images_for_create_and_resume(monkeypatch):
     assert str(image_path) in calls[1][0]
 
 
-def test_copilot_runner_rejects_image_attachments():
+def test_copilot_runner_accepts_image_paths_in_prompt(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
     runner = MultiAgentRunner(
         codex_bin="codex",
         copilot_bin="copilot",
@@ -205,10 +207,10 @@ def test_copilot_runner_rejects_image_attachments():
     )
 
     image_path = Path("/tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg")
-    result = runner.create_session("copilot", Path("/tmp/project"), "hello", image_paths=(image_path,))
+    result = runner.create_session("copilot", Path("/tmp/project"), f"Read {image_path}", image_paths=(image_path,))
 
-    assert result.success is False
-    assert result.error_message == "Image attachments are not supported for Copilot sessions."
+    assert result.success is True
+    assert "Read /tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg" in calls[0][0]
 
 
 def test_copilot_runner_uses_native_home_when_copilot_home_is_unset(monkeypatch):
@@ -1060,7 +1062,7 @@ def test_resume_session_returns_failure_for_unsupported_provider(monkeypatch):
     assert calls == []
 
 
-def test_copilot_resume_rejects_image_attachments(monkeypatch):
+def test_copilot_resume_accepts_image_paths_in_prompt(monkeypatch):
     calls: list = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
@@ -1074,13 +1076,12 @@ def test_copilot_resume_rejects_image_attachments(monkeypatch):
         "copilot",
         "sess_1",
         Path("/tmp/project"),
-        "hello",
+        "Read /tmp/image.png",
         image_paths=[Path("/tmp/image.png")],
     )
 
-    assert result.success is False
-    assert "not supported" in (result.error_message or "").lower()
-    assert calls == []  # no subprocess launched
+    assert result.success is True
+    assert "Read /tmp/image.png" in calls[0][0]
 
 
 def test_runner_uses_internal_code_for_generic_command_failure(monkeypatch):

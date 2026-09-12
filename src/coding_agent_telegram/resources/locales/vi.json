@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "Lần chạy của tác nhân đã thất bại.",
   "runtime.live_agent_output": "Đầu ra trực tiếp của tác nhân",
   "runtime.photo_too_large": "Ảnh quá lớn. Kích thước tối đa được hỗ trợ là 5 MB.",
+  "runtime.photo_album_too_many": "Có quá nhiều ảnh. Một album chỉ có thể chứa tối đa {limit} ảnh.",
   "runtime.voice_audio_too_large": "Tệp âm thanh quá lớn cho chuyển giọng nói thành văn bản cục bộ. Kích thước tối đa được hỗ trợ là {max_size_mb} MB.",
   "runtime.provider_output_index": "Đầu ra {provider} {index}/{total}",
   "runtime.provider_output_single": "Đầu ra {provider}",

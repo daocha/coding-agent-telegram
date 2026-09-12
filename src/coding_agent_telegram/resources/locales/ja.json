@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "エージェント実行に失敗しました。",
   "runtime.live_agent_output": "エージェントのライブ出力",
   "runtime.photo_too_large": "写真が大きすぎます。対応する最大サイズは 5 MB です。",
+  "runtime.photo_album_too_many": "写真が多すぎます。1つのアルバムに含められる画像は最大 {limit} 枚です。",
   "runtime.voice_audio_too_large": "音声がローカル音声文字起こしの上限を超えています。対応する最大サイズは {max_size_mb} MB です。",
   "runtime.provider_output_index": "{provider} 出力 {index}/{total}",
   "runtime.provider_output_single": "{provider} 出力",

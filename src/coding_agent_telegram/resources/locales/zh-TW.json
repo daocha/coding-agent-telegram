@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "代理執行失敗。",
   "runtime.live_agent_output": "代理即時輸出",
   "runtime.photo_too_large": "圖片太大。支援的最大大小為 5 MB。",
+  "runtime.photo_album_too_many": "圖片太多。單一相簿最多只能包含 {limit} 張圖片。",
   "runtime.voice_audio_too_large": "音訊太大，無法使用本機語音轉文字。支援的最大大小為 {max_size_mb} MB。",
   "runtime.provider_output_index": "{provider} 輸出 {index}/{total}",
   "runtime.provider_output_single": "{provider} 輸出",

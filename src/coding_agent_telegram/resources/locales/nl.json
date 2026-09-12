@@ -62,6 +62,7 @@
   "runtime.agent_run_failed": "De agent-run is mislukt.",
   "runtime.live_agent_output": "Live agentuitvoer",
   "runtime.photo_too_large": "De foto is te groot. De maximaal ondersteunde grootte is 5 MB.",
+  "runtime.photo_album_too_many": "Te veel foto's. Eén album mag maximaal {limit} afbeeldingen bevatten.",
   "runtime.voice_audio_too_large": "De audio is te groot voor lokale spraak-naar-tekst. De maximaal ondersteunde grootte is {max_size_mb} MB.",
   "runtime.provider_output_index": "{provider}-uitvoer {index}/{total}",
   "runtime.provider_output_single": "{provider}-uitvoer",

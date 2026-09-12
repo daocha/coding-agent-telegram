@@ -224,17 +224,30 @@ class PhotoAttachmentStore:
 
         attachments_root = self.attachments_root(project_folder)
         attachments_root.mkdir(parents=True, exist_ok=True)
-        target = attachments_root / f"{digest}{suffix}"
-        if not target.exists():
-            target.write_bytes(content)
-        return target
+        # Eight hex characters keep paths readable while still providing roughly
+        # four billion possible names. Should a prefix collision ever occur, grow
+        # only that filename until it is unambiguous.
+        for length in range(8, len(digest) + 1, 8):
+            target = attachments_root / f"{digest[:length]}{suffix}"
+            if not target.exists():
+                target.write_bytes(content)
+                return target
+            if target.read_bytes() == content:
+                return target
+        # A full SHA-256 collision is not realistically possible, but keep the
+        # fallback deterministic rather than overwriting an existing attachment.
+        raise PhotoAttachmentError("photo_name_collision", "Could not store photo attachment safely.")
 
-    def build_prompt(self, attachment_path: Path, project_path: Path, caption: str) -> str:
-        rel_path = os.path.relpath(attachment_path, start=project_path).replace(os.sep, "/")
-        lines = [
-            f"An image is attached at {rel_path}.",
-            IMAGE_INSPECTION_PROMPT,
-        ]
+    def build_prompt(self, attachment_paths: Sequence[Path], project_path: Path, caption: str) -> str:
+        rel_paths = [os.path.relpath(path, start=project_path).replace(os.sep, "/") for path in attachment_paths]
+        if len(rel_paths) == 1:
+            lines = [f"An image is attached at {rel_paths[0]}.", IMAGE_INSPECTION_PROMPT]
+        else:
+            lines = [
+                "Images are attached at:",
+                *(f"- {path}" for path in rel_paths),
+                "Open and inspect every image before answering.",
+            ]
         caption = caption.strip()
         if caption:
             lines.extend(["", "User caption:", caption])
