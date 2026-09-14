@@ -77,8 +77,8 @@ class SessionProviderCommandMixin:
                         callback_data=f"provider:set:{provider}",
                         api_kwargs={"style": "success"},
                     )
-                    for provider in SUPPORTED_PROVIDERS
                 ]
+                for provider in SUPPORTED_PROVIDERS
             ]
         )
 
