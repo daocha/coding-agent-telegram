@@ -751,6 +751,26 @@ Zu beachten ist, dass `/compact` selbst nicht kostenlos ist: Es funktioniert, in
 Wählst du **Zu neuer Sitzung wechseln**, wird eine brandneue, leere Sitzung gestartet und deine Nachricht dort fortgesetzt — benannt nach der alten Sitzung mit einem fortlaufenden `-newN`-Suffix (z. B. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` beim nächsten Wechsel), damit du sie in `/switch` weiterhin von der ursprünglichen unterscheiden kannst. Wählst du **Erst komprimieren**, wird die Sitzung zusammengefasst, eine neue Sitzung aus dieser Zusammenfassung gestartet und deine Nachricht anschließend auf der neuen Sitzung fortgesetzt — ähnlich benannt, aber mit einem `-resumeN`-Suffix (z. B. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` bei der nächsten Komprimierung). Wählst du **Trotzdem fortsetzen**, wird ganz normal auf der bestehenden Sitzung weitergemacht. Die gesamte Prüfung lässt sich mit `LONG_GAP_WARNING_ENABLED=false` deaktivieren.
 </details>
 
+<details>
+<summary><b>Claude-Sitzungen scheitern plötzlich mit „Failed to authenticate: OAuth session expired and could not be refreshed“</b></summary>
+
+Das kann selbst dann passieren, wenn `claude auth status` meldet, dass du eingeloggt bist, und sogar direkt nachdem du dich erneut eingeloggt hast. Die interaktive OAuth-Sitzung, die Claude Code normalerweise nutzt, kann speziell für die headless, losgelöste Subprozess-Art, wie dieser Bot Sitzungen erstellt, aufhören zu funktionieren, ohne dass dein eigentlicher Login schuld ist — das wurde nach einem automatischen Claude-Code-CLI-Update beobachtet und kann auch intermittierend auftreten.
+
+Wenn ein Nutzer live über `/new`, eine fortgesetzte Sitzung oder eine beliebige Nachricht darauf stößt, erkennt der Bot diesen speziellen Fehler und antwortet sofort mit Anweisungen zur Behebung, statt mit dem rohen CLI-Fehler.
+
+**So behebst du es** auf dem Host, auf dem der Bot läuft:
+
+1. Führe `claude setup-token` aus und genehmige den Zugriff im geöffneten Browser. **Das eigentliche Token wird danach in deinem Terminal ausgegeben (es beginnt mit `sk-ant-oat01-`), nirgendwo im Browser** — etwas von der Browserseite selbst statt aus dem Terminal zu kopieren ist ein häufiger Fehler und funktioniert nicht. Dadurch wird ein langlebiges (etwa 1 Jahr gültiges) Authentifizierungs-Token erstellt — Anthropics eigener unterstützter Mechanismus für headless/automatisierte Nutzung (derselbe, der für GitHub Actions verwendet wird). Anders als die interaktive OAuth-Sitzung hängt es nicht davon ab, dass Keychain-/Sitzungs-Refresh aus einem losgelösten Hintergrundprozess funktioniert, sodass es nach dem Einrichten voraussichtlich erst wieder angefasst werden muss, wenn es abläuft.
+2. Kopiere das ausgegebene Token und speichere es mit dem Befehl, der zu deiner Art passt, wie du diese App betreibst — die eigene Antwort des Bots wählt automatisch den richtigen aus, hier zur Referenz:
+   - Installiert über `pip` oder das Einzeiler-`install.sh` (Quick-Start-Variante A/B): `coding-agent-telegram claude-auth <token>`
+   - Läuft aus einem geklonten Repository mit `./startup.sh` (Quick-Start-Variante C): `./startup.sh claude-auth <token>`
+
+   Beide Befehle speichern das Token als `CLAUDE_CODE_OAUTH_TOKEN` in deiner Env-Datei und prüfen die Claude-Authentifizierung sofort erneut, sodass du sofort ein Bestanden/Fehlgeschlagen bekommst, statt blind neu zu starten und zu hoffen.
+3. Starte den Bot neu, damit der laufende Prozess die Änderung übernimmt.
+
+Du kannst den Befehl auch überspringen und `CLAUDE_CODE_OAUTH_TOKEN=<token>` direkt selbst in deiner Env-Datei (`.env_coding_agent_telegram`) setzen — die beiden obigen Befehle sind nur ein bequemer Wrapper genau dafür, plus Verifizierung.
+</details>
+
 ## 📌 Hinweise
 
 - Dieses Projekt ist für Nutzer gedacht, die die Agenten lokal auf ihrem eigenen Rechner ausführen.

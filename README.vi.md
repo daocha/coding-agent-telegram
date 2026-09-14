@@ -741,6 +741,26 @@ Lưu ý rằng bản thân `/compact` cũng không miễn phí chi phí này: n�
 Chọn **Chuyển sang session mới** sẽ khởi tạo một session mới hoàn toàn trống, rồi tiếp tục với tin nhắn của bạn ở đó — được đặt tên theo session cũ với hậu tố `-newN` tăng dần (ví dụ `fix-bug` → `fix-bug-new1` → `fix-bug-new2` nếu chuyển lần nữa), để bạn vẫn phân biệt được với bản gốc trong `/switch`. Chọn **Compact trước** sẽ tóm tắt session, khởi tạo một session mới từ bản tóm tắt đó, rồi tiếp tục với tin nhắn của bạn trên session mới — được đặt tên tương tự nhưng dùng hậu tố `-resumeN` (ví dụ `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` ở lần compact tiếp theo). Chọn **Cứ tiếp tục** thì chỉ đơn giản là tiếp tục trên session hiện có như bình thường. Có thể tắt toàn bộ cơ chế kiểm tra này bằng `LONG_GAP_WARNING_ENABLED=false`.
 </details>
 
+<details>
+<summary><b>Các phiên Claude đột nhiên thất bại với "Failed to authenticate: OAuth session expired and could not be refreshed"</b></summary>
+
+Điều này có thể xảy ra ngay cả khi `claude auth status` báo bạn đã đăng nhập, và ngay cả ngay sau khi bạn vừa đăng nhập lại. Phiên OAuth tương tác mà Claude Code thường dùng có thể ngừng hoạt động riêng đối với cách bot này tạo phiên theo kiểu headless, subprocess tách biệt, mà không phải do lỗi đăng nhập thực sự của bạn — điều này đã được ghi nhận sau khi Claude Code CLI tự động cập nhật, và cũng có thể xảy ra không liên tục.
+
+Nếu người dùng gặp phải trực tiếp qua `/new`, một phiên được resume, hoặc bất kỳ tin nhắn nào, bot sẽ nhận ra lỗi cụ thể này và trả lời ngay với hướng dẫn khắc phục, thay vì lỗi CLI thô.
+
+**Để khắc phục**, trên máy chủ đang chạy bot:
+
+1. Chạy `claude setup-token` và chấp thuận quyền truy cập trong trình duyệt vừa mở. **Token thật sau đó được in ra trong terminal của bạn (bắt đầu bằng `sk-ant-oat01-`), không hiển thị ở đâu trong trình duyệt** — sao chép thứ gì đó từ chính trang trình duyệt thay vì terminal là lỗi thường gặp và sẽ không hoạt động. Việc này tạo ra một token xác thực tồn tại lâu dài (khoảng 1 năm), là cơ chế được Anthropic chính thức hỗ trợ cho việc sử dụng headless/tự động hóa (giống cơ chế dùng cho GitHub Actions) — khác với phiên OAuth tương tác, nó không phụ thuộc vào việc Keychain/làm mới phiên hoạt động từ một tiến trình nền tách biệt, nên sau khi thiết lập, dự kiến sẽ không cần đụng vào lại cho đến khi nó hết hạn.
+2. Sao chép token được in ra, sau đó lưu nó bằng lệnh phù hợp với cách bạn chạy ứng dụng này — phản hồi của chính bot sẽ tự động chọn lệnh đúng, nhưng để tham khảo:
+   - Cài qua `pip` hoặc `install.sh` một dòng (Quick Start Cách A/B): `coding-agent-telegram claude-auth <token>`
+   - Chạy từ repository đã clone bằng `./startup.sh` (Quick Start Cách C): `./startup.sh claude-auth <token>`
+
+   Cả hai lệnh đều lưu token dưới dạng `CLAUDE_CODE_OAUTH_TOKEN` trong file env của bạn và kiểm tra lại ngay xác thực Claude, nên bạn biết ngay kết quả đạt/không đạt thay vì khởi động lại mù quáng rồi hy vọng.
+3. Khởi động lại bot để tiến trình đang chạy nhận thay đổi này.
+
+Bạn cũng có thể bỏ qua lệnh và tự đặt `CLAUDE_CODE_OAUTH_TOKEN=<token>` trực tiếp trong file env (`.env_coding_agent_telegram`) — hai lệnh ở trên chỉ là lớp bọc tiện lợi để làm đúng việc đó, cộng thêm bước xác minh.
+</details>
+
 ## 📌 Ghi chú
 
 - Dự án này dành cho người dùng chạy agent cục bộ trên chính máy của mình.

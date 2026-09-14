@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "正在建立工作階段...",
   "lifecycle.failed_create_session": "建立工作階段失敗。",
   "lifecycle.session_created_successfully": "工作階段建立成功：{session_name}\n工作階段 ID：{session_id}\n專案：{project_folder}\n提供者：{provider}\n分支：{branch_name}",
+  "health.claude_auth_failed_auth": "即使你自己的 Claude 登入狀態正常，Claude 都無法驗證這個工作階段（{detail}）。\n\n要在執行此 bot 的主機上修復：\n1. 執行：claude setup-token\n2. 在開啟的瀏覽器中核准存取，然後回到終端機——實際的權杖會顯示在終端機（以 sk-ant-oat01- 開頭），而不是在瀏覽器中。複製那個，然後執行：\n{claude_auth_hint}\n（該指令會幫你儲存並驗證。）\n3. 重新啟動 bot。\n\n其他選項請參閱 README 中的「常見問題 / 疑難排解」章節。",
   "provider.cli_not_found": "找不到 {provider_label} CLI：{bin_name}\n執行 /provider 選擇可用的提供者，或更新機器人設定。",
   "provider.status_available": "可用",
   "provider.status_missing": "缺少",

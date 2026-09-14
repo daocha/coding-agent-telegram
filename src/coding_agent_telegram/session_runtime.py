@@ -14,6 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
+from coding_agent_telegram.claude_health import claude_auth_failure_message, is_claude_auth_failure
 from coding_agent_telegram.config import AppConfig, DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES
 from coding_agent_telegram.diff_utils import (
     TEXTUAL_DIFF_UNAVAILABLE,
@@ -286,6 +287,27 @@ class SessionRuntime:
     def _t(self, update: Update | None, key: str, **kwargs) -> str:
         return translate(self._locale(update), key, **kwargs)
 
+    def _claude_auth_error_text(self, provider: str, error_message: Optional[str]) -> Optional[str]:
+        """Returns the same guidance text the background Claude auth health
+        check sends (see claude_health.py) when a run just failed for that
+        reason, so a user who hits it live (before the periodic check would
+        have caught it) gets the fix instructions immediately instead of the
+        raw CLI error."""
+        if provider != "claude" or not is_claude_auth_failure(error_message):
+            return None
+        return claude_auth_failure_message(self.cfg.locale, error_message)
+
+    def _agent_failure_text(self, update: Update | None, provider: str, result: AgentRunResult) -> str:
+        if getattr(result, "error_code", None) == "agent_aborted":
+            return self._t(update, "runtime.agent_run_aborted")
+        error_message = result.error_message
+        claude_auth_text = self._claude_auth_error_text(provider, error_message)
+        if claude_auth_text:
+            return claude_auth_text
+        if error_message:
+            return _sanitize_agent_error(error_message, error_code=getattr(result, "error_code", None))
+        return self._t(update, "runtime.agent_run_failed")
+
     def _take_reply_to_message_id(self, reply_state: dict[str, int | None]) -> int | None:
         reply_to_message_id = reply_state.get("reply_to_message_id")
         reply_state["reply_to_message_id"] = None
@@ -446,13 +468,7 @@ class SessionRuntime:
                 active_id,
                 result.error_message or "unknown error",
             )
-            error_text = (
-                _sanitize_agent_error(result.error_message, error_code=getattr(result, "error_code", None))
-                if result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, result)
             await send_text(update, context, error_text)
             return result
 
@@ -554,13 +570,7 @@ class SessionRuntime:
             )
             return None
         if not summary_result.success:
-            error_text = (
-                _sanitize_agent_error(summary_result.error_message, error_code=getattr(summary_result, "error_code", None))
-                if summary_result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(summary_result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, summary_result)
             await send_text(update, context, error_text)
             return summary_result
 
@@ -594,13 +604,7 @@ class SessionRuntime:
         if create_result is None:
             return None
         if not create_result.success or not create_result.session_id:
-            error_text = (
-                _sanitize_agent_error(create_result.error_message, error_code=getattr(create_result, "error_code", None))
-                if create_result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(create_result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, create_result)
             await send_text(update, context, error_text)
             return create_result
 
@@ -679,13 +683,7 @@ class SessionRuntime:
         if create_result is None:
             return None
         if not create_result.success or not create_result.session_id:
-            error_text = (
-                _sanitize_agent_error(create_result.error_message, error_code=getattr(create_result, "error_code", None))
-                if create_result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(create_result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, create_result)
             await send_text(update, context, error_text)
             return create_result
 

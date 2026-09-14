@@ -5,6 +5,7 @@ import re
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.claude_health import claude_auth_failure_message, is_claude_auth_failure
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.telegram_sender import send_text
 
@@ -157,7 +158,12 @@ class SessionLifecycleCommandMixin:
             return False
 
         if not result.success or not result.session_id:
-            await send_text(update, context, result.error_message or self._t(update, "lifecycle.failed_create_session"))
+            error_text = (
+                claude_auth_failure_message(self.deps.cfg.locale, result.error_message)
+                if provider == "claude" and is_claude_auth_failure(result.error_message)
+                else result.error_message or self._t(update, "lifecycle.failed_create_session")
+            )
+            await send_text(update, context, error_text)
             return False
 
         if use_session_id_as_name:

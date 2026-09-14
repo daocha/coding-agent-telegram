@@ -745,6 +745,26 @@ Codex と Copilot は自分たちの resume/list コマンドでこの「対話�
 **新しい session に切り替え** を選ぶと、まったく新しい空の session を開始し、そこであなたのメッセージを続行します — 名前は元の session 名に `-newN` という連番のサフィックスを付けたもの（例: `fix-bug` → `fix-bug-new1` → 再度切り替えると `fix-bug-new2`）になるので、`/switch` でも元の session と区別できます。**先に compact** を選ぶと、session を要約し、その要約から新しい session を開始したうえで、あなたのメッセージをその新しい session 上で続行します — 同様に命名されますが、代わりに `-resumeN` サフィックスが付きます（例: `fix-bug` → `fix-bug-resume1` → 次の compaction で `fix-bug-resume2`）。**そのまま続行** を選ぶと、既存の session 上でいつもどおり続行するだけです。この仕組み全体は `LONG_GAP_WARNING_ENABLED=false` で無効化できます。
 </details>
 
+<details>
+<summary><b>Claude セッションが突然「Failed to authenticate: OAuth session expired and could not be refreshed」で失敗する</b></summary>
+
+これは `claude auth status` がログイン済みと報告している場合でも、再ログイン直後であっても発生することがあります。Claude Code が通常使用するインタラクティブな OAuth セッションは、実際のログインには問題がなくても、この bot がセッションを作成する headless かつ切り離された subprocess 方式に限って動作しなくなることがあります — これは Claude Code CLI の自動更新後に観測されており、断続的に発生することもあります。
+
+ユーザーが `/new`、再開したセッション、または任意のメッセージでリアルタイムにこれに遭遇した場合、bot はこの特定の失敗を認識し、生の CLI エラーの代わりに修正手順を即座に返信します。
+
+**修正するには**、この bot を実行しているホスト上で:
+
+1. `claude setup-token` を実行し、開いたブラウザでアクセスを承認してください。**実際のトークンはその後ターミナルに表示されます（`sk-ant-oat01-` で始まります）。ブラウザ側には表示されません** — ターミナルではなくブラウザのページから何かをコピーしてしまうのはよくある間違いで、それでは動作しません。これにより長期間有効な（約 1 年間の）認証トークンが作成されます。これは headless/自動化用途向けの Anthropic 公式にサポートされた仕組みで（GitHub Actions でも使われているものと同じです）、インタラクティブな OAuth セッションとは異なり、切り離されたバックグラウンドプロセスからの Keychain・セッションリフレッシュの動作に依存しません。そのため一度設定すれば、期限が来るまで再度触る必要はないと想定されます。
+2. 表示されたトークンをコピーし、このアプリの実行方法に合ったコマンドで保存してください — bot 自身の返信が自動的に正しいものを選びますが、参考までに:
+   - `pip` またはワンライナーの `install.sh` でインストールした場合（Quick Start 方法A/B）: `coding-agent-telegram claude-auth <token>`
+   - クローンしたリポジトリから `./startup.sh` で実行している場合（Quick Start 方法C）: `./startup.sh claude-auth <token>`
+
+   どちらのコマンドも、トークンを env ファイルに `CLAUDE_CODE_OAUTH_TOKEN` として保存し、Claude の認証を即座に再チェックします。そのため、ブラインドな再起動と祈りではなく、その場で成功/失敗が分かります。
+3. bot を再起動して、実行中のプロセスに変更を反映させてください。
+
+コマンドを使わずに、env ファイル（`.env_coding_agent_telegram`）に直接 `CLAUDE_CODE_OAUTH_TOKEN=<token>` を自分で設定することもできます — 上記の 2 つのコマンドは、まさにそれを行い、さらに検証も行う便利なラッパーにすぎません。
+</details>
+
 ## 📌 メモ
 
 - このプロジェクトは、自分のマシンで agent をローカル実行するユーザー向けです。

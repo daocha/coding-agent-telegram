@@ -749,6 +749,26 @@ Codex 和 Copilot 在自己的 resume/list 指令中並不會做這種互動式�
 選擇**切換到新 session** 會開啟一個全新的空 session，並在其上繼續處理你的訊息——新 session 會以舊 session 名稱加上遞增的 `-newN` 後綴命名（例如 `fix-bug` → `fix-bug-new1` → 再次切換後變成 `fix-bug-new2`），讓你在 `/switch` 中仍能與原始 session 區分開來。選擇**先 compact**會先總結目前的 session，再根據該摘要開啟一個新 session，接著在新 session 上繼續處理你的訊息——命名方式類似，但改用 `-resumeN` 後綴（例如 `fix-bug` → `fix-bug-resume1` → 下次 compact 時變成 `fix-bug-resume2`）。選擇**直接繼續**則只會照常在現有的 session 上繼續。可以用 `LONG_GAP_WARNING_ENABLED=false` 關閉整個檢查機制。
 </details>
 
+<details>
+<summary><b>Claude session 突然出現 "Failed to authenticate: OAuth session expired and could not be refreshed" 錯誤</b></summary>
+
+即使 `claude auth status` 顯示你已登入，甚至剛重新登入之後，這個問題仍可能發生。Claude Code 平常使用的互動式 OAuth session，可能會單獨在這個 bot 建立 session 所用的 headless、獨立子程序方式下失效，而與你實際的登入狀態無關——這種情況在 Claude Code CLI 自動更新之後曾經出現過，也可能是間歇性的。
+
+如果使用者透過 `/new`、恢復某個 session，或傳送任何訊息即時遇到這個問題，bot 會辨識出這個特定的失敗，並立即回覆修復說明，而不是原始的 CLI 錯誤。
+
+**修復方法**：在執行此 bot 的主機上：
+
+1. 執行 `claude setup-token`，並在開啟的瀏覽器中核准存取。**實際的權杖之後會印在你的終端機（以 `sk-ant-oat01-` 開頭），瀏覽器中不會顯示**——從瀏覽器頁面本身而不是終端機複製內容是常見的錯誤，那樣行不通。這會建立一個長期有效（約 1 年）的驗證權杖——這是 Anthropic 官方支援的 headless/自動化用途機制（與 GitHub Actions 所用的相同）。與互動式 OAuth session 不同，它不依賴於從獨立背景程序中正常重新整理 Keychain/session，因此設定一次之後，預計在到期之前都不需要再次處理。
+2. 複製印出的權杖，然後依照你執行此應用程式的方式，用對應的指令儲存它——bot 自身的回覆會自動選擇正確的指令，這裡列出以供參考：
+   - 透過 `pip` 或一行式 `install.sh` 安裝（Quick Start 方案 A/B）：`coding-agent-telegram claude-auth <token>`
+   - 從 clone 下來的 repository 用 `./startup.sh` 執行（Quick Start 方案 C）：`./startup.sh claude-auth <token>`
+
+   這兩個指令都會將權杖以 `CLAUDE_CODE_OAUTH_TOKEN` 的形式儲存到你的 env 檔案中，並立即重新驗證 Claude 認證，因此你會馬上知道成功或失敗，而不是盲目重新啟動後乾等。
+3. 重新啟動 bot，讓執行中的程序套用這項變更。
+
+你也可以跳過這個指令，直接在你的 env 檔案（`.env_coding_agent_telegram`）中自行設定 `CLAUDE_CODE_OAUTH_TOKEN=<token>`——以上兩個指令只是對這項操作的便利封裝，外加自動驗證。
+</details>
+
 ## 📌 備註
 
 - 本專案面向在自己機器上本地執行 agent 的使用者。

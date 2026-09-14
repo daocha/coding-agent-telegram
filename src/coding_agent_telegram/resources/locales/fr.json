@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "Création de la session...",
   "lifecycle.failed_create_session": "Échec de la création de la session.",
   "lifecycle.session_created_successfully": "session créée avec succès : {session_name}\nID de session : {session_id}\nProjet : {project_folder}\nFournisseur : {provider}\nBranche : {branch_name}",
+  "health.claude_auth_failed_auth": "Claude n'a pas pu authentifier cette session, même si votre propre connexion Claude est valide ({detail}).\n\nPour corriger cela, sur l'hôte exécutant ce bot :\n1. Exécutez : claude setup-token\n2. Approuvez l'accès dans le navigateur qui s'ouvre, puis revenez au terminal -- le jeton réel y est affiché (commence par sk-ant-oat01-), pas dans le navigateur. Copiez-le, puis exécutez :\n{claude_auth_hint}\n(Cette commande l'enregistre et le vérifie pour vous.)\n3. Redémarrez le bot.\n\nConsultez la section « FAQ / Dépannage » du README pour d'autres options.",
   "provider.cli_not_found": "CLI {provider_label} introuvable : {bin_name}\nExécutez /provider pour choisir un fournisseur disponible ou mettre à jour la configuration du bot.",
   "provider.status_available": "disponible",
   "provider.status_missing": "manquant",
