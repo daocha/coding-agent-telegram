@@ -13,3 +13,4 @@ logs/
 .codex
 .copilot
 .env
+*.child.pid
