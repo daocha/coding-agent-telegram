@@ -13,6 +13,7 @@ from coding_agent_telegram.command_router import CommandRouter, RouterDeps
 from coding_agent_telegram.config import create_initial_env_file, load_config, resolve_env_file_path
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.logging_utils import setup_logging
+from coding_agent_telegram.polling_heartbeat import touch_heartbeat
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.stt_setup import ensure_stt_runtime_or_exit, offer_stt_install_for_new_env
 from coding_agent_telegram.usage_status import configure_persistence
@@ -20,6 +21,7 @@ from coding_agent_telegram.usage_status import configure_persistence
 
 logger = logging.getLogger(__name__)
 BOT_ID_HASH_PREFIX_LENGTH = 12
+POLLING_HEARTBEAT_INTERVAL_SECONDS = 60.0
 
 
 def _ensure_env_file() -> tuple[Path, str | None]:
@@ -48,8 +50,29 @@ def _env_locale_for_messages(env_path: Path) -> str:
     return "en"
 
 
-async def _run_polling_apps(apps: Sequence) -> None:
+async def _poll_heartbeat_loop(app, bot_label: str, heartbeat_file: Path) -> None:
+    """Periodically pings Telegram and touches the heartbeat file on success.
+
+    python-telegram-bot's own get_updates loop gives no external hook to observe
+    success/failure, so this issues its own lightweight, independent call on the
+    same event loop -- if the loop or the HTTP stack is wedged, this stops
+    touching the file too, which is exactly the staleness supervise.sh watches
+    for (it owns the decision to restart; this only reports liveness).
+    """
+    touch_heartbeat(heartbeat_file)
+    while True:
+        await asyncio.sleep(POLLING_HEARTBEAT_INTERVAL_SECONDS)
+        try:
+            await app.bot.get_me()
+        except Exception:
+            logger.warning("Heartbeat check failed for @%s; will retry.", bot_label, exc_info=True)
+            continue
+        touch_heartbeat(heartbeat_file)
+
+
+async def _run_polling_apps(apps: Sequence, heartbeat_file: Path) -> None:
     started_apps = []
+    heartbeat_tasks = []
     try:
         for app in apps:
             await app.initialize()
@@ -80,10 +103,15 @@ async def _run_polling_apps(apps: Sequence) -> None:
             await app.updater.start_polling()
             logger.info("Started polling for @%s", me.username or "unknown")
             started_apps.append(app)
+            heartbeat_tasks.append(
+                asyncio.create_task(_poll_heartbeat_loop(app, me.username or "unknown", heartbeat_file))
+            )
 
         logger.info("Started %d Telegram bot(s).", len(started_apps))
         await asyncio.Event().wait()
     finally:
+        for task in heartbeat_tasks:
+            task.cancel()
         for app in reversed(started_apps):
             if app.updater is not None:
                 await app.updater.stop()
@@ -93,6 +121,7 @@ async def _run_polling_apps(apps: Sequence) -> None:
 
 async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
     apps = []
+    heartbeat_file = cfg.app_internal_root / "polling.heartbeat"
     for token in cfg.telegram_bot_tokens:
         router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id=_bot_id_from_token(token)))
         app = build_application(token, router, allowed_chat_ids=cfg.allowed_chat_ids)
@@ -102,7 +131,7 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
         app.bot_data["max_telegram_message_length"] = cfg.max_telegram_message_length
         apps.append(app)
 
-    await _run_polling_apps(apps)
+    await _run_polling_apps(apps, heartbeat_file)
 
 
 def main() -> None:

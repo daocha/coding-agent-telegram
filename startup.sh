@@ -1,221 +1,207 @@
-#!/usr/bin/env bash
-
-set -euo pipefail
+#!/bin/bash
+# Entry point: run this to start the bot(s). One-time environment setup
+# (venv, deps, .env validation) lives in bootstrap.sh, run once below; this
+# script then supervises the actual bot process, keeping it alive across
+# crashes and network outages and recycling it if it hangs (see the
+# heartbeat watchdog below). Launched by launchd (see the plist in
+# ~/Library/LaunchAgents) but safe to run directly in the foreground too.
+#
+# Why the supervision exists: python-telegram-bot retries transient
+# get_updates errors on its own, but it has no way to notice its own event
+# loop wedging (a connection stuck past its configured timeout that never
+# actually fires). When that happens the process stays alive -- doing
+# nothing -- and nothing then brings it back on its own. This loop restarts
+# it, and waits for DNS to actually work again before each restart so the
+# fresh process does not immediately die the same way.
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-DEFAULT_ENV_FILE=".env_coding_agent_telegram"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-ENV_FILE="${ENV_FILE:-}"
-ENV_TEMPLATE_FILE="${ENV_TEMPLATE_FILE:-src/coding_agent_telegram/resources/.env.example}"
-VENV_DIR="${VENV_DIR:-.venv}"
-
-resolve_user_home() {
-  "$PYTHON_BIN" - <<'PY'
-from pathlib import Path
-import os
-import pwd
-
-sudo_user = os.getenv("SUDO_USER", "").strip()
-if sudo_user and sudo_user != "root":
-    try:
-        print(pwd.getpwnam(sudo_user).pw_dir)
-    except KeyError:
-        print(Path.home())
-else:
-    print(Path.home())
-PY
-}
-
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "Error: $PYTHON_BIN was not found in PATH." >&2
-  exit 1
+echo "$(date '+%Y-%m-%d %H:%M:%S') SUPERVISOR: running bootstrap.sh..."
+./bootstrap.sh
+bootstrap_status=$?
+if [ "$bootstrap_status" -ne 0 ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') SUPERVISOR: bootstrap.sh failed (status $bootstrap_status); not starting." >&2
+  exit "$bootstrap_status"
 fi
 
-APP_HOME_DIR="$(resolve_user_home)/.coding-agent-telegram"
-HOME_ENV_FILE="$APP_HOME_DIR/$DEFAULT_ENV_FILE"
-STATE_FILE_DEFAULT="$APP_HOME_DIR/state.json"
-STATE_BACKUP_FILE_DEFAULT="$APP_HOME_DIR/state.json.bak"
-LOG_DIR_DEFAULT="$APP_HOME_DIR/logs"
-LOCAL_PRETEND_VERSION="${SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM:-0.0.dev0}"
-INSTALL_STATE_FILE_NAME=".coding-agent-telegram-install-state"
-FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
+PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+APP_HOME_DIR="${HOME}/.coding-agent-telegram"
+HEARTBEAT_FILE="$APP_HOME_DIR/polling.heartbeat"
+CHILD_PID_FILE="$SCRIPT_DIR/coding-agent-telegram.child.pid"
 
-compute_install_fingerprint() {
-  local files=()
-  local file
-  for file in pyproject.toml setup.py; do
-    if [[ -f "$file" ]]; then
-      files+=("$file")
+# stt_setup.py reads this at runtime to point users at the installer if
+# speech-to-text isn't set up yet. bootstrap.sh runs as a separate
+# subprocess above, so its own `export` of this does not reach the bot
+# process started by the loop below -- it has to be set here instead.
+export CODING_AGENT_TELEGRAM_STT_INSTALL_HINT="./install-stt.sh"
+
+# Restart pacing: quick after the first failure, backing off to
+# MAX_BACKOFF while the network stays down, and reset once a run has
+# survived long enough to count as healthy.
+MIN_BACKOFF=5
+MAX_BACKOFF=300
+HEALTHY_RUN_SECONDS=60
+
+# Watchdog: the app touches HEARTBEAT_FILE roughly every 60s (see
+# cli.py's POLLING_HEARTBEAT_INTERVAL_SECONDS) for as long as polling is
+# actually alive. If it stops moving while the process is still alive, the
+# event loop is wedged -- polling is dead but nothing exits, which is the
+# failure that leaves the bot silently offline. Five missed beats is well
+# past any legitimate slow tick.
+HEARTBEAT_MAX_AGE=300
+WATCHDOG_CHECK_SECONDS=30
+
+# DNS probe between restarts. 60 x 5s = 5 minutes, after which we start
+# anyway and let the backoff loop handle it if it fails again.
+DNS_MAX_ATTEMPTS=60
+DNS_RETRY_SECONDS=5
+
+child=""
+sleeper=""
+shutting_down=0
+
+log() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') SUPERVISOR: $*"
+}
+
+# launchd (or launchctl stop) sends SIGTERM here. Forward it to the bot's
+# python child, wait for it to finish its own shutdown (PTB closes the
+# polling session cleanly on SIGTERM), and exit *without* restarting --
+# otherwise stopping the bot would be impossible.
+terminate() {
+  shutting_down=1
+  [ -n "$sleeper" ] && kill "$sleeper" 2>/dev/null
+  if [ -n "$child" ] && kill -0 "$child" 2>/dev/null; then
+    log "stop requested, forwarding SIGTERM to bot (pid $child)"
+    kill "$child" 2>/dev/null
+    for _ in $(seq 1 20); do
+      kill -0 "$child" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$child" 2>/dev/null; then
+      log "bot (pid $child) did not exit after 20s, sending SIGKILL"
+      kill -9 "$child" 2>/dev/null
+    fi
+  fi
+  rm -f "$CHILD_PID_FILE"
+  log "supervisor exiting"
+  exit 0
+}
+trap terminate TERM INT
+
+# Sleep that can still be interrupted by SIGTERM. Bash defers traps until the
+# current foreground command returns, so a plain `sleep 300` would make a
+# stop request hang for up to five minutes; `wait` is the one builtin a
+# signal cuts short.
+interruptible_sleep() {
+  sleep "$1" &
+  sleeper=$!
+  wait "$sleeper" 2>/dev/null
+  sleeper=""
+}
+
+# Wait for DNS, not just for IP reachability. Pinging 1.1.1.1 only proves
+# packets get out; the bot immediately needs to *resolve* api.telegram.org,
+# and this host has been observed with working routing but a stuck resolver.
+# Resolving through the same interpreter the bot actually runs under tests
+# exactly what it needs. Falls back to system python3 if the venv somehow
+# doesn't exist (bootstrap.sh above already guarantees it does).
+wait_for_dns() {
+  local probe="$PYTHON"
+  [ -x "$probe" ] || probe="python3"
+  local attempt=0
+  until "$probe" -c \
+    'import socket; socket.getaddrinfo("api.telegram.org", 443)' >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge "$DNS_MAX_ATTEMPTS" ]; then
+      log "DNS still down after $((DNS_MAX_ATTEMPTS * DNS_RETRY_SECONDS))s -- starting anyway."
+      return
+    fi
+    [ "$attempt" -eq 1 ] && log "waiting for DNS..."
+    interruptible_sleep "$DNS_RETRY_SECONDS"
+    [ "$shutting_down" -eq 1 ] && return
+  done
+  [ "$attempt" -gt 0 ] && log "DNS is back after $((attempt * DNS_RETRY_SECONDS))s."
+  return 0
+}
+
+# Prints the seconds since the heartbeat file was last written; returns
+# non-zero if there is no readable heartbeat yet, which callers treat as
+# "no opinion" rather than "wedged".
+heartbeat_age() {
+  [ -f "$HEARTBEAT_FILE" ] || return 1
+  local mtime
+  mtime=$(date -r "$HEARTBEAT_FILE" +%s 2>/dev/null) || return 1
+  echo $(( $(date +%s) - mtime ))
+}
+
+# A stale child pid file means a previous supervisor was SIGKILLed and left
+# the bot behind. Two pollers sharing a token make Telegram return 409
+# Conflict, so clear it out before starting a new one.
+if [ -f "$CHILD_PID_FILE" ]; then
+  stray="$(cat "$CHILD_PID_FILE" 2>/dev/null)"
+  if [ -n "$stray" ] && kill -0 "$stray" 2>/dev/null; then
+    log "found an orphaned bot process (pid $stray) -- stopping it first."
+    kill "$stray" 2>/dev/null
+    for _ in $(seq 1 20); do
+      kill -0 "$stray" 2>/dev/null || break
+      sleep 1
+    done
+    kill -0 "$stray" 2>/dev/null && kill -9 "$stray" 2>/dev/null
+  fi
+  rm -f "$CHILD_PID_FILE"
+fi
+
+backoff=$MIN_BACKOFF
+while :; do
+  wait_for_dns
+  [ "$shutting_down" -eq 1 ] && exit 0
+
+  # Drop the previous process's heartbeat: it is stale by definition, and
+  # the new one only writes its first beat once every bot has connected.
+  rm -f "$HEARTBEAT_FILE"
+  "$PYTHON" -m coding_agent_telegram &
+  child=$!
+  echo "$child" > "$CHILD_PID_FILE"
+  log "bot started (pid $child)."
+  started=$(date +%s)
+
+  # Watch the heartbeat while it runs. Plain `wait` would block until the
+  # process exits, which never happens in the wedged case.
+  while kill -0 "$child" 2>/dev/null; do
+    interruptible_sleep "$WATCHDOG_CHECK_SECONDS"
+    [ "$shutting_down" -eq 1 ] && exit 0
+    age=$(heartbeat_age) || continue
+    if [ "$age" -gt "$HEARTBEAT_MAX_AGE" ]; then
+      log "no heartbeat for ${age}s -- bot (pid $child) looks wedged, restarting it."
+      kill "$child" 2>/dev/null
+      for _ in $(seq 1 20); do
+        kill -0 "$child" 2>/dev/null || break
+        sleep 1
+      done
+      kill -0 "$child" 2>/dev/null && kill -9 "$child" 2>/dev/null
+      break
     fi
   done
-  if [[ "${#files[@]}" -eq 0 ]]; then
-    printf 'no-packaging-files\n'
-    return
+
+  wait "$child" 2>/dev/null
+  status=$?
+  child=""
+  rm -f "$CHILD_PID_FILE"
+  [ "$shutting_down" -eq 1 ] && exit 0
+
+  ran=$(( $(date +%s) - started ))
+  if [ "$ran" -ge "$HEALTHY_RUN_SECONDS" ]; then
+    backoff=$MIN_BACKOFF
   fi
-  shasum -a 256 "${files[@]}" | shasum -a 256 | awk '{print $1}'
-}
-
-if [[ -z "$ENV_FILE" ]]; then
-  if [[ -f "$HOME_ENV_FILE" ]]; then
-    ENV_FILE="$HOME_ENV_FILE"
-  elif [[ -f "$DEFAULT_ENV_FILE" ]]; then
-    ENV_FILE="$DEFAULT_ENV_FILE"
-  else
-    ENV_FILE="$HOME_ENV_FILE"
-  fi
-fi
-
-NEW_ENV_CREATED=0
-if [[ ! -f "$ENV_FILE" ]]; then
-  if [[ -f "$ENV_TEMPLATE_FILE" ]]; then
-    ENV_FILE_TARGET="$ENV_FILE" ENV_TEMPLATE_SOURCE="$ENV_TEMPLATE_FILE" PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY'
-from pathlib import Path
-import os
-from coding_agent_telegram.config import create_initial_env_file
-from coding_agent_telegram.i18n import translate
-
-env_path = Path(os.environ["ENV_FILE_TARGET"]).expanduser()
-template_path = Path(os.environ["ENV_TEMPLATE_SOURCE"]).expanduser()
-app_locale = create_initial_env_file(env_path, template_path)
-print(translate(app_locale, "bootstrap.env_created_locale_line", env_path=env_path, app_locale=app_locale))
-print(translate(app_locale, "bootstrap.env_created_change_line", env_path=env_path))
-PY
-    NEW_ENV_CREATED=1
-  else
-    echo "Error: $ENV_FILE is missing and $ENV_TEMPLATE_FILE was not found." >&2
-    exit 1
-  fi
-fi
-
-STATE_FILE="$STATE_FILE_DEFAULT"
-STATE_BACKUP_FILE="$STATE_BACKUP_FILE_DEFAULT"
-if [[ -f "$APP_HOME_DIR/state.json" ]]; then
-  STATE_FILE="$APP_HOME_DIR/state.json"
-elif [[ -f "./state.json" ]]; then
-  STATE_FILE="./state.json"
-fi
-if [[ -f "$APP_HOME_DIR/state.json.bak" ]]; then
-  STATE_BACKUP_FILE="$APP_HOME_DIR/state.json.bak"
-elif [[ -f "./state.json.bak" ]]; then
-  STATE_BACKUP_FILE="./state.json.bak"
-fi
-LOG_DIR="$LOG_DIR_DEFAULT"
-
-mkdir -p "$(dirname "$STATE_FILE")" "$(dirname "$STATE_BACKUP_FILE")" "$LOG_DIR"
-touch "$STATE_FILE" "$STATE_BACKUP_FILE"
-
-if [[ ! -d "$VENV_DIR" ]]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-fi
-
-source "$VENV_DIR/bin/activate"
-
-python -m pip install --upgrade pip >/dev/null
-INSTALL_STATE_FILE="$VENV_DIR/$INSTALL_STATE_FILE_NAME"
-CURRENT_INSTALL_FINGERPRINT="$(compute_install_fingerprint)"
-STORED_INSTALL_FINGERPRINT=""
-if [[ -f "$INSTALL_STATE_FILE" ]]; then
-  STORED_INSTALL_FINGERPRINT="$(<"$INSTALL_STATE_FILE")"
-fi
-
-NEEDS_REINSTALL=0
-if [[ "$FORCE_REINSTALL" == "1" ]]; then
-  NEEDS_REINSTALL=1
-elif ! python -c "import coding_agent_telegram" >/dev/null 2>&1; then
-  NEEDS_REINSTALL=1
-elif [[ "$CURRENT_INSTALL_FINGERPRINT" != "$STORED_INSTALL_FINGERPRINT" ]]; then
-  NEEDS_REINSTALL=1
-fi
-
-if [[ "$NEEDS_REINSTALL" == "1" ]]; then
-  echo "Installing local package into $VENV_DIR."
-  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CODING_AGENT_TELEGRAM="$LOCAL_PRETEND_VERSION" \
-    python -m pip install -e .
-  printf '%s\n' "$CURRENT_INSTALL_FINGERPRINT" > "$INSTALL_STATE_FILE"
-else
-  echo "Existing editable install detected; skipping reinstall."
-fi
-
-if [[ "$NEW_ENV_CREATED" == "1" ]]; then
-  python -m coding_agent_telegram.stt_setup offer \
-    --env-file "$ENV_FILE" \
-    --python-bin "$VENV_DIR/bin/python" \
-    --installer-label "./install-stt.sh"
-fi
-
-set -a
-source "$ENV_FILE"
-set +a
-
-required_vars=(
-  WORKSPACE_ROOT
-  TELEGRAM_BOT_TOKENS
-)
-
-for var_name in "${required_vars[@]}"; do
-  if [[ -z "${!var_name:-}" ]]; then
-    echo "Error: $var_name must be set in $ENV_FILE." >&2
-    echo "Post-installation checklist:"
-    echo "1. Edit $ENV_FILE"
-    echo "2. Set WORKSPACE_ROOT to the parent folder containing your projects"
-    echo "3. Set TELEGRAM_BOT_TOKENS to one or more bot tokens"
-    echo "4. Set ALLOWED_CHAT_IDS to your Telegram chat id(s)"
-    echo "5. Run: ./startup.sh"
-    exit 1
-  fi
+  log "bot exited (status $status) after ${ran}s -- restarting in ${backoff}s."
+  interruptible_sleep "$backoff"
+  [ "$shutting_down" -eq 1 ] && exit 0
+  # Back off while the failure keeps repeating, so a misconfiguration (bad
+  # token, missing .env) settles into one retry every MAX_BACKOFF seconds
+  # instead of filling the log at five-second intervals.
+  backoff=$((backoff * 2))
+  [ "$backoff" -gt "$MAX_BACKOFF" ] && backoff=$MAX_BACKOFF
 done
-
-if [[ -z "${ALLOWED_CHAT_IDS:-}" ]]; then
-  echo "Error: set ALLOWED_CHAT_IDS in $ENV_FILE." >&2
-  echo "Run: ./startup.sh after updating $ENV_FILE."
-  exit 1
-fi
-
-DEFAULT_AGENT_PROVIDER="${DEFAULT_AGENT_PROVIDER:-codex}"
-CODEX_BIN="${CODEX_BIN:-codex}"
-COPILOT_BIN="${COPILOT_BIN:-copilot}"
-CLAUDE_BIN="${CLAUDE_BIN:-claude}"
-
-case "$DEFAULT_AGENT_PROVIDER" in
-  codex)
-    if ! command -v "$CODEX_BIN" >/dev/null 2>&1; then
-      echo "Error: Codex CLI not found: $CODEX_BIN" >&2
-      echo "Check DEFAULT_AGENT_PROVIDER and CODEX_BIN in $ENV_FILE." >&2
-      echo "If this machine only has Copilot or Claude Code, set DEFAULT_AGENT_PROVIDER=copilot or claude." >&2
-      exit 1
-    fi
-    ;;
-  copilot)
-    if ! command -v "$COPILOT_BIN" >/dev/null 2>&1; then
-      echo "Error: Copilot CLI not found: $COPILOT_BIN" >&2
-      echo "Check DEFAULT_AGENT_PROVIDER and COPILOT_BIN in $ENV_FILE." >&2
-      echo "If this machine only has Codex or Claude Code, set DEFAULT_AGENT_PROVIDER=codex or claude." >&2
-      exit 1
-    fi
-    ;;
-  claude)
-    if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
-      echo "Error: Claude Code CLI not found: $CLAUDE_BIN" >&2
-      echo "Check DEFAULT_AGENT_PROVIDER and CLAUDE_BIN in $ENV_FILE." >&2
-      echo "If this machine only has Codex or Copilot, set DEFAULT_AGENT_PROVIDER=codex or copilot." >&2
-      exit 1
-    fi
-    ;;
-  *)
-    echo "Error: DEFAULT_AGENT_PROVIDER must be codex, copilot, or claude." >&2
-    exit 1
-    ;;
-esac
-
-echo "Post-installation guide:"
-echo "1. Confirm $ENV_FILE contains WORKSPACE_ROOT, TELEGRAM_BOT_TOKENS, and ALLOWED_CHAT_IDS."
-echo "2. State files are ready at $STATE_FILE and $STATE_BACKUP_FILE."
-echo "3. Application logs will be written under $LOG_DIR."
-echo "4. Optional voice-to-text: run ./install-stt.sh if you want local Whisper support."
-echo "5. Start the server with: ./startup.sh"
-echo "6. In Telegram, start conversations."
-echo "Starting coding-agent-telegram..."
-export CODING_AGENT_TELEGRAM_STT_INSTALL_HINT="./install-stt.sh"
-exec python -m coding_agent_telegram
