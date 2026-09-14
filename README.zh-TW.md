@@ -749,8 +749,6 @@ Codex 和 Copilot 在自己的 resume/list 指令中並不會做這種互動式�
 選擇**切換到新 session** 會開啟一個全新的空 session，並在其上繼續處理你的訊息——新 session 會以舊 session 名稱加上遞增的 `-newN` 後綴命名（例如 `fix-bug` → `fix-bug-new1` → 再次切換後變成 `fix-bug-new2`），讓你在 `/switch` 中仍能與原始 session 區分開來。選擇**先 compact**會先總結目前的 session，再根據該摘要開啟一個新 session，接著在新 session 上繼續處理你的訊息——命名方式類似，但改用 `-resumeN` 後綴（例如 `fix-bug` → `fix-bug-resume1` → 下次 compact 時變成 `fix-bug-resume2`）。選擇**直接繼續**則只會照常在現有的 session 上繼續。可以用 `LONG_GAP_WARNING_ENABLED=false` 關閉整個檢查機制。
 </details>
 
-## ❓ 常見問題 / 疑難排解
-
 <details>
 <summary><b>Claude session 突然出現 "Failed to authenticate: OAuth session expired and could not be refreshed" 錯誤</b></summary>
 
