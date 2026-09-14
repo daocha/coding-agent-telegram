@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "세션을 생성하는 중...",
   "lifecycle.failed_create_session": "세션 생성에 실패했습니다.",
   "lifecycle.session_created_successfully": "세션을 생성했습니다: {session_name}\n세션 ID: {session_id}\n프로젝트: {project_folder}\n프로바이더: {provider}\n브랜치: {branch_name}",
+  "health.claude_auth_failed_auth": "본인의 Claude 로그인은 정상인데도 Claude 가 이 세션을 인증하지 못했습니다 ({detail}).\n\n이 봇을 실행 중인 호스트에서 해결하려면:\n1. 다음을 실행하세요: claude setup-token\n2. 열린 브라우저에서 접근을 승인한 뒤 터미널로 돌아가세요 -- 실제 토큰은 브라우저가 아니라 터미널에 출력됩니다 (sk-ant-oat01- 로 시작). 그걸 복사한 뒤 다음을 실행하세요:\n{claude_auth_hint}\n(이 명령이 토큰을 저장하고 검증까지 해 줍니다.)\n3. 봇을 재시작하세요.\n\n다른 방법은 README의 \"FAQ / 문제 해결\" 섹션을 참고하세요.",
   "provider.cli_not_found": "{provider_label} CLI를 찾을 수 없습니다: {bin_name}\n/provider 를 실행해서 사용 가능한 프로바이더 를 선택하거나 봇 설정을 업데이트하세요.",
   "provider.status_available": "사용 가능",
   "provider.status_missing": "없음",

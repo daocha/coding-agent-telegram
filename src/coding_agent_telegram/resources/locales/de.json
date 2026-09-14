@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "Sitzung wird erstellt...",
   "lifecycle.failed_create_session": "Sitzung konnte nicht erstellt werden.",
   "lifecycle.session_created_successfully": "Sitzung erfolgreich erstellt: {session_name}\nSitzung-ID: {session_id}\nProjekt: {project_folder}\nAnbieter: {provider}\nZweig: {branch_name}",
+  "health.claude_auth_failed_auth": "Claude konnte diese Sitzung nicht authentifizieren, obwohl dein eigener Claude-Login in Ordnung ist ({detail}).\n\nSo behebst du das auf dem Host, auf dem dieser Bot läuft:\n1. Führe aus: claude setup-token\n2. Genehmige den Zugriff im geöffneten Browser, kehre dann zum Terminal zurück -- dort wird das eigentliche Token ausgegeben (beginnt mit sk-ant-oat01-), nicht im Browser. Kopiere es und führe dann aus:\n{claude_auth_hint}\n(Dieser Befehl speichert und überprüft es für dich.)\n3. Starte den Bot neu.\n\nWeitere Optionen findest du im README-Abschnitt „FAQ / Fehlerbehebung“.",
   "provider.cli_not_found": "{provider_label} CLI nicht gefunden: {bin_name}\nFühre /provider aus, um einen verfügbaren Anbieter zu wählen oder die Bot-Konfiguration zu aktualisieren.",
   "provider.status_available": "verfügbar",
   "provider.status_missing": "fehlt",

@@ -27,6 +27,15 @@ if [ "$bootstrap_status" -ne 0 ]; then
 fi
 
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+
+# One-shot passthrough: `./startup.sh claude-auth <token>` saves a
+# `claude setup-token` result and exits, instead of starting the supervisor
+# loop below. bootstrap.sh above already guarantees the venv exists.
+if [ "${1:-}" = "claude-auth" ]; then
+  shift
+  exec "$PYTHON" -m coding_agent_telegram claude-auth "$@"
+fi
+
 APP_HOME_DIR="${HOME}/.coding-agent-telegram"
 HEARTBEAT_FILE="$APP_HOME_DIR/polling.heartbeat"
 CHILD_PID_FILE="$SCRIPT_DIR/coding-agent-telegram.child.pid"

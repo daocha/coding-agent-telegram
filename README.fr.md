@@ -747,6 +747,26 @@ Notez que `/compact` lui-même n'est pas exempt de ce coût : il fonctionne en r
 Choisir **Basculer vers une nouvelle session** démarre une session toute neuve et vide, puis y poursuit avec votre message — nommée d'après l'ancienne session avec un suffixe `-newN` incrémental (par ex. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` si vous basculez à nouveau), pour pouvoir toujours la distinguer de l'originale dans `/switch`. Choisir **Compacter d'abord** résume la session, en démarre une nouvelle à partir de ce résumé, puis poursuit avec votre message sur la nouvelle session — nommée de façon similaire mais avec un suffixe `-resumeN` (par ex. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` à la compaction suivante). Choisir **Continuer quand même** poursuit simplement sur la session existante comme d'habitude. Désactivez tout le mécanisme avec `LONG_GAP_WARNING_ENABLED=false`.
 </details>
 
+<details>
+<summary><b>Les sessions Claude échouent soudainement avec « Failed to authenticate: OAuth session expired and could not be refreshed »</b></summary>
+
+Cela peut se produire même quand `claude auth status` indique que vous êtes connecté, et même juste après vous être reconnecté. La session OAuth interactive que Claude Code utilise normalement peut cesser de fonctionner spécifiquement pour la façon headless, en sous-processus détaché, dont ce bot crée les sessions, sans que votre connexion réelle soit en cause — cela a été observé après une mise à jour automatique du CLI Claude Code, et peut aussi être intermittent.
+
+Si un utilisateur y est confronté en direct via `/new`, une session reprise, ou n'importe quel message, le bot reconnaît cette défaillance spécifique et répond immédiatement avec des instructions de correction, au lieu de l'erreur brute du CLI.
+
+**Pour corriger cela**, sur l'hôte exécutant le bot :
+
+1. Exécutez `claude setup-token` et approuvez l'accès dans le navigateur qui s'ouvre. **Le jeton réel est ensuite affiché dans votre terminal (il commence par `sk-ant-oat01-`), pas dans le navigateur** — copier quelque chose depuis la page du navigateur au lieu du terminal est une erreur courante et ne fonctionnera pas. Cela crée un jeton d'authentification longue durée (environ 1 an), le mécanisme officiellement pris en charge par Anthropic pour un usage headless/automatisé (le même que celui utilisé pour GitHub Actions) — contrairement à la session OAuth interactive, il ne dépend pas du bon fonctionnement du trousseau/rafraîchissement de session depuis un processus d'arrière-plan détaché, donc une fois défini, il ne devrait pas avoir besoin d'être retouché avant son expiration.
+2. Copiez le jeton affiché, puis enregistrez-le avec la commande correspondant à votre façon d'exécuter cette application — la réponse du bot choisit automatiquement la bonne, mais pour référence :
+   - Installée via `pip` ou le `install.sh` en une ligne (Quick Start Variante A/B) : `coding-agent-telegram claude-auth <token>`
+   - Exécutée depuis un dépôt cloné avec `./startup.sh` (Quick Start Variante C) : `./startup.sh claude-auth <token>`
+
+   Les deux commandes enregistrent le jeton en tant que `CLAUDE_CODE_OAUTH_TOKEN` dans votre fichier env et revérifient immédiatement l'authentification Claude, afin d'obtenir un résultat immédiat plutôt qu'un redémarrage à l'aveugle.
+3. Redémarrez le bot pour que le processus en cours prenne en compte le changement.
+
+Vous pouvez aussi ignorer la commande et définir vous-même `CLAUDE_CODE_OAUTH_TOKEN=<token>` directement dans votre fichier env (`.env_coding_agent_telegram`) — les deux commandes ci-dessus ne sont qu'un wrapper pratique faisant exactement cela, avec vérification en plus.
+</details>
+
 ## 📌 Remarques
 
 - Ce projet est conçu pour les utilisateurs qui exécutent les agents localement sur leur propre machine.

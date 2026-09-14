@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "Đang tạo phiên...",
   "lifecycle.failed_create_session": "Tạo phiên thất bại.",
   "lifecycle.session_created_successfully": "Đã tạo phiên thành công: {session_name}\nPhiên ID: {session_id}\nDự án: {project_folder}\nNhà cung cấp: {provider}\nNhánh: {branch_name}",
+  "health.claude_auth_failed_auth": "Claude không thể xác thực phiên này, dù việc đăng nhập Claude của bạn vẫn bình thường ({detail}).\n\nĐể khắc phục, trên máy chủ đang chạy bot này:\n1. Chạy: claude setup-token\n2. Chấp thuận quyền truy cập trong trình duyệt vừa mở, sau đó quay lại terminal -- token thật được in ở đó (bắt đầu bằng sk-ant-oat01-), không phải trong trình duyệt. Sao chép nó, sau đó chạy:\n{claude_auth_hint}\n(Lệnh đó sẽ lưu và xác minh giúp bạn.)\n3. Khởi động lại bot.\n\nXem phần \"FAQ / Khắc phục sự cố\" trong README để biết các cách khác.",
   "provider.cli_not_found": "Không tìm thấy CLI {provider_label}: {bin_name}\nChạy /provider để chọn nhà cung cấp khả dụng hoặc cập nhật cấu hình bot.",
   "provider.status_available": "khả dụng",
   "provider.status_missing": "thiếu",
