@@ -240,15 +240,17 @@ class QueueProcessingMixin:
             chat_id=chat_id,
             text="\n".join(lines),
             reply_markup=InlineKeyboardMarkup(
-                [[
-                    InlineKeyboardButton(translate(locale, "queue.button_group"), callback_data="queuebatch:group"),
-                    InlineKeyboardButton(translate(locale, "queue.button_single"), callback_data="queuebatch:single"),
-                    InlineKeyboardButton(
-                        translate(locale, "queue.button_cancel"),
-                        callback_data="queuebatch:cancel",
-                        **self._negative_inline_button_kwargs(),
-                    ),
-                ]]
+                [
+                    [InlineKeyboardButton(translate(locale, "queue.button_group"), callback_data="queuebatch:group")],
+                    [InlineKeyboardButton(translate(locale, "queue.button_single"), callback_data="queuebatch:single")],
+                    [
+                        InlineKeyboardButton(
+                            translate(locale, "queue.button_cancel"),
+                            callback_data="queuebatch:cancel",
+                            **self._negative_inline_button_kwargs(),
+                        ),
+                    ],
+                ]
             ),
         )
 

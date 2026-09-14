@@ -1670,7 +1670,8 @@ def test_provider_command_sends_inline_buttons(tmp_path: Path):
     assert "Current provider: copilot" in message[1]
     keyboard = message[3]
     assert keyboard is not None
-    buttons = keyboard.inline_keyboard[0]
+    buttons = [button for row in keyboard.inline_keyboard for button in row]
+    assert [len(row) for row in keyboard.inline_keyboard] == [1, 1, 1]
     assert buttons[0].callback_data == "provider:set:codex"
     assert buttons[1].callback_data == "provider:set:copilot"
     assert buttons[2].callback_data == "provider:set:claude"
@@ -5226,7 +5227,8 @@ def test_grouped_queue_batch_requires_user_decision_then_processes_remaining_que
         assert len(prompt_messages) == 1
         keyboard = prompt_messages[0][3]
         assert keyboard is not None
-        buttons = keyboard.inline_keyboard[0]
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
+        assert [len(row) for row in keyboard.inline_keyboard] == [1, 1, 1]
         assert buttons[0].callback_data == "queuebatch:group"
         assert buttons[1].callback_data == "queuebatch:single"
         assert buttons[2].callback_data == "queuebatch:cancel"
@@ -6372,6 +6374,7 @@ def test_diff_limits_buttons_to_ten_per_page(monkeypatch, tmp_path: Path):
     rows = reply_markup.inline_keyboard
     file_buttons = [button for row in rows[:-1] for button in row]
     nav_buttons = rows[-1]
+    assert [len(row) for row in rows[:-1]] == [1] * 10
     assert len(file_buttons) == 10
     assert [button.text for button in file_buttons[:3]] == ["1. file_1.py", "2. file_2.py", "3. file_3.py"]
     assert [button.callback_data for button in file_buttons[-2:]] == ["diffshow:8", "diffshow:9"]
@@ -6862,7 +6865,16 @@ def test_handle_provider_sends_keyboard_when_no_args(tmp_path: Path):
 
     # Should have sent a message with a reply_markup keyboard
     assert len(bot.messages) >= 1
-    assert bot.messages[-1][3] is not None  # reply_markup present
+    reply_markup = bot.messages[-1][3]
+    assert reply_markup is not None
+    # Provider labels include availability/current-state text, so keep every
+    # provider on its own row to avoid Telegram truncating the labels.
+    assert [len(row) for row in reply_markup.inline_keyboard] == [1, 1, 1]
+    assert [button.callback_data for row in reply_markup.inline_keyboard for button in row] == [
+        "provider:set:codex",
+        "provider:set:copilot",
+        "provider:set:claude",
+    ]
 
 
 def test_handle_provider_localizes_prompt_text(tmp_path: Path):
@@ -10189,6 +10201,32 @@ def test_prompt_queue_batch_decision_early_exit_no_send_message(tmp_path: Path):
     context = SimpleNamespace(bot=SimpleNamespace())  # no send_message attr
     msgs = [QueuedQuestion(text="q1"), QueuedQuestion(text="q2")]
     asyncio.run(router._prompt_queue_batch_decision(123, context, msgs))  # should not raise
+
+
+def test_prompt_queue_batch_decision_uses_one_button_per_row(tmp_path: Path):
+    from coding_agent_telegram.router.queue_processing import QueuedQuestion
+
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    bot = FakeBot()
+
+    asyncio.run(
+        router._prompt_queue_batch_decision(
+            123,
+            SimpleNamespace(bot=bot),
+            [QueuedQuestion(text="q1"), QueuedQuestion(text="q2")],
+        )
+    )
+
+    keyboard = bot.messages[-1][3]
+    assert [len(row) for row in keyboard.inline_keyboard] == [1, 1, 1]
+    assert [button.callback_data for row in keyboard.inline_keyboard for button in row] == [
+        "queuebatch:group",
+        "queuebatch:single",
+        "queuebatch:cancel",
+    ]
 
 
 def test_clear_chat_message_queue_removes_processing_and_pending(tmp_path: Path):

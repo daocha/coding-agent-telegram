@@ -43,7 +43,9 @@ class ProjectCommandMixin:
                     callback_data=f"branchsource:{token}",
                 )
         )
-        return InlineKeyboardMarkup([buttons])
+        # Branch names are user-defined and can be long. Put each source on a
+        # separate row so Telegram does not truncate either choice.
+        return InlineKeyboardMarkup([[button] for button in buttons])
 
     def _multi_branch_source_keyboard(
         self,
@@ -80,8 +82,7 @@ class ProjectCommandMixin:
                         )
                     )
                     seen.add(key)
-            if row:
-                rows.append(row)
+            rows.extend([button] for button in row)
         if not rows:
             return None
         return InlineKeyboardMarkup(rows)

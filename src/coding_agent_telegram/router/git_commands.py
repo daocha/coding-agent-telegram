@@ -40,20 +40,16 @@ class GitCommandMixin:
         page = min(max(page, 0), total_pages - 1)
         start = page * self.DIFF_BUTTON_PAGE_SIZE
         page_files = tracked_files[start : start + self.DIFF_BUTTON_PAGE_SIZE]
-        row: list[InlineKeyboardButton] = []
         for offset, path in enumerate(page_files, start=1):
             absolute_index = start + offset
-            row.append(
+            rows.append(
+                [
                 InlineKeyboardButton(
                     self._diff_button_label(absolute_index, path),
                     callback_data=f"diffshow:{absolute_index - 1}",
                 )
+                ]
             )
-            if len(row) == 2:
-                rows.append(row)
-                row = []
-        if row:
-            rows.append(row)
         nav_row: list[InlineKeyboardButton] = []
         if page > 0:
             nav_row.append(InlineKeyboardButton(self._t(update, "diff.button_prev_page"), callback_data=f"diffpage:{page - 1}"))
