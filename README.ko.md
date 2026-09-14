@@ -743,6 +743,26 @@ Codex 와 Copilot 은 자체 resume/list 명령에서 이런 대화형 vs headle
 **새 session 으로 전환** 을 선택하면 완전히 새로운 빈 session 을 시작하고 그곳에서 메시지를 이어서 진행합니다 — 이름은 기존 session 이름에 증가하는 `-newN` 접미사를 붙인 형태(예: `fix-bug` → `fix-bug-new1` → 다시 전환하면 `fix-bug-new2`)이므로 `/switch` 에서도 원본과 구분할 수 있습니다. **먼저 compact** 를 선택하면 session 을 요약하고 그 요약으로 새 session 을 시작한 뒤, 새 session 에서 메시지를 이어서 진행합니다 — 비슷하게 이름이 붙지만 `-resumeN` 접미사를 사용합니다(예: `fix-bug` → `fix-bug-resume1` → 다음 compaction 에서 `fix-bug-resume2`). **그대로 진행** 을 선택하면 기존 session 에서 평소처럼 계속 진행합니다. 전체 검사는 `LONG_GAP_WARNING_ENABLED=false` 로 비활성화할 수 있습니다.
 </details>
 
+<details>
+<summary><b>Claude 세션이 갑자기 "Failed to authenticate: OAuth session expired and could not be refreshed" 로 실패합니다</b></summary>
+
+이 문제는 `claude auth status` 가 로그인되어 있다고 알려주는 상태에서도, 심지어 다시 로그인한 직후에도 발생할 수 있습니다. Claude Code 가 평소에 사용하는 대화형 OAuth 세션은 실제 로그인 자체는 문제가 없더라도, 이 봇이 세션을 생성하는 방식인 headless·분리된 subprocess 방식에서만 특정적으로 작동을 멈출 수 있습니다 — 이는 Claude Code CLI 자동 업데이트 이후에 관찰된 적이 있으며, 간헐적으로 발생할 수도 있습니다.
+
+사용자가 `/new`, 재개된 세션, 또는 아무 메시지로든 실시간으로 이 문제를 겪으면, 봇은 이 특정 실패를 인식하고 원본 CLI 오류 대신 해결 안내를 즉시 답장합니다.
+
+**해결하려면**, 이 봇을 실행 중인 호스트에서:
+
+1. `claude setup-token` 을 실행하고 열린 브라우저에서 접근을 승인하세요. **실제 토큰은 그 후 터미널에 출력됩니다 (`sk-ant-oat01-` 로 시작), 브라우저에는 표시되지 않습니다** — 터미널이 아니라 브라우저 페이지에서 무언가를 복사하는 건 흔한 실수이며 그렇게 하면 작동하지 않습니다. 이렇게 하면 장기간(약 1년) 유효한 인증 토큰이 생성됩니다. 이는 headless/자동화 용도를 위한 Anthropic 자체 지원 메커니즘(GitHub Actions 에서 쓰이는 것과 동일)으로, 대화형 OAuth 세션과 달리 분리된 백그라운드 프로세스에서 Keychain/세션 갱신이 동작하는지에 의존하지 않습니다. 따라서 한 번 설정하면 만료될 때까지는 다시 손댈 필요가 없을 것으로 예상됩니다.
+2. 출력된 토큰을 복사한 뒤, 이 앱을 실행하는 방식에 맞는 명령으로 저장하세요 — 봇 자체의 답장이 알맞은 것을 자동으로 골라주지만, 참고로:
+   - `pip` 또는 한 줄 `install.sh` 로 설치한 경우 (Quick Start 방법 A/B): `coding-agent-telegram claude-auth <token>`
+   - clone한 저장소에서 `./startup.sh` 로 실행하는 경우 (Quick Start 방법 C): `./startup.sh claude-auth <token>`
+
+   두 명령 모두 토큰을 env 파일에 `CLAUDE_CODE_OAUTH_TOKEN` 으로 저장하고, 즉시 Claude 인증을 다시 확인하므로, 무작정 재시작해서 결과를 기다리는 대신 바로 성공/실패를 알 수 있습니다.
+3. 실행 중인 프로세스가 변경 사항을 반영하도록 봇을 재시작하세요.
+
+명령을 사용하지 않고, env 파일(`.env_coding_agent_telegram`)에 직접 `CLAUDE_CODE_OAUTH_TOKEN=<token>` 을 설정할 수도 있습니다 — 위 두 명령은 바로 그 작업에 검증까지 더한 편의 래퍼일 뿐입니다.
+</details>
+
 ## 📌 참고
 
 - 이 프로젝트는 자기 머신에서 agent 를 로컬로 실행하는 사용자를 위해 설계되었습니다.

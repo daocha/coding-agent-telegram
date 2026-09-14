@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "正在创建会话...",
   "lifecycle.failed_create_session": "创建会话失败。",
   "lifecycle.session_created_successfully": "会话创建成功：{session_name}\n会话 ID：{session_id}\n项目：{project_folder}\n提供方：{provider}\n分支：{branch_name}",
+  "health.claude_auth_failed_auth": "即便你自己的 Claude 登录状态正常，Claude 也未能验证此会话的身份（{detail}）。\n\n要在运行此机器人的主机上修复：\n1. 运行：claude setup-token\n2. 在打开的浏览器中批准访问，然后回到终端——真正的令牌会显示在终端里（以 sk-ant-oat01- 开头），而不是在浏览器里。复制那个，然后运行：\n{claude_auth_hint}\n（该命令会为你保存并验证令牌。）\n3. 重启机器人。\n\n其他选项请参阅 README 中的「常见问题 / 故障排查」章节。",
   "provider.cli_not_found": "未找到 {provider_label} CLI：{bin_name}\n运行 /provider 选择可用的提供方，或更新机器人配置。",
   "provider.status_available": "可用",
   "provider.status_missing": "缺失",

@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "กำลังสร้าง เซสชัน...",
   "lifecycle.failed_create_session": "สร้าง เซสชัน ไม่สำเร็จ",
   "lifecycle.session_created_successfully": "สร้าง เซสชัน สำเร็จ: {session_name}\nเซสชัน ID: {session_id}\nโปรเจ็กต์: {project_folder}\nผู้ให้บริการ: {provider}\nสาขา: {branch_name}",
+  "health.claude_auth_failed_auth": "Claude ไม่สามารถยืนยันตัวตนสำหรับเซสชันนี้ได้ แม้ว่าการเข้าสู่ระบบ Claude ของคุณจะปกติดี ({detail})\n\nวิธีแก้ไข บนโฮสต์ที่รันบอทนี้:\n1. รันคำสั่ง: claude setup-token\n2. อนุมัติการเข้าถึงในเบราว์เซอร์ที่เปิดขึ้น แล้วกลับมาที่เทอร์มินัล -- โทเค็นจริงจะแสดงที่เทอร์มินัล (ขึ้นต้นด้วย sk-ant-oat01-) ไม่ใช่ในเบราว์เซอร์ คัดลอกอันนั้น แล้วรัน:\n{claude_auth_hint}\n(คำสั่งนี้จะบันทึกและตรวจสอบให้โดยอัตโนมัติ)\n3. รีสตาร์ทบอท\n\nดูตัวเลือกอื่น ๆ ได้ที่หัวข้อ \"FAQ / การแก้ปัญหา\" ใน README",
   "provider.cli_not_found": "ไม่พบ {provider_label} CLI: {bin_name}\nใช้ /provider เพื่อเลือก ผู้ให้บริการ ที่พร้อมใช้งาน หรืออัปเดตการตั้งค่า บอท",
   "provider.status_available": "พร้อมใช้งาน",
   "provider.status_missing": "ไม่พบ",

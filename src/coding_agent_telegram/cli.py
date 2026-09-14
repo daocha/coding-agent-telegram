@@ -3,14 +3,24 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 from coding_agent_telegram.agent_runner import MultiAgentRunner
 from coding_agent_telegram.bot import build_application, default_bot_commands, initialize_bot_commands
+from coding_agent_telegram.claude_health import check_claude_auth
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
-from coding_agent_telegram.config import create_initial_env_file, load_config, resolve_env_file_path
+from coding_agent_telegram.config import (
+    AppConfig,
+    create_initial_env_file,
+    load_config,
+    read_env_value,
+    remove_env_value,
+    resolve_env_file_path,
+    upsert_env_value,
+)
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.logging_utils import setup_logging
 from coding_agent_telegram.polling_heartbeat import touch_heartbeat
@@ -134,7 +144,145 @@ async def _run(cfg, store: SessionStore, runner: MultiAgentRunner) -> None:
     await _run_polling_apps(apps, heartbeat_file)
 
 
+def _build_runner(cfg: AppConfig, *, claude_model: Optional[str] = None) -> MultiAgentRunner:
+    return MultiAgentRunner(
+        codex_bin=cfg.codex_bin,
+        copilot_bin=cfg.copilot_bin,
+        approval_policy=cfg.codex_approval_policy,
+        sandbox_mode=cfg.codex_sandbox_mode,
+        codex_model=cfg.codex_model,
+        copilot_model=cfg.copilot_model,
+        copilot_autopilot=cfg.copilot_autopilot,
+        copilot_no_ask_user=cfg.copilot_no_ask_user,
+        copilot_allow_all=cfg.copilot_allow_all,
+        copilot_allow_all_tools=cfg.copilot_allow_all_tools,
+        copilot_allow_tools=cfg.copilot_allow_tools,
+        copilot_deny_tools=cfg.copilot_deny_tools,
+        copilot_available_tools=cfg.copilot_available_tools,
+        claude_bin=cfg.claude_bin,
+        claude_model=claude_model if claude_model is not None else cfg.claude_model,
+        claude_permission_mode=cfg.claude_permission_mode,
+        claude_allowed_tools=cfg.claude_allowed_tools,
+        claude_disallowed_tools=cfg.claude_disallowed_tools,
+        hard_timeout_seconds=cfg.agent_hard_timeout_seconds,
+    )
+
+
+CLAUDE_AUTH_SUBCOMMAND = "claude-auth"
+# Deliberately not cfg.claude_model: an operator may have that set to a
+# premium/expensive alias (e.g. "fable" or "opus"), and this check only needs
+# a trivial reply -- Haiku is the cheapest current tier and is enough to prove
+# auth works end-to-end.
+CLAUDE_AUTH_VERIFY_MODEL = "haiku"
+
+
+def _prompt_yes_no(prompt: str, *, default: bool = True) -> bool:
+    suffix = "[Y/n]" if default else "[y/N]"
+    try:
+        answer = input(f"{prompt} {suffix} ").strip().lower()
+    except EOFError:
+        return default
+    if not answer:
+        return default
+    return answer in {"y", "yes"}
+
+
+def _run_claude_auth_subcommand(argv: list[str]) -> None:
+    """Handles `coding-agent-telegram claude-auth <token>` (and the equivalent
+    `./startup.sh claude-auth <token>`): saves a `claude setup-token` result as
+    CLAUDE_CODE_OAUTH_TOKEN, optionally verifying it immediately so the operator
+    gets a clear pass/fail instead of a blind restart-and-hope. Verification is
+    opt-in and clearly costed up front since it's a real, billable API call
+    (see check_claude_auth's docstring for why a cheap `claude auth status`-style
+    check isn't a substitute).
+    """
+    if len(argv) != 1 or not argv[0].strip():
+        print(f"Usage: coding-agent-telegram {CLAUDE_AUTH_SUBCOMMAND} <token>", file=sys.stderr)
+        print("Get <token> by running: claude setup-token", file=sys.stderr)
+        print(
+            "Approve access in the browser it opens, then copy the token it prints in the TERMINAL",
+            file=sys.stderr,
+        )
+        print(
+            "afterwards (starts with sk-ant-oat01-) -- not anything shown on the browser page itself.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    token = argv[0].strip()
+
+    if not token.startswith("sk-ant-"):
+        print(
+            "Warning: that doesn't look like a Claude token (expected it to start with sk-ant-oat01-).",
+            file=sys.stderr,
+        )
+        print(
+            "Make sure you copied the token `claude setup-token` printed in the TERMINAL after you",
+            file=sys.stderr,
+        )
+        print(
+            "approved access in the browser -- not anything shown on the browser page itself.",
+            file=sys.stderr,
+        )
+        print("Saving and verifying it anyway in case this is a valid but unexpected format...", file=sys.stderr)
+
+    env_path, _ = _ensure_env_file()
+    previous_token = read_env_value(env_path, "CLAUDE_CODE_OAUTH_TOKEN")
+
+    should_verify = _prompt_yes_no(
+        f"Verify this token now? This sends one small request to Claude (using '{CLAUDE_AUTH_VERIFY_MODEL}', "
+        "the cheapest model, regardless of your configured default) to confirm it actually authenticates -- "
+        "a small amount of real API usage, typically a fraction of a cent.",
+        default=True,
+    )
+
+    upsert_env_value(
+        env_path,
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        token,
+        comments=[
+            "# Long-lived token from `claude setup-token`, used instead of the interactive",
+            "# OAuth session for headless Claude session creation.",
+        ],
+    )
+    print(f"Saved CLAUDE_CODE_OAUTH_TOKEN to {env_path}.")
+
+    if not should_verify:
+        print("Skipped verification. Restart the bot for the token to take effect.")
+        return
+
+    try:
+        cfg = load_config(env_path)
+    except ValueError as exc:
+        print(f"Saved, but could not load the config to verify it: {exc}", file=sys.stderr)
+        print("Restart the bot for the token to take effect.")
+        return
+
+    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    print(f"Verifying with {CLAUDE_AUTH_VERIFY_MODEL}...")
+    verify_runner = _build_runner(cfg, claude_model=CLAUDE_AUTH_VERIFY_MODEL)
+    result = check_claude_auth(verify_runner, cfg.app_internal_root / "claude_health_check")
+    if result.healthy:
+        print("Verified: Claude can authenticate headless sessions now.")
+        print("Restart the bot for the running process to pick it up.")
+        return
+
+    print(f"Verification failed: {result.detail}", file=sys.stderr)
+    if previous_token is not None:
+        upsert_env_value(env_path, "CLAUDE_CODE_OAUTH_TOKEN", previous_token)
+        print("Rolled back CLAUDE_CODE_OAUTH_TOKEN to its previous value.", file=sys.stderr)
+    else:
+        remove_env_value(env_path, "CLAUDE_CODE_OAUTH_TOKEN")
+        print("Removed the unverified token (no CLAUDE_CODE_OAUTH_TOKEN was set before).", file=sys.stderr)
+    print("Double-check the token, or see the README's Claude Auth Troubleshooting section.", file=sys.stderr)
+    raise SystemExit(1)
+
+
 def main() -> None:
+    argv = sys.argv[1:]
+    if argv and argv[0] == CLAUDE_AUTH_SUBCOMMAND:
+        _run_claude_auth_subcommand(argv[1:])
+        return
+
     env_path, created_locale = _ensure_env_file()
     if created_locale is not None:
         print(
@@ -195,27 +343,7 @@ def main() -> None:
             cleared_pending_actions,
             "y" if cleared_pending_actions == 1 else "ies",
         )
-    runner = MultiAgentRunner(
-        codex_bin=cfg.codex_bin,
-        copilot_bin=cfg.copilot_bin,
-        approval_policy=cfg.codex_approval_policy,
-        sandbox_mode=cfg.codex_sandbox_mode,
-        codex_model=cfg.codex_model,
-        copilot_model=cfg.copilot_model,
-        copilot_autopilot=cfg.copilot_autopilot,
-        copilot_no_ask_user=cfg.copilot_no_ask_user,
-        copilot_allow_all=cfg.copilot_allow_all,
-        copilot_allow_all_tools=cfg.copilot_allow_all_tools,
-        copilot_allow_tools=cfg.copilot_allow_tools,
-        copilot_deny_tools=cfg.copilot_deny_tools,
-        copilot_available_tools=cfg.copilot_available_tools,
-        claude_bin=cfg.claude_bin,
-        claude_model=cfg.claude_model,
-        claude_permission_mode=cfg.claude_permission_mode,
-        claude_allowed_tools=cfg.claude_allowed_tools,
-        claude_disallowed_tools=cfg.claude_disallowed_tools,
-        hard_timeout_seconds=cfg.agent_hard_timeout_seconds,
-    )
+    runner = _build_runner(cfg)
     try:
         asyncio.run(_run(cfg, store, runner))
     except KeyboardInterrupt:

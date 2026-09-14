@@ -231,6 +231,52 @@ def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None
     return app_locale
 
 
+def upsert_env_value(
+    env_path: Path,
+    key: str,
+    value: str,
+    *,
+    comments: Optional[list[str]] = None,
+) -> None:
+    """Insert or overwrite a single ``KEY=value`` line in an env file in place,
+    preserving the rest of the file. Creates the file's parent dir if needed.
+    """
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    replacement = f"{key}={value}"
+    for index, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[index] = replacement
+            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return
+    if lines and lines[-1].strip():
+        lines.append("")
+    if comments:
+        lines.extend(comments)
+    lines.append(replacement)
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_env_value(env_path: Path, key: str) -> Optional[str]:
+    """Return the current value of ``key`` in an env file, or None if unset."""
+    if not env_path.exists():
+        return None
+    prefix = f"{key}="
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):]
+    return None
+
+
+def remove_env_value(env_path: Path, key: str) -> None:
+    """Remove the ``key=...`` line from an env file in place, if present."""
+    if not env_path.exists():
+        return
+    prefix = f"{key}="
+    lines = [line for line in env_path.read_text(encoding="utf-8").splitlines() if not line.startswith(prefix)]
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file is not None:
         return env_file

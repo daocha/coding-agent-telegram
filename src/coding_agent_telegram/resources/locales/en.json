@@ -169,6 +169,7 @@
   "lifecycle.creating_session": "Creating session...",
   "lifecycle.failed_create_session": "Failed to create a session.",
   "lifecycle.session_created_successfully": "Session created successfully: {session_name}\nSession ID: {session_id}\nProject: {project_folder}\nProvider: {provider}\nBranch: {branch_name}",
+  "health.claude_auth_failed_auth": "Claude couldn't authenticate this session, even though your own Claude login is fine ({detail}).\n\nTo fix, on the host running this bot:\n1. Run: claude setup-token\n2. Approve access in the browser it opens, then go back to the terminal -- the actual token is printed there (starts with sk-ant-oat01-), not shown in the browser. Copy that, then run:\n{claude_auth_hint}\n(That command saves and verifies it for you.)\n3. Restart the bot.\n\nSee the README's FAQ / Troubleshooting section for other options.",
   "provider.cli_not_found": "{provider_label} CLI not found: {bin_name}\nRun /provider to choose an available provider or update the bot config.",
   "provider.status_available": "available",
   "provider.status_missing": "missing",

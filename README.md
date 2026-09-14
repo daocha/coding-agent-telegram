@@ -771,6 +771,26 @@ Note that `/compact` itself is not free of this cost: it works by resuming the c
 Choosing **Switch to new session** starts a brand-new, empty session and continues with your message there — named after the old session with an incrementing `-newN` suffix (e.g. `fix-bug` → `fix-bug-new1` → `fix-bug-new2` if you switch again), so you can still tell it apart from the original in `/switch`. Choosing **Compact first** summarizes the session, starts a fresh one from that summary, and then continues with your message on the new session — named similarly but with a `-resumeN` suffix instead (e.g. `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` on the next compaction). Choosing **Proceed anyway** just continues on the existing session as normal. Disable the whole check with `LONG_GAP_WARNING_ENABLED=false`.
 </details>
 
+<details>
+<summary><b>Claude sessions suddenly fail with "Failed to authenticate: OAuth session expired and could not be refreshed"</b></summary>
+
+This can happen even when `claude auth status` reports you're logged in, and even right after you've logged in again. The interactive OAuth session Claude Code normally uses can stop working specifically for the headless, detached-subprocess way this bot creates sessions, without your actual login being at fault — this has been observed after a Claude Code CLI auto-update, and can also be intermittent.
+
+If a user hits it live via `/new`, a resumed session, or any message, the bot recognizes this specific failure and replies with fix instructions immediately, instead of the raw CLI error.
+
+**To fix it**, on the host running the bot:
+
+1. Run `claude setup-token` and approve access in the browser it opens. **The actual token is then printed back in your terminal (it starts with `sk-ant-oat01-`), not shown anywhere in the browser** — copying something from the browser page itself instead of the terminal is a common mistake and won't work. This creates a long-lived (about 1 year) authentication token, which is Anthropic's own supported mechanism for headless/automated use (the same one used for GitHub Actions) — unlike the interactive OAuth session, it doesn't depend on Keychain/session refresh working from a detached background process, so once set it isn't expected to need touching again until it's due to expire.
+2. Copy the token it prints, then save it with whichever command matches how you run this app — the bot's own reply picks the right one automatically, but for reference:
+   - Installed via `pip` or the one-line `install.sh` (Quick Start Options A/B): `coding-agent-telegram claude-auth <token>`
+   - Running from a cloned repository with `./startup.sh` (Quick Start Option C): `./startup.sh claude-auth <token>`
+
+   Either command saves the token as `CLAUDE_CODE_OAUTH_TOKEN` in your env file and immediately re-checks Claude auth, so you get a pass/fail right away instead of a blind restart-and-hope.
+3. Restart the bot so the running process picks up the change.
+
+You can also skip the command and set `CLAUDE_CODE_OAUTH_TOKEN=<token>` directly in your env file (`.env_coding_agent_telegram`) yourself — the two commands above are just a convenience wrapper around doing exactly that, plus verification.
+</details>
+
 ## 📌 Notes
 
 - This project is designed for users running the agents locally on their own machine.

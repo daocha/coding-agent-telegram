@@ -166,6 +166,7 @@
   "lifecycle.creating_session": "Sessie wordt aangemaakt...",
   "lifecycle.failed_create_session": "Maken van de sessie is mislukt.",
   "lifecycle.session_created_successfully": "Sessie succesvol aangemaakt: {session_name}\nSessie ID: {session_id}\nProject: {project_folder}\nAanbieder: {provider}\nTak: {branch_name}",
+  "health.claude_auth_failed_auth": "Claude kon deze sessie niet authenticeren, ook al is je eigen Claude-login in orde ({detail}).\n\nOm dit op te lossen, op de host waarop deze bot draait:\n1. Voer uit: claude setup-token\n2. Keur de toegang goed in de geopende browser en ga dan terug naar de terminal -- het echte token wordt daar getoond (begint met sk-ant-oat01-), niet in de browser. Kopieer dat en voer dan uit:\n{claude_auth_hint}\n(Dat commando slaat het op en verifieert het voor je.)\n3. Herstart de bot.\n\nZie de README-sectie \"FAQ / Probleemoplossing\" voor andere opties.",
   "provider.cli_not_found": "{provider_label} CLI niet gevonden: {bin_name}\nVoer /provider uit om een beschikbare aanbieder te kiezen of de botconfiguratie bij te werken.",
   "provider.status_available": "beschikbaar",
   "provider.status_missing": "ontbreekt",
