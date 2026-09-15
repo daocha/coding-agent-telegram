@@ -284,6 +284,14 @@ The bot currently accepts:
     <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>Choose the model for the active session, from the current provider's model list. The selection is stored on that session in <code>state.json</code> and is used whenever the session is resumed. Starting a new session (<code>/new</code>, <code>/switch</code> to a fresh session, or <code>/compact</code>) always resets to the provider's configured default model.</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>Set a specific model id not on the curated list. If it's not already a known choice, the bot first probes the CLI with a throwaway read-only call to confirm the id is actually accepted before saving it — if the CLI rejects it, the error is returned to the chat and nothing is saved.</td>
+  </tr>
+  <tr>
     <td><code>/project &lt;project_folder&gt;</code></td>
     <td>Set the current project folder. If the folder does not exist, the app creates it and marks it trusted. If it already exists and is still untrusted, the app asks you to trust it explicitly.</td>
   </tr>
@@ -426,6 +434,18 @@ The bot currently accepts:
     Examples: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
     <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a>
     </td>
+  </tr>
+  <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td>Comma-separated model list offered by the <code>/model</code> command for Codex. When unset, the bundled <code>.env.example</code> value is used.</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>Comma-separated model list offered by the <code>/model</code> command for Copilot. When unset, the bundled <code>.env.example</code> value is used.</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>Comma-separated model list offered by the <code>/model</code> command for Claude Code. When unset, the bundled <code>.env.example</code> value is used; if the template is unavailable, it falls back to <code>sonnet,opus,fable,haiku</code>.</td>
   </tr>
   <tr>
     <td><code>CODEX_APPROVAL_POLICY</code></td>

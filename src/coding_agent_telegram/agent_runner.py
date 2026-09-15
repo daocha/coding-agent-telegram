@@ -780,10 +780,12 @@ class MultiAgentRunner:
         image_paths: Sequence[Path] = (),
         *,
         for_session_creation: bool = False,
+        model: Optional[str] = None,
     ) -> list[str]:
         args = []
-        if self.codex_model:
-            args.extend(["-m", self.codex_model])
+        effective_model = model if model is not None else self.codex_model
+        if effective_model:
+            args.extend(["-m", effective_model])
         for image_path in image_paths:
             args.extend(["--image", str(image_path)])
         # Session creation only primes the CLI to hand back a session ID, so it runs
@@ -814,10 +816,13 @@ class MultiAgentRunner:
         user_message: str,
         skip_git_repo_check: bool,
         image_paths: Sequence[Path] = (),
+        *,
+        model: Optional[str] = None,
     ) -> list[str]:
         args = []
-        if self.codex_model:
-            args.extend(["-m", self.codex_model])
+        effective_model = model if model is not None else self.codex_model
+        if effective_model:
+            args.extend(["-m", effective_model])
         for image_path in image_paths:
             args.extend(["--image", str(image_path)])
         args.extend(
@@ -840,9 +845,11 @@ class MultiAgentRunner:
         user_message: str,
         skip_git_repo_check: bool,
         image_paths: Sequence[Path] = (),
+        *,
+        model: Optional[str] = None,
     ) -> list[str]:
         return [
-            *self._codex_resume_base(user_message, skip_git_repo_check, image_paths)[:-1],
+            *self._codex_resume_base(user_message, skip_git_repo_check, image_paths, model=model)[:-1],
             session_id,
             f"{self.PROMPT_PREFIX}{user_message}",
         ]
@@ -856,6 +863,7 @@ class MultiAgentRunner:
         skip_git_repo_check: bool,
         *,
         for_session_creation: bool = False,
+        model: Optional[str] = None,
     ) -> list[str]:
         # Session creation only primes the CLI to hand back a session ID, so the
         # operator's permission grants are withheld and the throwaway prompt cannot be
@@ -865,8 +873,9 @@ class MultiAgentRunner:
         # before each tool use, and `--no-ask-user` (deliberately not gated here) turns
         # that into a decline rather than a hang in this non-interactive run.
         args = []
-        if self.copilot_model:
-            args.extend(["--model", self.copilot_model])
+        effective_model = model if model is not None else self.copilot_model
+        if effective_model:
+            args.extend(["--model", effective_model])
         if self.copilot_autopilot and not for_session_creation:
             args.append("--autopilot")
         if self.copilot_no_ask_user:
@@ -890,10 +899,17 @@ class MultiAgentRunner:
         )
         return args
 
-    def _claude_base(self, user_message: str, *, for_session_creation: bool = False) -> list[str]:
+    def _claude_base(
+        self,
+        user_message: str,
+        *,
+        for_session_creation: bool = False,
+        model: Optional[str] = None,
+    ) -> list[str]:
         args = []
-        if self.claude_model:
-            args.extend(["--model", self.claude_model])
+        effective_model = model if model is not None else self.claude_model
+        if effective_model:
+            args.extend(["--model", effective_model])
         # Session creation only primes the CLI to hand back a session ID, so it runs
         # read-only. Without this the priming prompt inherits full autopilot
         # permissions and the agent may act on it (e.g. creating a git branch named
@@ -926,6 +942,7 @@ class MultiAgentRunner:
         skip_git_repo_check: bool = False,
         image_paths: Sequence[Path] = (),
         priming_only: bool = False,
+        model: Optional[str] = None,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
         on_progress: Optional[Callable[[AgentProgressInfo], None]] = None,
     ) -> AgentRunResult:
@@ -934,6 +951,9 @@ class MultiAgentRunner:
         ``priming_only`` marks calls whose prompt exists solely to make the CLI hand
         back a session ID; those run read-only so the throwaway prompt cannot be acted
         on. Callers that pass a real user request must leave it False.
+
+        ``model`` overrides the configured default model for this call only; leave it
+        None to use the provider's configured (or CLI) default.
         """
         if provider == "codex":
             args = [
@@ -945,6 +965,7 @@ class MultiAgentRunner:
                     skip_git_repo_check,
                     image_paths,
                     for_session_creation=priming_only,
+                    model=model,
                 ),
             ]
             return self._run_with_output_file(
@@ -958,7 +979,9 @@ class MultiAgentRunner:
         elif provider == "copilot":
             args = [
                 self.copilot_bin,
-                *self._copilot_base(user_message, skip_git_repo_check, for_session_creation=priming_only),
+                *self._copilot_base(
+                    user_message, skip_git_repo_check, for_session_creation=priming_only, model=model
+                ),
             ]
             return self._run(
                 args,
@@ -969,7 +992,10 @@ class MultiAgentRunner:
                 on_progress=on_progress,
             )
         elif provider == "claude":
-            args = [self.claude_bin, *self._claude_base(user_message, for_session_creation=priming_only)]
+            args = [
+                self.claude_bin,
+                *self._claude_base(user_message, for_session_creation=priming_only, model=model),
+            ]
             return self._run(
                 args,
                 provider="claude",
@@ -989,6 +1015,7 @@ class MultiAgentRunner:
         *,
         skip_git_repo_check: bool = False,
         image_paths: Sequence[Path] = (),
+        model: Optional[str] = None,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
         on_progress: Optional[Callable[[AgentProgressInfo], None]] = None,
     ) -> AgentRunResult:
@@ -997,7 +1024,7 @@ class MultiAgentRunner:
                 self.codex_bin,
                 "exec",
                 "resume",
-                *self._codex_resume_args(session_id, user_message, skip_git_repo_check, image_paths),
+                *self._codex_resume_args(session_id, user_message, skip_git_repo_check, image_paths, model=model),
             ]
             return self._run_with_output_file(
                 args,
@@ -1008,7 +1035,11 @@ class MultiAgentRunner:
                 on_progress=on_progress,
             )
         elif provider == "copilot":
-            args = [self.copilot_bin, f"--resume={session_id}", *self._copilot_base(user_message, skip_git_repo_check)]
+            args = [
+                self.copilot_bin,
+                f"--resume={session_id}",
+                *self._copilot_base(user_message, skip_git_repo_check, model=model),
+            ]
             return self._run(
                 args,
                 provider="copilot",
@@ -1018,7 +1049,7 @@ class MultiAgentRunner:
                 on_progress=on_progress,
             )
         elif provider == "claude":
-            args = [self.claude_bin, "--resume", session_id, *self._claude_base(user_message)]
+            args = [self.claude_bin, "--resume", session_id, *self._claude_base(user_message, model=model)]
             return self._run(
                 args,
                 provider="claude",

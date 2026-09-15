@@ -274,6 +274,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>새 세션용 제공자를 선택합니다. 선택 내용은 바꿀 때까지 bot/chat 단위로 저장됩니다.</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>현재 제공자의 모델 목록에서 활성 세션에 사용할 모델을 선택합니다. 선택한 내용은 해당 세션의 <code>state.json</code> 에 저장되며, 세션을 재개할 때마다 사용됩니다. 새 세션을 시작하면(<code>/new</code>, 새 세션으로 전환하는 <code>/switch</code>, 또는 <code>/compact</code>) 항상 제공자가 설정한 기본 모델로 돌아갑니다.</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>선별된 목록에 없는 특정 모델 id 를 설정합니다. 아직 알려진 선택지가 아니면, bot 이 저장하기 전에 먼저 일회성 read-only 호출로 CLI 를 검증해 해당 id 가 실제로 허용되는지 확인합니다 — CLI 가 거부하면 오류가 채팅에 반환되고 아무것도 저장되지 않습니다.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>현재 프로젝트 폴더를 설정합니다. 폴더가 없으면 앱이 만들고 trusted 로 표시합니다. 이미 존재하지만 아직 untrusted 이면 trust 확인을 요청합니다.</td>
   </tr>
@@ -405,6 +413,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>CLAUDE_MODEL</code></td>
     <td>선택적 Claude Code model override 입니다. 비워 두면 Claude Code CLI 기본 model 을 사용합니다. 예: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td><code>/model</code> 명령이 Codex에 제공하는 쉼표로 구분된 모델 목록입니다. 설정하지 않으면 함께 제공되는 <code>.env.example</code>의 값을 사용합니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td><code>/model</code> 명령이 Copilot에 제공하는 쉼표로 구분된 모델 목록입니다. 설정하지 않으면 함께 제공되는 <code>.env.example</code>의 값을 사용합니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td><code>/model</code> 명령이 Claude Code에 제공하는 쉼표로 구분된 모델 목록입니다. 설정하지 않으면 함께 제공되는 <code>.env.example</code>의 값을 사용하며, 템플릿을 사용할 수 없으면 <code>sonnet,opus,fable,haiku</code>를 사용합니다.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

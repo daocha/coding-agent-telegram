@@ -274,6 +274,14 @@ bot 当前接受：
     <td>为新会话选择提供方。该选择会按 bot 和 chat 保存，直到你手动修改。</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>从当前提供方的模型列表中，为活动会话选择模型。选择会保存在该会话的 <code>state.json</code> 中，并在每次恢复会话时使用。开始新会话（<code>/new</code>、切换到新会话的 <code>/switch</code> 或 <code>/compact</code>）时，始终会重置为提供方配置的默认模型。</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>设置不在精选列表中的特定模型 ID。如果它尚未是已知选项，bot 会先通过一次性只读调用测试 CLI，确认该 ID 确实被接受后才保存。若 CLI 拒绝，错误会返回到聊天，且不会保存任何设置。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>设置当前 project 文件夹。如果文件夹不存在，应用会创建并标记为 trusted；如果已存在但仍是 untrusted，应用会明确要求确认 trust。</td>
   </tr>
@@ -409,6 +417,18 @@ bot 当前接受：
     示例：<code>sonnet</code>、<code>opus</code>、<code>haiku</code>
     <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a>
     </td>
+  </tr>
+  <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td>以逗号分隔的模型列表，供 Codex 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值。</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>以逗号分隔的模型列表，供 Copilot 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>以逗号分隔的模型列表，供 Claude Code 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值；若模板不可用，则使用 <code>sonnet,opus,fable,haiku</code>。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

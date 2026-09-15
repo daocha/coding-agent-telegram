@@ -272,6 +272,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>เลือกผู้ให้บริการสำหรับเซสชันใหม่ โดยค่าที่เลือกจะถูกเก็บแยกตาม bot และ chat จนกว่าคุณจะเปลี่ยน</td>
   </tr>
   <tr>
+    <td width="332"><code>/model</code></td>
+    <td>เลือก model สำหรับเซสชันที่ใช้งานอยู่ จากรายการ model ของผู้ให้บริการปัจจุบัน ค่าที่เลือกจะถูกเก็บไว้กับเซสชันนั้นใน <code>state.json</code> และจะถูกใช้ทุกครั้งที่ resume เซสชันนั้น การเริ่มเซสชันใหม่ (<code>/new</code>, <code>/switch</code> ไปยังเซสชันใหม่ หรือ <code>/compact</code>) จะรีเซ็ตกลับไปเป็น model เริ่มต้นที่ผู้ให้บริการกำหนดไว้เสมอ</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/model &lt;model_id&gt;</code></td>
+    <td>ตั้งค่า model id ที่ไม่อยู่ในรายการที่คัดสรรไว้ หากยังไม่ใช่ตัวเลือกที่รู้จัก บอตจะทดสอบกับ CLI ด้วยการเรียกแบบ read-only ที่ใช้ทิ้งเพื่อยืนยันก่อนว่า id นั้นใช้ได้จริงก่อนจะบันทึก หาก CLI ปฏิเสธ ข้อความ error จะถูกส่งกลับมาในแชทและจะไม่มีการบันทึกใดๆ</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>ตั้งค่าโฟลเดอร์ project ปัจจุบัน หากโฟลเดอร์ยังไม่มี แอปจะสร้างและทำเครื่องหมายว่า trusted หากมีอยู่แล้วแต่ยัง untrusted แอปจะถามยืนยัน trust ก่อน</td>
   </tr>
@@ -403,6 +411,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td><code>CLAUDE_MODEL</code></td>
     <td>กำหนด model ของ Claude Code เพิ่มเติมได้แบบ optional หากปล่อยว่างจะใช้ model เริ่มต้นของ Claude Code CLI ตัวอย่าง: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
+  </tr>
+  <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Codex หากไม่ได้ตั้งค่า จะใช้ค่าจาก <code>.env.example</code> ที่มาพร้อมโปรแกรม</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Copilot หากไม่ได้ตั้งค่า จะใช้ค่าจาก <code>.env.example</code> ที่มาพร้อมโปรแกรม</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Claude Code หากไม่ได้ตั้งค่า จะใช้ค่าจาก <code>.env.example</code> ที่มาพร้อมโปรแกรม; หากไม่พบเทมเพลต จะใช้ <code>sonnet,opus,fable,haiku</code></td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

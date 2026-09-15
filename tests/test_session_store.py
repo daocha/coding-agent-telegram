@@ -28,6 +28,60 @@ def test_create_and_switch_session(tmp_path: Path):
     assert chat["current_branch"] == "feature-1"
 
 
+def test_create_session_defaults_to_no_model_override(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+
+    sessions = store.list_sessions("bot-a", 123)
+    assert sessions["sess_1"]["model"] == ""
+
+
+def test_create_session_can_carry_over_a_model(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude", model="opus")
+
+    sessions = store.list_sessions("bot-a", 123)
+    assert sessions["sess_1"]["model"] == "opus"
+
+
+def test_set_session_model_updates_existing_session(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+
+    assert store.set_session_model("bot-a", 123, "sess_1", "opus") is True
+
+    sessions = store.list_sessions("bot-a", 123)
+    assert sessions["sess_1"]["model"] == "opus"
+
+
+def test_set_session_model_clears_override_with_empty_string(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude", model="opus")
+
+    assert store.set_session_model("bot-a", 123, "sess_1", "") is True
+
+    sessions = store.list_sessions("bot-a", 123)
+    assert sessions["sess_1"]["model"] == ""
+
+
+def test_set_session_model_returns_false_for_unknown_session(tmp_path: Path):
+    state = tmp_path / "state.json"
+    backup = tmp_path / "state.json.bak"
+    store = SessionStore(state, backup)
+
+    assert store.set_session_model("bot-a", 123, "does-not-exist", "opus") is False
+
+
 def test_set_current_provider_persists_in_chat_state(tmp_path: Path):
     state = tmp_path / "state.json"
     backup = tmp_path / "state.json.bak"

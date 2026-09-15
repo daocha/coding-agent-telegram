@@ -35,6 +35,7 @@ class DummyRunner:
         skip_git_repo_check=False,
         image_paths=(),
         priming_only=False,
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -46,6 +47,7 @@ class DummyRunner:
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
                 "priming_only": priming_only,
+                "model": model,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -67,6 +69,7 @@ class DummyRunner:
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -78,6 +81,7 @@ class DummyRunner:
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -101,6 +105,7 @@ class CompactingRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -112,6 +117,7 @@ class CompactingRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -133,6 +139,7 @@ class CompactingRunner(DummyRunner):
         skip_git_repo_check=False,
         image_paths=(),
         priming_only=False,
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -144,6 +151,7 @@ class CompactingRunner(DummyRunner):
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
                 "priming_only": priming_only,
+                "model": model,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -167,6 +175,7 @@ class MarkdownRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -178,6 +187,7 @@ class MarkdownRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
             }
         )
@@ -200,6 +210,7 @@ class ReplyOptionsRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -231,6 +242,7 @@ class CommandBlockRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -242,6 +254,7 @@ class CommandBlockRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
             }
         )
@@ -264,6 +277,7 @@ class SessionIdRotatingRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -275,6 +289,7 @@ class SessionIdRotatingRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
             }
         )
@@ -297,6 +312,7 @@ class ResumeReplacementRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -308,6 +324,7 @@ class ResumeReplacementRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
             }
         )
@@ -330,6 +347,7 @@ class LongEscapedMarkdownRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -341,6 +359,7 @@ class LongEscapedMarkdownRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
             }
         )
@@ -559,6 +578,9 @@ def make_config(tmp_path: Path, *, locale: str = "en") -> AppConfig:
         codex_model="",
         copilot_model="",
         claude_model="",
+        codex_model_choices=("gpt-5.4",),
+        copilot_model_choices=("gpt-5.4", "claude-sonnet-4.6"),
+        claude_model_choices=("sonnet", "opus", "haiku"),
         copilot_autopilot=True,
         copilot_no_ask_user=True,
         copilot_allow_all=True,
@@ -1200,6 +1222,7 @@ class StallingRunner(DummyRunner):
         skip_git_repo_check=False,
         image_paths=(),
         priming_only=False,
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -1232,6 +1255,7 @@ class StallingRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -1267,6 +1291,7 @@ class ProgressRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -1298,6 +1323,7 @@ class RapidProgressRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -1356,6 +1382,7 @@ class BlockingRunner(DummyRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -1367,6 +1394,7 @@ class BlockingRunner(DummyRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -1408,6 +1436,7 @@ class AbortableBlockingRunner(BlockingRunner):
         *,
         skip_git_repo_check=False,
         image_paths=(),
+        model=None,
         on_stall=None,
         on_progress=None,
     ):
@@ -1419,6 +1448,7 @@ class AbortableBlockingRunner(BlockingRunner):
                 "user_message": user_message,
                 "skip_git_repo_check": skip_git_repo_check,
                 "image_paths": image_paths,
+                "model": model,
                 "on_stall": on_stall,
                 "on_progress": on_progress,
             }
@@ -1823,6 +1853,321 @@ def test_provider_callback_continues_pending_new_session(tmp_path: Path):
     state = store.get_chat_state("bot-a", 123)
     assert "pending_action" not in state
     assert state["sessions"][state["active_session_id"]]["provider"] == "copilot"
+
+
+# ---------------------------------------------------------------------------
+# /model
+# ---------------------------------------------------------------------------
+
+
+def test_model_command_reports_no_active_session(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert "No active session" in bot.messages[-1][1]
+
+
+def test_model_command_sends_inline_buttons_for_active_session_provider(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert len(bot.messages) == 1
+    message = bot.messages[0]
+    keyboard = message[3]
+    assert keyboard is not None
+    # One button per row: the default option plus one per configured Claude model.
+    assert [len(row) for row in keyboard.inline_keyboard] == [1, 1, 1, 1]
+    callback_data = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+    assert callback_data == ["model:default", "model:set:0", "model:set:1", "model:set:2"]
+
+
+def test_model_command_prompt_flags_a_custom_model_as_not_in_the_list(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude", model="claude-opus-5-preview")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert "custom, not in the list below" in bot.messages[-1][1]
+    assert "claude-opus-5-preview" in bot.messages[-1][1]
+
+
+def test_model_callback_sets_session_model_override(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    answers = []
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="model:set:1",  # index 1 -> "opus" in ("sonnet", "opus", "haiku")
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        answers.append("answered")
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_model_callback(update, context))
+
+    assert answers == ["answered"]
+    assert edited == ["Model set to: opus"]
+    assert store.list_sessions("bot-a", 123)["sess_1"]["model"] == "opus"
+
+
+def test_model_callback_reports_stale_selection_for_out_of_range_index(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="model:set:99",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_model_callback(update, context))
+
+    assert edited == ["⚠️ This button is no longer valid (the model list or provider may have changed). Run /model again."]
+    assert store.list_sessions("bot-a", 123)["sess_1"]["model"] == ""
+
+
+def test_model_callback_default_option_clears_override(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude", model="opus")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    edited = []
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data="model:default",
+            answer=None,
+            edit_message_text=None,
+        ),
+    )
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update.callback_query.answer = fake_answer
+    update.callback_query.edit_message_text = fake_edit
+
+    asyncio.run(router.handle_model_callback(update, context))
+
+    assert edited == ["Model set to: CLI default"]
+    assert store.list_sessions("bot-a", 123)["sess_1"]["model"] == ""
+
+
+def test_new_session_resets_model_to_default_even_after_override(tmp_path: Path):
+    """A model override applies to the active session's resume calls, but an explicit
+    /new session must always start on the provider's configured default model."""
+    project = tmp_path / "backend"
+    project.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.set_current_provider("bot-a", 123, "claude")
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude", model="opus")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/new")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_new(update, context))
+
+    assert runner.create_calls[-1]["model"] is None
+    state = store.get_chat_state("bot-a", 123)
+    new_session = state["sessions"][state["active_session_id"]]
+    assert new_session["model"] == ""
+
+
+def test_active_session_resume_uses_stored_model_override(tmp_path: Path):
+    project = tmp_path / "backend"
+    project.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude", model="opus")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="do the thing")
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(update, context))
+
+    assert runner.resume_calls[-1]["model"] == "opus"
+
+
+class RejectingModelRunner(DummyRunner):
+    def create_session(
+        self,
+        provider,
+        project_path,
+        user_message,
+        *,
+        skip_git_repo_check=False,
+        image_paths=(),
+        priming_only=False,
+        model=None,
+        on_stall=None,
+        on_progress=None,
+    ):
+        self.create_calls.append({"provider": provider, "model": model})
+        return AgentRunResult(
+            session_id=None,
+            success=False,
+            assistant_text="",
+            error_message="Error: unknown model 'not-a-real-model'",
+            raw_events=[],
+        )
+
+
+def test_model_command_with_too_many_args_shows_usage(tmp_path: Path):
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model foo bar")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["foo", "bar"], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert "Usage: /model" in bot.messages[-1][1]
+    assert runner.create_calls == []
+
+
+def test_model_command_with_curated_model_id_skips_cli_probe(tmp_path: Path):
+    """Typing a model id that's already on the curated list should save immediately
+    without spending a CLI round trip to re-validate something already known-good."""
+    project = tmp_path / "backend"
+    project.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model opus")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["opus"], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert runner.create_calls == []
+    assert "Model set to: opus" in bot.messages[-1][1]
+    assert store.list_sessions("bot-a", 123)["sess_1"]["model"] == "opus"
+
+
+def test_model_command_with_valid_custom_model_id_probes_then_saves(tmp_path: Path):
+    project = tmp_path / "backend"
+    project.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model claude-opus-5-preview")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["claude-opus-5-preview"], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert runner.create_calls[-1]["model"] == "claude-opus-5-preview"
+    assert runner.create_calls[-1]["priming_only"] is True
+    assert "Model set to: claude-opus-5-preview" in bot.messages[-1][1]
+    assert store.list_sessions("bot-a", 123)["sess_1"]["model"] == "claude-opus-5-preview"
+
+
+def test_model_command_with_invalid_custom_model_id_is_not_saved(tmp_path: Path):
+    project = tmp_path / "backend"
+    project.mkdir()
+    runner = RejectingModelRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "backend")
+    store.create_session("bot-a", 123, "sess_1", "backend-fix", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+
+    update = make_update(text="/model not-a-real-model")
+    bot = FakeBot()
+    context = SimpleNamespace(args=["not-a-real-model"], bot=bot)
+
+    asyncio.run(router.handle_model(update, context))
+
+    assert "not-a-real-model" in bot.messages[-1][1]
+    assert "unknown model" in bot.messages[-1][1]
+    # The rejected model must not be persisted -- the session keeps its prior (empty) model.
+    assert store.list_sessions("bot-a", 123)["sess_1"]["model"] == ""
 
 
 def test_text_message_is_queued_while_new_session_prerequisites_are_pending(tmp_path: Path):
@@ -4909,6 +5254,7 @@ def test_invalid_resume_recovery_recognizes_claude_session_not_found_error_code(
             *,
             skip_git_repo_check=False,
             image_paths=(),
+            model=None,
             on_stall=None,
             on_progress=None,
         ):
@@ -4920,6 +5266,7 @@ def test_invalid_resume_recovery_recognizes_claude_session_not_found_error_code(
                     "user_message": user_message,
                     "skip_git_repo_check": skip_git_repo_check,
                     "image_paths": image_paths,
+                    "model": model,
                     "on_stall": on_stall,
                 }
             )
@@ -4972,6 +5319,7 @@ def test_invalid_resume_recovery_ignores_resume_substring_in_claude_error_withou
             *,
             skip_git_repo_check=False,
             image_paths=(),
+            model=None,
             on_stall=None,
             on_progress=None,
         ):
@@ -4983,6 +5331,7 @@ def test_invalid_resume_recovery_ignores_resume_substring_in_claude_error_withou
                     "user_message": user_message,
                     "skip_git_repo_check": skip_git_repo_check,
                     "image_paths": image_paths,
+                    "model": model,
                     "on_stall": on_stall,
                 }
             )
@@ -9288,6 +9637,7 @@ class FailingCreateRunner(DummyRunner):
         skip_git_repo_check=False,
         image_paths=(),
         priming_only=False,
+        model=None,
         on_stall=None,
         on_progress=None,
     ):

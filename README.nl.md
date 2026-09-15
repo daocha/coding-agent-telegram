@@ -272,6 +272,14 @@ De bot accepteert momenteel:
     <td>Kies de aanbieder voor nieuwe sessies. Die keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
   </tr>
   <tr>
+    <td width="332"><code>/model</code></td>
+    <td>Kies het model voor de actieve sessie, uit de modellijst van de huidige aanbieder. De keuze wordt op die sessie opgeslagen in <code>state.json</code> en wordt gebruikt telkens wanneer de sessie wordt hervat. Het starten van een nieuwe sessie (<code>/new</code>, <code>/switch</code> naar een nieuwe sessie, of <code>/compact</code>) zet dit altijd terug naar het standaardmodel van de aanbieder.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/model &lt;model_id&gt;</code></td>
+    <td>Stel een specifiek model-ID in dat niet op de samengestelde lijst staat. Als dit nog geen bekende keuze is, test de bot eerst met een wegwerp read-only aanroep naar de CLI of het ID daadwerkelijk wordt geaccepteerd voordat het wordt opgeslagen — wijst de CLI het af, dan wordt de foutmelding teruggestuurd naar de chat en wordt er niets opgeslagen.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Stel de huidige projectmap in. Bestaat de map niet, dan maakt de app die aan en markeert hem trusted. Bestaat hij al maar is hij nog untrusted, dan vraagt de app expliciet om trust.</td>
   </tr>
@@ -407,6 +415,18 @@ De bot accepteert momenteel:
     Voorbeelden: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
     <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code-modelconfiguratie</a>
     </td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Codex. Indien niet ingesteld, wordt de waarde uit de meegeleverde <code>.env.example</code> gebruikt.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Copilot. Indien niet ingesteld, wordt de waarde uit de meegeleverde <code>.env.example</code> gebruikt.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Claude Code. Indien niet ingesteld, wordt de waarde uit de meegeleverde <code>.env.example</code> gebruikt; zonder template wordt <code>sonnet,opus,fable,haiku</code> gebruikt.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
