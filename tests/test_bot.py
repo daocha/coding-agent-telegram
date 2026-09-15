@@ -5,7 +5,7 @@ def test_default_bot_commands_hide_commit_and_push_when_disabled():
     commands = default_bot_commands(enable_commit_command=False)
     names = [command.command for command in commands]
 
-    assert names == ["provider", "project", "branch", "current", "status", "new", "switch", "compact", "diff", "pull", "push", "abort"]
+    assert names == ["provider", "model", "project", "branch", "current", "status", "new", "switch", "compact", "diff", "pull", "push", "abort"]
     assert "commit" not in names
 
 
@@ -15,6 +15,7 @@ def test_default_bot_commands_show_commit_and_push_when_enabled():
 
     assert names == [
         "provider",
+        "model",
         "project",
         "branch",
         "current",

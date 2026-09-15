@@ -35,6 +35,9 @@ def _isolate_env(monkeypatch, tmp_path):
         "CODEX_MODEL",
         "COPILOT_MODEL",
         "CLAUDE_MODEL",
+        "CODEX_MODEL_CHOICES",
+        "COPILOT_MODEL_CHOICES",
+        "CLAUDE_MODEL_CHOICES",
         "COPILOT_AUTOPILOT",
         "COPILOT_NO_ASK_USER",
         "COPILOT_ALLOW_ALL",
@@ -108,6 +111,9 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.codex_model == ""
     assert cfg.copilot_model == ""
     assert cfg.claude_model == ""
+    assert cfg.codex_model_choices == ("gpt-5.4",)
+    assert cfg.copilot_model_choices == ("gpt-5.4", "claude-sonnet-4.6")
+    assert cfg.claude_model_choices == ("sonnet", "opus", "haiku")
     assert cfg.copilot_autopilot is True
     assert cfg.copilot_no_ask_user is True
     assert cfg.copilot_allow_all is True
@@ -140,6 +146,34 @@ def test_load_config_accepts_claude_as_default_provider(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.default_agent_provider == "claude"
+
+
+def test_load_config_model_choices_override(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("CODEX_MODEL_CHOICES", "o4-mini, gpt-5.4")
+
+    cfg = load_config()
+
+    assert cfg.codex_model_choices == ("o4-mini", "gpt-5.4")
+    # Unset entirely -> falls back to the hardcoded defaults.
+    assert cfg.copilot_model_choices == ("gpt-5.4", "claude-sonnet-4.6")
+
+
+def test_load_config_model_choices_can_be_explicitly_emptied(monkeypatch, tmp_path):
+    _isolate_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", "~/git")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKENS", "token-a")
+    monkeypatch.setenv("ALLOWED_CHAT_IDS", "123")
+    monkeypatch.setenv("CODEX_MODEL_CHOICES", "")
+
+    cfg = load_config()
+
+    # Explicitly set to empty (as opposed to unset) must be honored as "no curated
+    # choices", not silently fall back to the hardcoded default.
+    assert cfg.codex_model_choices == ()
 
 
 def test_load_config_rejects_unknown_default_provider(monkeypatch, tmp_path):

@@ -473,6 +473,42 @@ def test_codex_runner_passes_model_when_configured(monkeypatch):
     assert calls[0][0][:4] == ["codex", "exec", "-m", "gpt-5-codex"]
 
 
+def test_codex_runner_create_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        codex_model="gpt-5-codex",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=False, model="o4-mini")
+
+    assert calls[0][0][:4] == ["codex", "exec", "-m", "o4-mini"]
+
+
+def test_codex_runner_resume_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        codex_model="gpt-5-codex",
+    )
+
+    runner.resume_session(
+        "codex", "sess_1", Path("/tmp/project"), "hello again", skip_git_repo_check=False, model="o4-mini"
+    )
+
+    assert calls[0][0][:5] == ["codex", "exec", "resume", "-m", "o4-mini"]
+
+
 def test_copilot_runner_passes_model_when_configured(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
@@ -496,6 +532,27 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
         "--no-ask-user",
         "--output-format=json",
     ]
+
+
+def test_copilot_runner_resume_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        copilot_model="gpt-5",
+    )
+
+    runner.resume_session(
+        "copilot", "sess_1", Path("/tmp/project"), "hello again", skip_git_repo_check=False, model="claude-sonnet-4.6"
+    )
+
+    assert calls[0][0][:2] == ["copilot", "--resume=sess_1"]
+    assert "--model" in calls[0][0]
+    assert calls[0][0][calls[0][0].index("--model") + 1] == "claude-sonnet-4.6"
 
 
 def _copilot_tool_permission_runner() -> MultiAgentRunner:
@@ -645,6 +702,40 @@ def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
         "-p",
         runner.PROMPT_PREFIX + "hello",
     ]
+
+
+def test_claude_runner_resume_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_model="sonnet",
+    )
+
+    runner.resume_session("claude", "sess_1", Path("/tmp/project"), "hello again", model="opus")
+
+    assert calls[0][0][:5] == ["claude", "--resume", "sess_1", "--model", "opus"]
+
+
+def test_claude_runner_create_session_without_override_uses_configured_default(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_model="sonnet",
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "hello")
+
+    assert calls[0][0][:3] == ["claude", "--model", "sonnet"]
 
 
 def test_claude_runner_reports_failure_from_result_event(monkeypatch):
