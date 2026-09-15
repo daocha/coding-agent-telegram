@@ -414,15 +414,15 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
-    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Codex. Mặc định là <code>gpt-5.4</code>.</td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Codex. Khi chưa đặt, giá trị trong <code>.env.example</code> đi kèm sẽ được dùng.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Copilot. Mặc định là <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Copilot. Khi chưa đặt, giá trị trong <code>.env.example</code> đi kèm sẽ được dùng.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Claude Code. Mặc định là <code>sonnet,opus,haiku</code>.</td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Claude Code. Khi chưa đặt, giá trị trong <code>.env.example</code> đi kèm sẽ được dùng; nếu không có mẫu, dùng <code>sonnet,opus,fable,haiku</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

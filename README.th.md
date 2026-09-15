@@ -414,15 +414,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td><code>CODEX_MODEL_CHOICES</code></td>
-    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Codex ค่าเริ่มต้นคือ <code>gpt-5.4</code></td>
+    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Codex หากไม่ได้ตั้งค่า จะใช้ค่าจาก <code>.env.example</code> ที่มาพร้อมโปรแกรม</td>
   </tr>
   <tr>
     <td><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Copilot ค่าเริ่มต้นคือ <code>gpt-5.4,claude-sonnet-4.6</code></td>
+    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Copilot หากไม่ได้ตั้งค่า จะใช้ค่าจาก <code>.env.example</code> ที่มาพร้อมโปรแกรม</td>
   </tr>
   <tr>
     <td><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Claude Code ค่าเริ่มต้นคือ <code>sonnet,opus,haiku</code></td>
+    <td>รายการ model ที่คั่นด้วยคอมมา ซึ่งคำสั่ง <code>/model</code> จะแสดงให้เลือกสำหรับ Claude Code หากไม่ได้ตั้งค่า จะใช้ค่าจาก <code>.env.example</code> ที่มาพร้อมโปรแกรม; หากไม่พบเทมเพลต จะใช้ <code>sonnet,opus,fable,haiku</code></td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

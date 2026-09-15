@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import coding_agent_telegram.config as config_module
+import coding_agent_telegram.models as models_module
 from coding_agent_telegram.config import (
     DEFAULT_MAX_TELEGRAM_MESSAGE_LENGTH,
     DEFAULT_OPENAI_WHISPER_MODEL,
@@ -111,9 +112,9 @@ def test_load_config_required(monkeypatch, tmp_path):
     assert cfg.codex_model == ""
     assert cfg.copilot_model == ""
     assert cfg.claude_model == ""
-    assert cfg.codex_model_choices == ("gpt-5.4",)
-    assert cfg.copilot_model_choices == ("gpt-5.4", "claude-sonnet-4.6")
-    assert cfg.claude_model_choices == ("sonnet", "opus", "haiku")
+    assert cfg.codex_model_choices == models_module.DEFAULT_MODEL_CHOICES["codex"]
+    assert cfg.copilot_model_choices == models_module.DEFAULT_MODEL_CHOICES["copilot"]
+    assert cfg.claude_model_choices == models_module.DEFAULT_MODEL_CHOICES["claude"]
     assert cfg.copilot_autopilot is True
     assert cfg.copilot_no_ask_user is True
     assert cfg.copilot_allow_all is True
@@ -158,8 +159,8 @@ def test_load_config_model_choices_override(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.codex_model_choices == ("o4-mini", "gpt-5.4")
-    # Unset entirely -> falls back to the hardcoded defaults.
-    assert cfg.copilot_model_choices == ("gpt-5.4", "claude-sonnet-4.6")
+    # Unset entirely -> falls back to the bundled template defaults.
+    assert cfg.copilot_model_choices == models_module.DEFAULT_MODEL_CHOICES["copilot"]
 
 
 def test_load_config_model_choices_can_be_explicitly_emptied(monkeypatch, tmp_path):
@@ -174,6 +175,19 @@ def test_load_config_model_choices_can_be_explicitly_emptied(monkeypatch, tmp_pa
     # Explicitly set to empty (as opposed to unset) must be honored as "no curated
     # choices", not silently fall back to the hardcoded default.
     assert cfg.codex_model_choices == ()
+
+
+def test_model_choices_fall_back_when_template_is_missing(monkeypatch):
+    def missing_resources(_package):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(models_module.resources, "files", missing_resources)
+
+    assert models_module._load_default_model_choices() == {
+        "codex": (),
+        "copilot": (),
+        "claude": ("sonnet", "opus", "fable", "haiku"),
+    }
 
 
 def test_load_config_rejects_unknown_default_provider(monkeypatch, tmp_path):

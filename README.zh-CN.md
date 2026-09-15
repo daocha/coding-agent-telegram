@@ -420,15 +420,15 @@ bot 当前接受：
   </tr>
   <tr>
     <td><code>CODEX_MODEL_CHOICES</code></td>
-    <td>以逗号分隔的模型列表，供 Codex 的 <code>/model</code> 命令选用。默认：<code>gpt-5.4</code>。</td>
+    <td>以逗号分隔的模型列表，供 Codex 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值。</td>
   </tr>
   <tr>
     <td><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>以逗号分隔的模型列表，供 Copilot 的 <code>/model</code> 命令选用。默认：<code>gpt-5.4,claude-sonnet-4.6</code>。</td>
+    <td>以逗号分隔的模型列表，供 Copilot 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值。</td>
   </tr>
   <tr>
     <td><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>以逗号分隔的模型列表，供 Claude Code 的 <code>/model</code> 命令选用。默认：<code>sonnet,opus,haiku</code>。</td>
+    <td>以逗号分隔的模型列表，供 Claude Code 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值；若模板不可用，则使用 <code>sonnet,opus,fable,haiku</code>。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

@@ -437,15 +437,15 @@ The bot currently accepts:
   </tr>
   <tr>
     <td><code>CODEX_MODEL_CHOICES</code></td>
-    <td>Comma-separated model list offered by the <code>/model</code> command for Codex. Defaults to <code>gpt-5.4</code>.</td>
+    <td>Comma-separated model list offered by the <code>/model</code> command for Codex. When unset, the bundled <code>.env.example</code> value is used.</td>
   </tr>
   <tr>
     <td><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>Comma-separated model list offered by the <code>/model</code> command for Copilot. Defaults to <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+    <td>Comma-separated model list offered by the <code>/model</code> command for Copilot. When unset, the bundled <code>.env.example</code> value is used.</td>
   </tr>
   <tr>
     <td><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>Comma-separated model list offered by the <code>/model</code> command for Claude Code. Defaults to <code>sonnet,opus,haiku</code>.</td>
+    <td>Comma-separated model list offered by the <code>/model</code> command for Claude Code. When unset, the bundled <code>.env.example</code> value is used; if the template is unavailable, it falls back to <code>sonnet,opus,fable,haiku</code>.</td>
   </tr>
   <tr>
     <td><code>CODEX_APPROVAL_POLICY</code></td>

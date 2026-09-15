@@ -418,15 +418,15 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td><code>CODEX_MODEL_CHOICES</code></td>
-    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Codex anbietet. Standard: <code>gpt-5.4</code>.</td>
+    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Codex anbietet. Wenn nicht gesetzt, wird der Wert aus der mitgelieferten <code>.env.example</code> verwendet.</td>
   </tr>
   <tr>
     <td><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Copilot anbietet. Standard: <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Copilot anbietet. Wenn nicht gesetzt, wird der Wert aus der mitgelieferten <code>.env.example</code> verwendet.</td>
   </tr>
   <tr>
     <td><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Claude Code anbietet. Standard: <code>sonnet,opus,haiku</code>.</td>
+    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Claude Code anbietet. Wenn nicht gesetzt, wird der Wert aus der mitgelieferten <code>.env.example</code> verwendet; fehlt die Vorlage, wird <code>sonnet,opus,fable,haiku</code> verwendet.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

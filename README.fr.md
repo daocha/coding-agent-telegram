@@ -418,15 +418,15 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
-    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Codex. Valeur par défaut : <code>gpt-5.4</code>.</td>
+    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Codex. Si elle n’est pas définie, la valeur du fichier <code>.env.example</code> fourni est utilisée.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Copilot. Valeur par défaut : <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Copilot. Si elle n’est pas définie, la valeur du fichier <code>.env.example</code> fourni est utilisée.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Claude Code. Valeur par défaut : <code>sonnet,opus,haiku</code>.</td>
+    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Claude Code. Si elle n’est pas définie, la valeur du fichier <code>.env.example</code> fourni est utilisée ; si le modèle est indisponible, <code>sonnet,opus,fable,haiku</code> est utilisé.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

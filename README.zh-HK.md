@@ -416,15 +416,15 @@ bot 目前接受：
   </tr>
   <tr>
     <td><code>CODEX_MODEL_CHOICES</code></td>
-    <td>以逗號分隔的模型清單，供 Codex 的 <code>/model</code> 指令選用。預設：<code>gpt-5.4</code>。</td>
+    <td>以逗號分隔的模型清單，供 Codex 的 <code>/model</code> 指令選用。未設定時，會使用隨附 <code>.env.example</code> 中的值。</td>
   </tr>
   <tr>
     <td><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>以逗號分隔的模型清單，供 Copilot 的 <code>/model</code> 指令選用。預設：<code>gpt-5.4,claude-sonnet-4.6</code>。</td>
+    <td>以逗號分隔的模型清單，供 Copilot 的 <code>/model</code> 指令選用。未設定時，會使用隨附 <code>.env.example</code> 中的值。</td>
   </tr>
   <tr>
     <td><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>以逗號分隔的模型清單，供 Claude Code 的 <code>/model</code> 指令選用。預設：<code>sonnet,opus,haiku</code>。</td>
+    <td>以逗號分隔的模型清單，供 Claude Code 的 <code>/model</code> 指令選用。未設定時，會使用隨附 <code>.env.example</code> 中的值；若範本無法使用，則使用 <code>sonnet,opus,fable,haiku</code>。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

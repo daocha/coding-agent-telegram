@@ -418,15 +418,15 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
-    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Codex. Standaard: <code>gpt-5.4</code>.</td>
+    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Codex. Indien niet ingesteld, wordt de waarde uit de meegeleverde <code>.env.example</code> gebruikt.</td>
   </tr>
   <tr>
     <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
-    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Copilot. Standaard: <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Copilot. Indien niet ingesteld, wordt de waarde uit de meegeleverde <code>.env.example</code> gebruikt.</td>
   </tr>
   <tr>
     <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Claude Code. Standaard: <code>sonnet,opus,haiku</code>.</td>
+    <td>Door komma's gescheiden modellijst die het <code>/model</code>-commando aanbiedt voor Claude Code. Indien niet ingesteld, wordt de waarde uit de meegeleverde <code>.env.example</code> gebruikt; zonder template wordt <code>sonnet,opus,fable,haiku</code> gebruikt.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

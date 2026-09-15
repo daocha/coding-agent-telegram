@@ -418,15 +418,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td><code>CODEX_MODEL_CHOICES</code></td>
-    <td><code>/model</code> コマンドが Codex 向けに提示する、カンマ区切りのモデル一覧です。既定値: <code>gpt-5.4</code>。</td>
+    <td><code>/model</code> コマンドが Codex 向けに提示する、カンマ区切りのモデル一覧です。未設定の場合は、同梱の <code>.env.example</code> の値を使用します。</td>
   </tr>
   <tr>
     <td><code>COPILOT_MODEL_CHOICES</code></td>
-    <td><code>/model</code> コマンドが Copilot 向けに提示する、カンマ区切りのモデル一覧です。既定値: <code>gpt-5.4,claude-sonnet-4.6</code>。</td>
+    <td><code>/model</code> コマンドが Copilot 向けに提示する、カンマ区切りのモデル一覧です。未設定の場合は、同梱の <code>.env.example</code> の値を使用します。</td>
   </tr>
   <tr>
     <td><code>CLAUDE_MODEL_CHOICES</code></td>
-    <td><code>/model</code> コマンドが Claude Code 向けに提示する、カンマ区切りのモデル一覧です。既定値: <code>sonnet,opus,haiku</code>。</td>
+    <td><code>/model</code> コマンドが Claude Code 向けに提示する、カンマ区切りのモデル一覧です。未設定の場合は、同梱の <code>.env.example</code> の値を使用します。テンプレートが利用できない場合は <code>sonnet,opus,fable,haiku</code> を使用します。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

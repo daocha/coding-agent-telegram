@@ -415,6 +415,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>선택적 Claude Code model override 입니다. 비워 두면 Claude Code CLI 기본 model 을 사용합니다. 예: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
   </tr>
   <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td><code>/model</code> 명령이 Codex에 제공하는 쉼표로 구분된 모델 목록입니다. 설정하지 않으면 함께 제공되는 <code>.env.example</code>의 값을 사용합니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td><code>/model</code> 명령이 Copilot에 제공하는 쉼표로 구분된 모델 목록입니다. 설정하지 않으면 함께 제공되는 <code>.env.example</code>의 값을 사용합니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td><code>/model</code> 명령이 Claude Code에 제공하는 쉼표로 구분된 모델 목록입니다. 설정하지 않으면 함께 제공되는 <code>.env.example</code>의 값을 사용하며, 템플릿을 사용할 수 없으면 <code>sonnet,opus,fable,haiku</code>를 사용합니다.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Codex 에 전달할 approval mode 입니다. 기본값: <code>never</code>.</td>
   </tr>

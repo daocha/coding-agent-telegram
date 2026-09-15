@@ -1,19 +1,50 @@
 from __future__ import annotations
 
-"""Default per-provider model choices offered by the /model command.
+"""Default per-provider model choices offered by the /model command."""
 
-These only seed the /model picker; the model actually passed to each CLI
-still comes from CODEX_MODEL/COPILOT_MODEL/CLAUDE_MODEL (config.py) or a
-per-session override set via /model. Override the picker's choices with the
-CODEX_MODEL_CHOICES/COPILOT_MODEL_CHOICES/CLAUDE_MODEL_CHOICES env vars
-(comma separated) if a CLI supports models not listed here.
-"""
+from importlib import resources
 
-DEFAULT_MODEL_CHOICES: dict[str, tuple[str, ...]] = {
-    "codex": ("gpt-5.4",),
-    "copilot": ("gpt-5.4", "claude-sonnet-4.6"),
-    "claude": ("sonnet", "opus", "haiku"),
+
+_MODEL_CHOICE_ENV_NAMES = {
+    "codex": "CODEX_MODEL_CHOICES",
+    "copilot": "COPILOT_MODEL_CHOICES",
+    "claude": "CLAUDE_MODEL_CHOICES",
 }
+_CLAUDE_FALLBACK_MODEL_CHOICES = ("sonnet", "opus", "fable", "haiku")
+
+
+def _parse_template_model_choices(template_text: str) -> dict[str, tuple[str, ...]]:
+    """Read model-picker defaults from the packaged .env.example template."""
+    values = {provider: () for provider in _MODEL_CHOICE_ENV_NAMES}
+    for line in template_text.splitlines():
+        name, separator, raw_value = line.partition("=")
+        if not separator:
+            continue
+        for provider, env_name in _MODEL_CHOICE_ENV_NAMES.items():
+            if name != env_name:
+                continue
+            values[provider] = tuple(item.strip() for item in raw_value.split(",") if item.strip())
+            break
+    return values
+
+
+def _load_default_model_choices() -> dict[str, tuple[str, ...]]:
+    try:
+        template_text = resources.files("coding_agent_telegram").joinpath("resources/.env.example").read_text(
+            encoding="utf-8"
+        )
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        template_text = ""
+
+    choices = _parse_template_model_choices(template_text)
+    # Claude's stable aliases remain useful even when a package is distributed
+    # without its configuration template.
+    if not choices["claude"]:
+        choices["claude"] = _CLAUDE_FALLBACK_MODEL_CHOICES
+    return choices
+
+
+DEFAULT_MODEL_CHOICES = _load_default_model_choices()
 
 
 def model_choices_for(provider: str) -> tuple[str, ...]:
