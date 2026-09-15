@@ -272,6 +272,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>新しいセッション用のプロバイダーを選択します。選択は変更するまで bot と chat ごとに保存されます。</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>現在のプロバイダーのモデル一覧から、アクティブなセッションのモデルを選択します。選択はそのセッションの <code>state.json</code> に保存され、セッションを再開するたびに使用されます。新しいセッションを開始すると（<code>/new</code>、新しいセッションへの <code>/switch</code>、または <code>/compact</code>）、常にプロバイダーに設定された既定モデルにリセットされます。</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>選定済みの一覧にない特定のモデル ID を設定します。既知の選択肢でない場合、bot はまず使い捨ての読み取り専用呼び出しで CLI に問い合わせ、その ID が実際に受け入れられるかを保存前に確認します。CLI がそれを拒否した場合は、エラーが chat に返され、何も保存されません。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>現在のプロジェクトフォルダを設定します。フォルダが存在しない場合は作成して trusted として扱います。既存で untrusted の場合は明示的に trust を確認します。</td>
   </tr>
@@ -407,6 +415,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     例: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
     <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a>
     </td>
+  </tr>
+  <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td><code>/model</code> コマンドが Codex 向けに提示する、カンマ区切りのモデル一覧です。既定値: <code>gpt-5.4</code>。</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td><code>/model</code> コマンドが Copilot 向けに提示する、カンマ区切りのモデル一覧です。既定値: <code>gpt-5.4,claude-sonnet-4.6</code>。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td><code>/model</code> コマンドが Claude Code 向けに提示する、カンマ区切りのモデル一覧です。既定値: <code>sonnet,opus,haiku</code>。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

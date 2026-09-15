@@ -272,6 +272,14 @@ Der Bot akzeptiert derzeit:
     <td>Provider für neue Sessions wählen. Die Auswahl wird pro Bot und Chat gespeichert, bis du sie änderst.</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>Modell für die aktive Session wählen, aus der Modellliste des aktuellen Providers. Die Auswahl wird für diese Session in <code>state.json</code> gespeichert und verwendet, sobald die Session fortgesetzt wird. Eine neue Session zu starten (<code>/new</code>, <code>/switch</code> zu einer neuen Session oder <code>/compact</code>) setzt sie immer auf das konfigurierte Standardmodell des Providers zurück.</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>Eine bestimmte Modell-ID festlegen, die nicht in der kuratierten Liste enthalten ist. Ist sie noch keine bekannte Option, testet der Bot zunächst mit einem schreibgeschützten Testaufruf bei der CLI, ob die ID tatsächlich akzeptiert wird, bevor sie gespeichert wird — lehnt die CLI sie ab, wird der Fehler im Chat zurückgegeben und nichts gespeichert.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Aktuellen Projektordner setzen. Falls der Ordner nicht existiert, erstellt die App ihn und markiert ihn als vertrauenswürdig. Wenn er bereits existiert und noch nicht vertraut ist, fragt die App nach einer Bestätigung.</td>
   </tr>
@@ -407,6 +415,18 @@ Der Bot akzeptiert derzeit:
     Beispiele: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
     <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code Modellkonfiguration</a>
     </td>
+  </tr>
+  <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Codex anbietet. Standard: <code>gpt-5.4</code>.</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Copilot anbietet. Standard: <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>Kommagetrennte Modellliste, die der Befehl <code>/model</code> für Claude Code anbietet. Standard: <code>sonnet,opus,haiku</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

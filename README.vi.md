@@ -272,6 +272,14 @@ Hiện tại bot chấp nhận:
     <td>Chọn nhà cung cấp cho các phiên mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
+    <td width="332"><code>/model</code></td>
+    <td>Chọn model cho phiên đang hoạt động, từ danh sách model của nhà cung cấp hiện tại. Lựa chọn này được lưu trên phiên đó trong <code>state.json</code> và được dùng mỗi khi phiên được resume. Bắt đầu một phiên mới (<code>/new</code>, <code>/switch</code> sang một phiên mới, hoặc <code>/compact</code>) luôn đặt lại về model mặc định đã cấu hình của nhà cung cấp.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/model &lt;model_id&gt;</code></td>
+    <td>Đặt một model id cụ thể không có trong danh sách được chọn sẵn. Nếu đây chưa phải là một lựa chọn đã biết, bot sẽ thử gọi CLI trước bằng một lệnh gọi chỉ-đọc dùng một lần để xác nhận id đó thực sự được chấp nhận trước khi lưu — nếu CLI từ chối, lỗi sẽ được trả về chat và không có gì được lưu.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Đặt thư mục project hiện tại. Nếu thư mục chưa tồn tại, app sẽ tạo và đánh dấu là trusted. Nếu đã tồn tại nhưng vẫn untrusted, app sẽ yêu cầu xác nhận trust rõ ràng.</td>
   </tr>
@@ -403,6 +411,18 @@ Hiện tại bot chấp nhận:
   <tr>
     <td width="332"><code>CLAUDE_MODEL</code></td>
     <td>Ghi đè model Claude Code nếu cần. Để trống để dùng model mặc định của Claude Code CLI. Ví dụ: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Codex. Mặc định là <code>gpt-5.4</code>.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Copilot. Mặc định là <code>gpt-5.4,claude-sonnet-4.6</code>.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Claude Code. Mặc định là <code>sonnet,opus,haiku</code>.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

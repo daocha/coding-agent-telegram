@@ -274,6 +274,14 @@ bot 目前接受：
     <td>為新的工作階段選擇提供者。這個選擇會依 bot 與 chat 儲存，直到你手動修改。</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>從目前提供者的模型列表中，為使用中工作階段選擇模型。此選擇會儲存在該工作階段的 <code>state.json</code> 中，並在每次恢復該工作階段時套用。建立新工作階段（<code>/new</code>、切換到全新工作階段的 <code>/switch</code>，或 <code>/compact</code>）一律會重設為提供者設定的預設模型。</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>設定不在精選列表中的特定模型 ID。如果它還不是已知選項，bot 會先以一次可拋棄的唯讀呼叫探測 CLI，確認該 ID 確實會被接受後才會儲存——如果 CLI 拒絕該 ID，錯誤訊息會回傳到 chat，且不會儲存任何內容。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>設定目前的 project 資料夾。如果資料夾不存在，app 會建立並標記為 trusted；如果已存在但仍是 untrusted，app 會明確要求確認 trust。</td>
   </tr>
@@ -405,6 +413,18 @@ bot 目前接受：
   <tr>
     <td width="332"><code>CLAUDE_MODEL</code></td>
     <td>可選的 Claude Code model override。留空則使用 Claude Code CLI 預設 model。例子：<code>sonnet</code>、<code>opus</code>、<code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td>以逗號分隔的 model 列表，供 Codex 的 <code>/model</code> 指令選用。預設：<code>gpt-5.4</code>。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>以逗號分隔的 model 列表，供 Copilot 的 <code>/model</code> 指令選用。預設：<code>gpt-5.4,claude-sonnet-4.6</code>。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>以逗號分隔的 model 列表，供 Claude Code 的 <code>/model</code> 指令選用。預設：<code>sonnet,opus,haiku</code>。</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
