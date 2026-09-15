@@ -14,6 +14,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from coding_agent_telegram.i18n import DEFAULT_LOCALE, normalize_locale
+from coding_agent_telegram.models import DEFAULT_MODEL_CHOICES
 from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
 
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
@@ -66,6 +67,9 @@ class AppConfig:
     codex_model: str
     copilot_model: str
     claude_model: str
+    codex_model_choices: tuple[str, ...]
+    copilot_model_choices: tuple[str, ...]
+    claude_model_choices: tuple[str, ...]
     copilot_autopilot: bool
     copilot_no_ask_user: bool
     copilot_allow_all: bool
@@ -108,6 +112,14 @@ def _parse_csv_env(name: str) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _parse_model_choices_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Like ``_parse_csv_env``, but an unset var falls back to ``default`` while an
+    explicitly empty one (``NAME=``) is honored as "no curated choices"."""
+    if os.getenv(name) is None:
+        return default
+    return tuple(_parse_csv_env(name))
 
 
 def _parse_allowed_chat_ids() -> set[int]:
@@ -354,6 +366,9 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         codex_model=os.getenv("CODEX_MODEL", "").strip(),
         copilot_model=os.getenv("COPILOT_MODEL", "").strip(),
         claude_model=os.getenv("CLAUDE_MODEL", "").strip(),
+        codex_model_choices=_parse_model_choices_env("CODEX_MODEL_CHOICES", DEFAULT_MODEL_CHOICES["codex"]),
+        copilot_model_choices=_parse_model_choices_env("COPILOT_MODEL_CHOICES", DEFAULT_MODEL_CHOICES["copilot"]),
+        claude_model_choices=_parse_model_choices_env("CLAUDE_MODEL_CHOICES", DEFAULT_MODEL_CHOICES["claude"]),
         copilot_autopilot=_parse_bool(os.getenv("COPILOT_AUTOPILOT", "true"), default=True),
         copilot_no_ask_user=_parse_bool(os.getenv("COPILOT_NO_ASK_USER", "true"), default=True),
         copilot_allow_all=_parse_bool(os.getenv("COPILOT_ALLOW_ALL", "true"), default=True),

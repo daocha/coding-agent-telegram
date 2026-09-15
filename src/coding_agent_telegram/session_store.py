@@ -151,6 +151,7 @@ class SessionStore:
         origin: str = "bot",
         origin_label: Optional[str] = None,
         initialized_from: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> dict[str, str]:
         now = self._now()
         normalized_provider = _normalize_provider(provider)
@@ -158,6 +159,7 @@ class SessionStore:
             "name": session_name,
             "project_folder": project_folder,
             "provider": normalized_provider,
+            "model": (model or "").strip(),
             "branch_name": branch_name or "",
             "origin": origin,
             "origin_label": origin_label or ("Bot managed session" if origin == "bot" else origin),
@@ -201,6 +203,20 @@ class SessionStore:
             chat_data["current_provider"] = _normalize_provider(provider)
 
         self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
+
+    def set_session_model(self, bot_id: str, chat_id: int, session_id: str, model: Optional[str]) -> bool:
+        """Store a model override on a session record; empty/None clears it back to the CLI/env default."""
+
+        def mutate(chat_data: dict[str, Any]) -> bool:
+            session = chat_data.get("sessions", {}).get(session_id)
+            if not session:
+                return False
+            session["model"] = (model or "").strip()
+            session["updated_at"] = self._now()
+            return True
+
+        result = self._mutate_chat_data(bot_id, chat_id, mutate)
+        return False if result is None else result
 
     def set_pending_action(self, bot_id: str, chat_id: int, pending_action: Optional[dict[str, Any]]) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
@@ -246,6 +262,7 @@ class SessionStore:
         origin: str = "bot",
         origin_label: Optional[str] = None,
         initialized_from: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
             sessions = chat_data.setdefault("sessions", {})
@@ -259,6 +276,7 @@ class SessionStore:
                 origin=origin,
                 origin_label=origin_label,
                 initialized_from=initialized_from,
+                model=model,
             )
             chat_data["active_session_id"] = session_id
             chat_data["current_project_folder"] = project_folder

@@ -272,6 +272,14 @@ Le bot accepte actuellement :
     <td>Choisir le fournisseur pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>
   <tr>
+    <td width="332"><code>/model</code></td>
+    <td>Choisir le modèle pour la session active, parmi la liste de modèles du fournisseur courant. Le choix est stocké sur cette session dans <code>state.json</code> et est utilisé chaque fois que la session est reprise. Démarrer une nouvelle session (<code>/new</code>, <code>/switch</code> vers une session neuve, ou <code>/compact</code>) réinitialise toujours au modèle par défaut configuré pour le fournisseur.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/model &lt;model_id&gt;</code></td>
+    <td>Définir un id de modèle spécifique absent de la liste sélectionnée. S’il ne s’agit pas déjà d’un choix connu, le bot sonde d’abord la CLI avec un appel de test en lecture seule pour confirmer que l’id est réellement accepté avant de l’enregistrer — si la CLI le rejette, l’erreur est renvoyée dans le chat et rien n’est enregistré.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Définir le dossier de projet courant. Si le dossier n’existe pas, l’app le crée et le marque trusted. S’il existe déjà mais reste untrusted, l’app vous demande une confirmation.</td>
   </tr>
@@ -407,6 +415,18 @@ Le bot accepte actuellement :
     Exemples : <code>sonnet</code>, <code>opus</code>, <code>haiku</code>
     <a href="https://code.claude.com/docs/en/model-config" target="_blank">Configuration des modèles Claude Code</a>
     </td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Codex. Si elle n’est pas définie, la valeur du fichier <code>.env.example</code> fourni est utilisée.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Copilot. Si elle n’est pas définie, la valeur du fichier <code>.env.example</code> fourni est utilisée.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>Liste de modèles séparés par des virgules proposée par la commande <code>/model</code> pour Claude Code. Si elle n’est pas définie, la valeur du fichier <code>.env.example</code> fourni est utilisée ; si le modèle est indisponible, <code>sonnet,opus,fable,haiku</code> est utilisé.</td>
   </tr>
   <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>

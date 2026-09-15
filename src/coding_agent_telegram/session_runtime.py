@@ -392,6 +392,7 @@ class SessionRuntime:
         project_folder = session["project_folder"]
         provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
+        model = (session.get("model") or "").strip() or None
         logger.info(
             "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'. "
             "Prompt (first 200 chars): %.200r",
@@ -432,6 +433,7 @@ class SessionRuntime:
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
+            model=model,
             stall_message=self._t(update, "runtime.active_run_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
@@ -482,6 +484,9 @@ class SessionRuntime:
                 project_folder,
                 provider,
                 branch_name=branch_name,
+                # Not a user-initiated new session -- the CLI just rotated the id for
+                # the same conversation, so the model override carries over.
+                model=model,
             )
             logger.info(
                 "Resume returned a different session id for chat %s; switched from '%s' (%s) to '%s' (%s).",
@@ -559,6 +564,7 @@ class SessionRuntime:
             COMPACT_SUMMARY_PROMPT,
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            model=(session.get("model") or "").strip() or None,
             stall_message=self._t(update, "runtime.active_run_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
@@ -758,6 +764,9 @@ class SessionRuntime:
             active_id,
             chat_id,
         )
+        # Not a user-initiated new session -- the old one just expired underneath the
+        # same conversation, so the model override carries over rather than resetting.
+        model = (session.get("model") or "").strip() or None
         create_result = await self.run_with_typing(
             update,
             context,
@@ -768,6 +777,7 @@ class SessionRuntime:
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
+            model=model,
             stall_message=self._t(update, "runtime.replacement_session_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
@@ -785,6 +795,7 @@ class SessionRuntime:
             project_folder,
             provider,
             branch_name=branch_name,
+            model=model,
         )
         logger.info(
             "Created a replacement session for chat %s after resume failure: old='%s' (%s) new='%s' (%s).",
