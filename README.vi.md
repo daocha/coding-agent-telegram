@@ -179,6 +179,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+Lệnh `coding-agent-telegram` đã cài đặt có cùng watchdog polling như `./startup.sh`: lệnh sẽ khởi động lại bot sau khi bị lỗi hoặc khi heartbeat Telegram quá cũ, đồng thời lùi thời gian thử lại khi DNS hoặc mạng không khả dụng.
+
 ### Cách C: Chạy từ repository đã clone
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram

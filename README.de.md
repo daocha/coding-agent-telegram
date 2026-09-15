@@ -179,6 +179,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+Der installierte Befehl `coding-agent-telegram` enthält denselben Polling-Watchdog wie `./startup.sh`: Er startet den Bot nach einem Absturz oder einem veralteten Telegram-Heartbeat neu und verwendet einen Backoff, solange DNS oder Netzwerk nicht verfügbar sind.
+
 ### Variante C: Aus einem geklonten Repository starten
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram

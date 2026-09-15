@@ -181,6 +181,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+설치된 `coding-agent-telegram` 명령에는 `./startup.sh`와 동일한 폴링 watchdog이 포함되어 있습니다. 봇이 충돌하거나 Telegram heartbeat가 오래되면 봇을 재시작하며, DNS 또는 네트워크를 사용할 수 없는 동안에는 backoff를 적용해 재시도합니다.
+
 ### 방법 C: 저장소를 clone해서 실행
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram

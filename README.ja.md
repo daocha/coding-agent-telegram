@@ -179,6 +179,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+インストールされた `coding-agent-telegram` コマンドには `./startup.sh` と同じ polling watchdog が含まれています。bot がクラッシュした場合や Telegram heartbeat が古くなった場合に再起動し、DNS またはネットワークが利用できない間はバックオフして再試行します。
+
 ### 方法C: クローンしたリポジトリから実行
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
