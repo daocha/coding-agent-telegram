@@ -181,6 +181,10 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+The installed `coding-agent-telegram` command includes the same polling
+watchdog as `./startup.sh`: it restarts the bot after a crash or a stale
+Telegram heartbeat, and backs off while DNS/network connectivity is down.
+
 ### Option C: Run from a cloned repository
 
 ```bash

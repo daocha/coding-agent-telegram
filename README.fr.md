@@ -179,6 +179,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+La commande installée `coding-agent-telegram` inclut le même mécanisme de surveillance du polling que `./startup.sh` : elle redémarre le bot après un crash ou un heartbeat Telegram obsolète et applique un délai croissant tant que le DNS ou le réseau est indisponible.
+
 ### Variante C : Exécution depuis un dépôt cloné
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
