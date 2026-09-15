@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-coding-agent-telegram = "coding_agent_telegram.cli:main"
+coding-agent-telegram = "coding_agent_telegram.supervisor:main"
 coding-agent-telegram-stt-install = "coding_agent_telegram.stt_setup:main"
 
 [tool.setuptools]

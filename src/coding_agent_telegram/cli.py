@@ -348,3 +348,7 @@ def main() -> None:
         asyncio.run(_run(cfg, store, runner))
     except KeyboardInterrupt:
         logger.info("Stopping Telegram bot polling.")
+
+
+if __name__ == "__main__":
+    main()

@@ -11,9 +11,10 @@ established TCP sockets to Telegram, but never issued another request for
 never triggers either.
 
 This module only records liveness; it makes no decision about staleness or
-restarting. That decision belongs to ``startup.sh``, which runs this process
-as a child, watches this file's mtime, and restarts the child (after waiting
-for DNS to actually work again) if it goes stale.
+restarting. That decision belongs to the installed command's Python supervisor
+(or ``startup.sh`` in a repository checkout), which runs this process as a
+child, watches this file's mtime, and restarts the child (after waiting for
+DNS to actually work again) if it goes stale.
 """
 
 from pathlib import Path

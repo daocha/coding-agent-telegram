@@ -181,6 +181,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+已安裝的 `coding-agent-telegram` 指令包含與 `./startup.sh` 相同的輪詢 watchdog：bot crash 或 Telegram heartbeat 過期後會自動重新啟動；DNS 或網路不可用時會採用 backoff 策略重試。
+
 ### 方案 C：從 clone 下來的 repository 執行
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
