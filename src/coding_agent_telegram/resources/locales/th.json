@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ ปุ่มนี้หมดอายุแล้ว โปรดลองสั่งคำสั่งอีกครั้ง",
   "git.branch_unknown": "⚠️ ไม่สามารถระบุ สาขา ของ เซสชัน ปัจจุบันได้",
   "git.branch_discrepancy_warning": "⚠️ ตรวจพบสาขาไม่ตรงกัน สาขาของเซสชันที่ใช้งานคือ `{session_branch}` แต่ repository กำลัง checkout `{checked_out_branch}` อยู่ โปรดสลับไปยังสาขาที่ต้องการก่อนเรียกใช้คำสั่งนี้",
+  "git.branch_discrepancy_switch_to_session": "สลับไปยัง {branch_name}",
+  "git.branch_discrepancy_use_current": "เปลี่ยนสาขาเซสชันเป็น {branch_name}",
   "git.detached_head_label": "HEAD แบบ detached",
   "git.cancel_button": "ยกเลิก",
   "git.pull_cancelled": "ยกเลิก pull แล้ว",

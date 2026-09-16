@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ 此按鈕已過期。請重新執行命令。",
   "git.branch_unknown": "⚠️ 無法判斷目前工作階段的分支。",
   "git.branch_discrepancy_warning": "⚠️ 偵測到分支不一致。目前工作階段分支為 `{session_branch}`，但儲存庫目前簽出的分支為 `{checked_out_branch}`。請先切換至預期分支，再執行此指令。",
+  "git.branch_discrepancy_switch_to_session": "切換至 {branch_name}",
+  "git.branch_discrepancy_use_current": "將工作階段分支改為 {branch_name}",
   "git.detached_head_label": "分離的 HEAD",
   "git.cancel_button": "取消",
   "git.pull_cancelled": "已取消拉取。",

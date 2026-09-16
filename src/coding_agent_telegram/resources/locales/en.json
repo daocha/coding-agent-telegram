@@ -24,6 +24,8 @@
   "common.project_folder_missing": "⚠️ Project folder no longer exists for this session: {project_folder}",
   "git.branch_unknown": "⚠️ Could not determine the branch for the current session.",
   "git.branch_discrepancy_warning": "⚠️ Branch discrepancy detected. The active session branch is `{session_branch}`, but the repository currently has `{checked_out_branch}` checked out. Switch to the intended branch before running this command.",
+  "git.branch_discrepancy_switch_to_session": "Switch to {branch_name}",
+  "git.branch_discrepancy_use_current": "Change session branch to {branch_name}",
   "git.detached_head_label": "detached HEAD",
   "git.cancel_button": "Cancel",
   "git.usage_diff": "Usage: /diff",

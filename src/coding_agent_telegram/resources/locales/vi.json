@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ Nút này đã hết hạn. Vui lòng chạy lại lệnh.",
   "git.branch_unknown": "⚠️ Không thể xác định nhánh của phiên hiện tại.",
   "git.branch_discrepancy_warning": "⚠️ Phát hiện nhánh không khớp. Nhánh của phiên đang hoạt động là `{session_branch}`, nhưng kho hiện đang checkout `{checked_out_branch}`. Hãy chuyển sang nhánh mong muốn trước khi chạy lệnh này.",
+  "git.branch_discrepancy_switch_to_session": "Chuyển sang {branch_name}",
+  "git.branch_discrepancy_use_current": "Đổi nhánh phiên thành {branch_name}",
   "git.detached_head_label": "HEAD tách rời",
   "git.cancel_button": "Hủy",
   "git.pull_cancelled": "Đã hủy pull.",

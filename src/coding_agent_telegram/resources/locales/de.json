@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ Diese Schaltfläche ist abgelaufen. Bitte führe den Befehl erneut aus.",
   "git.branch_unknown": "⚠️ Der Zweig der aktuellen Sitzung konnte nicht ermittelt werden.",
   "git.branch_discrepancy_warning": "⚠️ Zweigabweichung erkannt. Der Zweig der aktiven Sitzung ist `{session_branch}`, im Repository ist jedoch `{checked_out_branch}` ausgecheckt. Wechsle vor diesem Befehl zum gewünschten Zweig.",
+  "git.branch_discrepancy_switch_to_session": "Zu {branch_name} wechseln",
+  "git.branch_discrepancy_use_current": "Sitzungszweig zu {branch_name} ändern",
   "git.detached_head_label": "losgelöster HEAD",
   "git.cancel_button": "Abbrechen",
   "git.usage_diff": "Verwendung: /diff",

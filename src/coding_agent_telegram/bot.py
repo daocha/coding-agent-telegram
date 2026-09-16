@@ -183,6 +183,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CallbackQueryHandler(router.handle_long_gap_callback, pattern=r"^longgap:(compact|proceed|switch)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_source_callback, pattern=r"^branchsource:[0-9a-f]{12}$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_discrepancy_callback, pattern=r"^branchdiscrepancy:(stored|current)$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_git_branch_discrepancy_callback, pattern=r"^gitbranchdiscrepancy:(stored|current)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_commit_generate_callback, pattern=r"^commitgen:(confirm|cancel):[0-9a-f]{12}$"))
     app.add_handler(CallbackQueryHandler(router.handle_commit_execute_callback, pattern=r"^commitexec:(confirm|cancel):[0-9a-f]{12}$"))
     app.add_handler(CallbackQueryHandler(router.handle_diff_callback, pattern=r"^diff(?:show|page):[0-9a-f]{12}:\d+$"))

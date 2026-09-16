@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ 此按钮已过期。请重新执行命令。",
   "git.branch_unknown": "⚠️ 无法确定当前会话的分支。",
   "git.branch_discrepancy_warning": "⚠️ 检测到分支不一致。活动会话分支为 `{session_branch}`，但仓库当前检出的分支为 `{checked_out_branch}`。请先切换到预期分支，再运行此命令。",
+  "git.branch_discrepancy_switch_to_session": "切换到 {branch_name}",
+  "git.branch_discrepancy_use_current": "将会话分支改为 {branch_name}",
   "git.detached_head_label": "分离的 HEAD",
   "git.cancel_button": "取消",
   "git.pull_cancelled": "已取消拉取。",
