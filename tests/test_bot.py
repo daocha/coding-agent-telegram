@@ -5,8 +5,11 @@ def test_default_bot_commands_hide_commit_and_push_when_disabled():
     commands = default_bot_commands(enable_commit_command=False)
     names = [command.command for command in commands]
 
-    assert names == ["provider", "model", "project", "branch", "current", "status", "new", "switch", "compact", "diff", "pull", "push", "abort"]
+    assert names == ["provider", "model", "project", "branch", "current", "status", "new", "switch", "compact", "diff", "pull", "push", "log", "reset", "abort"]
     assert "commit" not in names
+    descriptions = {command.command: command.description for command in commands}
+    assert descriptions["pull"] == "Git pull the current session branch"
+    assert all("Git" in descriptions[name] for name in ("pull", "push", "log", "reset"))
 
 
 def test_default_bot_commands_show_commit_and_push_when_enabled():
@@ -27,6 +30,8 @@ def test_default_bot_commands_show_commit_and_push_when_enabled():
         "commit",
         "pull",
         "push",
+        "log",
+        "reset",
         "abort",
     ]
 

@@ -345,11 +345,19 @@ The bot currently accepts:
   </tr>
   <tr>
     <td><code>/pull</code></td>
-    <td>Pull from <code>origin</code> for the active session branch after confirmation. The bot also refreshes the default branch when applicable.</td>
+    <td>Git pull from <code>origin</code> for the active session branch after confirmation. The bot also refreshes the default branch when applicable.</td>
   </tr>
   <tr>
     <td><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
+    <td>Git push <code>origin &lt;branch&gt;</code> for the current active session. The bot asks for confirmation before pushing.</td>
+  </tr>
+  <tr>
+    <td><code>/log</code></td>
+    <td>Show the top five Git commits for the active session project.</td>
+  </tr>
+  <tr>
+    <td><code>/reset</code></td>
+    <td>Select a local or <code>origin</code> default/current branch, then confirm a <code>git reset --hard</code>. Remote targets are pulled first.</td>
   </tr>
   <tr>
     <td><code>/abort</code></td>

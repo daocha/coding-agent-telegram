@@ -210,21 +210,33 @@ def _git(project_path: Path, args: list[str]) -> str:
     return proc.stdout
 
 
-def _parse_status_paths(output: str) -> list[str]:
-    paths: list[str] = []
-    for line in output.splitlines():
-        if len(line) < 4:
+def _parse_status_entries(output: str) -> list[tuple[str, str]]:
+    """Parse ``git status --porcelain=v1 -z`` without losing path characters."""
+    records = output.split("\0")
+    entries: list[tuple[str, str]] = []
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if len(record) < 4:
             continue
-        path = line[3:].strip()
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1].strip()
+        status = record[:2]
+        path = record[3:]
+        if "R" in status or "C" in status:
+            # In -z mode the destination is in this record and the source path
+            # follows as a second NUL-terminated record.
+            index += 1
         if path:
-            paths.append(path)
-    return paths
+            entries.append((status, path))
+    return entries
+
+
+def _parse_status_paths(output: str) -> list[str]:
+    return [path for _status, path in _parse_status_entries(output)]
 
 
 def changed_files(project_path: Path) -> list[str]:
-    output = _git(project_path, ["status", "--short", "--untracked-files=all"])
+    output = _git(project_path, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])
     return [
         path
         for path in _parse_status_paths(output)
@@ -234,16 +246,10 @@ def changed_files(project_path: Path) -> list[str]:
 
 
 def split_changed_files(project_path: Path) -> tuple[list[str], list[str]]:
-    output = _git(project_path, ["status", "--short", "--untracked-files=all"])
+    output = _git(project_path, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])
     tracked: list[str] = []
     untracked: list[str] = []
-    for line in output.splitlines():
-        if len(line) < 4:
-            continue
-        status = line[:2]
-        path = line[3:].strip()
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1].strip()
+    for status, path in _parse_status_entries(output):
         if (
             not path
             or path.startswith(f"{INTERNAL_APP_DIR}/")
