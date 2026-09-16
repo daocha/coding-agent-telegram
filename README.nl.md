@@ -331,11 +331,19 @@ De bot accepteert momenteel:
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>Voer na bevestiging een pull uit vanaf <code>origin</code> voor de branch van de actieve sessie. De bot ververst ook de standaardbranch wanneer dat van toepassing is.</td>
+    <td>Voer na bevestiging een Git pull uit vanaf <code>origin</code> voor de branch van de actieve sessie. De bot ververst ook de standaardbranch wanneer dat van toepassing is.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
+    <td>Voer een Git push uit naar <code>origin &lt;branch&gt;</code> voor de huidige actieve sessie. De bot vraagt om bevestiging voordat hij pusht.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>Toon de laatste vijf Git-commits voor het project van de actieve sessie.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>Selecteer de lokale of <code>origin</code>-standaard-/huidige branch en bevestig daarna een <code>git reset --hard</code>. Remote doelen worden eerst gepulld.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

@@ -333,11 +333,19 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>확인 후 활성 세션 브랜치에 대해 <code>origin</code> 에서 pull 합니다. 필요하면 기본 브랜치도 함께 새로고칩니다.</td>
+    <td>확인 후 활성 세션 브랜치에 대해 <code>origin</code> 에서 Git pull 합니다. 필요하면 기본 브랜치도 함께 새로고칩니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>현재 활성 세션 에 대해 <code>origin &lt;branch&gt;</code> 를 push 합니다. push 전에 bot 이 확인합니다.</td>
+    <td>현재 활성 세션 에 대해 <code>origin &lt;branch&gt;</code> 로 Git push 합니다. push 전에 bot 이 확인합니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>활성 세션 project 의 최근 Git 커밋 5개를 표시합니다.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>local 또는 <code>origin</code> 의 기본/현재 브랜치를 선택한 뒤 <code>git reset --hard</code> 를 확인합니다. remote 대상은 먼저 pull 합니다.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

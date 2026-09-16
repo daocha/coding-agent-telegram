@@ -331,11 +331,19 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>ดึงจาก <code>origin</code> สำหรับ branch ของเซสชันที่ใช้งานอยู่หลังจากยืนยันแล้ว และ bot จะรีเฟรช default branch ให้ด้วยเมื่อเกี่ยวข้อง</td>
+    <td>Git pull จาก <code>origin</code> สำหรับ branch ของเซสชันที่ใช้งานอยู่หลังจากยืนยันแล้ว และ bot จะรีเฟรช default branch ให้ด้วยเมื่อเกี่ยวข้อง</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>push <code>origin &lt;branch&gt;</code> สำหรับ เซสชันที่ใช้งานอยู่ ปัจจุบัน โดยบอตจะขอการยืนยันก่อน push</td>
+    <td>Git push ไปยัง <code>origin &lt;branch&gt;</code> สำหรับ เซสชันที่ใช้งานอยู่ ปัจจุบัน โดยบอตจะขอการยืนยันก่อน push</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>แสดง Git commit 5 รายการล่าสุดของ project ในเซสชันที่ใช้งานอยู่</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>เลือก default/current branch จาก local หรือ <code>origin</code> แล้วจึงยืนยัน <code>git reset --hard</code> โดยจะ pull เป้าหมาย remote ก่อน</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

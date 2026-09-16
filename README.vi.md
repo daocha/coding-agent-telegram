@@ -331,11 +331,19 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>Sau khi xác nhận, thực hiện pull từ <code>origin</code> cho branch của phiên đang hoạt động. Bot cũng làm mới branch mặc định khi cần.</td>
+    <td>Sau khi xác nhận, thực hiện Git pull từ <code>origin</code> cho branch của phiên đang hoạt động. Bot cũng làm mới branch mặc định khi cần.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+    <td>Thực hiện Git push đến <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>Hiển thị năm commit Git mới nhất của project trong phiên đang hoạt động.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>Chọn branch mặc định/hiện tại ở local hoặc <code>origin</code>, sau đó xác nhận <code>git reset --hard</code>. Mục tiêu remote sẽ được pull trước.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
