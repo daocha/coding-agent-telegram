@@ -331,11 +331,19 @@ Le bot accepte actuellement :
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>Après confirmation, exécuter un <code>pull</code> depuis <code>origin</code> pour la branche de la session active. Le bot rafraîchit aussi la branche par défaut si nécessaire.</td>
+    <td>Après confirmation, exécuter un Git <code>pull</code> depuis <code>origin</code> pour la branche de la session active. Le bot rafraîchit aussi la branche par défaut si nécessaire.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Pousser <code>origin &lt;branch&gt;</code> pour la session active courante. Le bot demande une confirmation avant le push.</td>
+    <td>Exécuter un Git push vers <code>origin &lt;branch&gt;</code> pour la session active courante. Le bot demande une confirmation avant le push.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>Afficher les cinq derniers commits Git du projet de la session active.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>Sélectionner la branche par défaut ou courante, locale ou sur <code>origin</code>, puis confirmer un <code>git reset --hard</code>. Les cibles distantes sont d’abord pullées.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

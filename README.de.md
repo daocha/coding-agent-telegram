@@ -331,11 +331,19 @@ Der Bot akzeptiert derzeit:
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>Nach Bestätigung <code>origin</code> in den Branch der aktiven Session pullen. Wenn zutreffend, aktualisiert der Bot zusätzlich den Standard-Branch.</td>
+    <td>Nach Bestätigung per Git von <code>origin</code> in den Branch der aktiven Session pullen. Wenn zutreffend, aktualisiert der Bot zusätzlich den Standard-Branch.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td><code>origin &lt;branch&gt;</code> für die aktuelle aktive Session pushen. Der Bot fragt vor dem Push nach einer Bestätigung.</td>
+    <td>Per Git <code>origin &lt;branch&gt;</code> für die aktuelle aktive Session pushen. Der Bot fragt vor dem Push nach einer Bestätigung.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>Die letzten fünf Git-Commits für das Projekt der aktiven Session anzeigen.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>Einen lokalen oder <code>origin</code>-Standard-/aktuellen Branch auswählen und anschließend <code>git reset --hard</code> bestätigen. Remote-Ziele werden zuerst gepullt.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

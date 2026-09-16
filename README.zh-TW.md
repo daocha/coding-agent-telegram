@@ -333,11 +333,19 @@ bot 目前接受：
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>確認後，從 <code>origin</code> 拉取作用中工作階段目前的分支。適用時，bot 也會一併重新整理預設分支。</td>
+    <td>確認後，透過 Git 從 <code>origin</code> 拉取作用中工作階段目前的分支。適用時，bot 也會一併重新整理預設分支。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>為目前作用中工作階段執行 <code>origin &lt;branch&gt;</code> push。push 前 bot 會要求確認。</td>
+    <td>為目前作用中工作階段透過 Git push 至 <code>origin &lt;branch&gt;</code>。push 前 bot 會要求確認。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>顯示作用中工作階段專案最近的五個 Git 提交。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>選擇 local 或 <code>origin</code> 上的預設／目前分支，然後確認執行 <code>git reset --hard</code>。遠端目標會先被拉取。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

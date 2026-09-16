@@ -331,11 +331,19 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>確認後に、アクティブなセッションのブランチで <code>origin</code> から pull します。必要に応じてデフォルト ブランチも更新します。</td>
+    <td>確認後に、アクティブなセッションのブランチで <code>origin</code> から Git pull します。必要に応じてデフォルト ブランチも更新します。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>現在の アクティブなセッション に対して <code>origin &lt;branch&gt;</code> を push します。push 前に bot が確認します。</td>
+    <td>現在の アクティブなセッション に対して <code>origin &lt;branch&gt;</code> へ Git push します。push 前に bot が確認します。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>アクティブなセッションの project で最新の Git コミット 5 件を表示します。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>local または <code>origin</code> のデフォルト／現在のブランチを選択し、<code>git reset --hard</code> を確認します。remote の対象は先に pull されます。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

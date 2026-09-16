@@ -333,11 +333,19 @@ bot 当前接受：
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>确认后，从 <code>origin</code> 拉取活动会话当前分支。适用时，bot 也会一并刷新默认分支。</td>
+    <td>确认后，通过 Git 从 <code>origin</code> 拉取活动会话当前分支。适用时，bot 也会一并刷新默认分支。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>为当前活动会话执行 <code>origin &lt;branch&gt;</code> push。push 前 bot 会要求确认。</td>
+    <td>为当前活动会话通过 Git push 到 <code>origin &lt;branch&gt;</code>。push 前 bot 会要求确认。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>显示活动会话项目最近的五条 Git 提交。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>选择 local 或 <code>origin</code> 上的默认/当前分支，然后确认执行 <code>git reset --hard</code>。远程目标会先被拉取。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>

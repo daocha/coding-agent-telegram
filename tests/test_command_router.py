@@ -6043,6 +6043,22 @@ def _run_pull_command(router: CommandRouter, *, args: list[str] | None = None) -
     return bot
 
 
+def _run_log_command(router: CommandRouter, *, args: list[str] | None = None) -> FakeBot:
+    update = make_update(text="/log" if not args else "/log " + " ".join(args))
+    bot = FakeBot()
+    context = SimpleNamespace(args=args or [], bot=bot)
+    asyncio.run(router.handle_log(update, context))
+    return bot
+
+
+def _run_reset_command(router: CommandRouter, *, args: list[str] | None = None) -> FakeBot:
+    update = make_update(text="/reset" if not args else "/reset " + " ".join(args))
+    bot = FakeBot()
+    context = SimpleNamespace(args=args or [], bot=bot)
+    asyncio.run(router.handle_reset(update, context))
+    return bot
+
+
 def _run_diff_command(router: CommandRouter, *, args: list[str] | None = None) -> FakeBot:
     update = make_update(text="/diff" if not args else "/diff " + " ".join(args))
     bot = FakeBot()
@@ -6062,6 +6078,14 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
             ],
         ),
     )
+    lock_states = []
+    original_run_safe_commit_command = router.git.run_safe_commit_command
+
+    def run_safe_commit_command(project_path, args):
+        lock_states.append(router._workspace_locks["backend"].locked())
+        return original_run_safe_commit_command(project_path, args)
+
+    router.git.run_safe_commit_command = run_safe_commit_command
 
     bot = _run_commit_command(router, '/commit git add -u && rm -rf / && git commit -m "safe"')
 
@@ -6080,6 +6104,7 @@ def test_commit_executes_only_valid_git_commands_and_ignores_non_git_segments(tm
     assert "[telegram-enhance 5b9a263] safe" in bot.messages[-1][1]
     assert "Ignored non-git commands:" in bot.messages[-1][1]
     assert "- rm -rf /" in bot.messages[-1][1]
+    assert lock_states == [True, True]
 
 
 def test_commit_is_rejected_when_disabled(tmp_path: Path):
@@ -6404,6 +6429,23 @@ def test_push_uses_current_session_branch(tmp_path: Path):
     assert buttons[1].api_kwargs == {"style": "danger"}
 
 
+def test_push_escapes_backticks_in_branch_name_for_markdown(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    branch_name = "feature/foo`bar"
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name=branch_name)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch=branch_name)
+    router.runtime.git = router.git
+
+    bot = _run_push_command(router)
+
+    assert bot.messages[-1][1] == "Push branch `feature/foo\\`bar` to `origin`?"
+    assert bot.messages[-1][2] == "Markdown"
+
+
 def test_push_confirmation_executes_push(tmp_path: Path):
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
@@ -6419,11 +6461,21 @@ def test_push_confirmation_executes_push(tmp_path: Path):
         push_result=SimpleNamespace(success=True, message="Pushed branch 'feature-1' to origin.", current_branch="feature-1"),
     )
     router.runtime.git = router.git
+    lock_states = []
+    original_push_branch = router.git.push_branch
+
+    def push_branch(project_path, branch_name):
+        lock_states.append(router._workspace_locks["backend"].locked())
+        return original_push_branch(project_path, branch_name)
+
+    router.git.push_branch = push_branch
+    prompt_bot = _run_push_command(router)
+    confirm_callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][0].callback_data
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="push:confirm",
+            data=confirm_callback_data,
             answer=None,
             edit_message_text=None,
         ),
@@ -6447,6 +6499,7 @@ def test_push_confirmation_executes_push(tmp_path: Path):
     assert bot.messages[-1][1].startswith('<pre><code class="language-bash">')
     assert f"${shlex.join(['git', 'push', 'origin', 'feature-1'])}" in bot.messages[-1][1]
     assert "[Completed]" in bot.messages[-1][1]
+    assert lock_states == [True]
 
 
 def test_push_confirmation_cancel_does_not_push(tmp_path: Path):
@@ -6459,11 +6512,13 @@ def test_push_confirmation_cancel_does_not_push(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
     router.runtime.git = router.git
+    prompt_bot = _run_push_command(router)
+    cancel_callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][1].callback_data
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="push:cancel",
+            data=cancel_callback_data,
             answer=None,
             edit_message_text=None,
         ),
@@ -6483,6 +6538,38 @@ def test_push_confirmation_cancel_does_not_push(tmp_path: Path):
     asyncio.run(router.handle_push_callback(update, context))
 
     assert edited == ["Push cancelled."]
+
+
+def test_push_confirmation_expires_when_active_session_branch_changes(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    prompt_bot = _run_push_command(router)
+    callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][0].callback_data
+    store.set_active_session_branch("bot-a", 123, "feature-2")
+    router.git._current_branch = "feature-2"
+
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_push_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert "expired" in edited[-1].lower()
+    assert router.git.push_calls == []
 
 
 def test_pull_refreshes_active_session_branch(tmp_path: Path):
@@ -6509,8 +6596,8 @@ def test_pull_refreshes_active_session_branch(tmp_path: Path):
     assert router.git.refresh_calls == []
     assert bot.messages[-1][1] == "Pull branch `feature-1` from `origin`?"
     buttons = bot.messages[-1][3].inline_keyboard[0]
-    assert buttons[0].callback_data == "pull:confirm"
-    assert buttons[1].callback_data == "pull:cancel"
+    assert buttons[0].callback_data.startswith("pull:confirm:")
+    assert buttons[1].callback_data.startswith("pull:cancel:")
     assert buttons[0].text == "Confirm pull"
     assert buttons[1].text == "Cancel"
 
@@ -6542,7 +6629,7 @@ def test_pull_confirmation_refreshes_default_and_session_branch(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(
         is_git_repo=True,
-        current_branch="main",
+        current_branch="feature-1",
         default_branch="develop",
         checkout_result=SimpleNamespace(success=True, message="Checked out branch"),
     )
@@ -6551,12 +6638,22 @@ def test_pull_confirmation_refreshes_default_and_session_branch(tmp_path: Path):
         warnings=("git fetch origin failed.",),
     )
     router.runtime.git = router.git
+    lock_states = []
+    original_refresh_current_branch = router.git.refresh_current_branch
+
+    def refresh_current_branch(project_path):
+        lock_states.append(router._workspace_locks["backend"].locked())
+        return original_refresh_current_branch(project_path)
+
+    router.git.refresh_current_branch = refresh_current_branch
+    prompt_bot = _run_pull_command(router)
+    confirm_callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][0].callback_data
 
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="pull:confirm",
+            data=confirm_callback_data,
             answer=None,
             edit_message_text=None,
         ),
@@ -6580,11 +6677,11 @@ def test_pull_confirmation_refreshes_default_and_session_branch(tmp_path: Path):
         (backend, "develop"),
         (backend, "feature-1"),
     ]
-    assert "Updated branch &#x27;develop&#x27; from origin." in bot.messages[-1][1]
-    assert "Updated branch &#x27;feature-1&#x27; from origin." in bot.messages[-1][1]
+    assert "Updated branch" not in bot.messages[-1][1]
     assert "Refresh warnings:" in bot.messages[-1][1]
     assert "- git fetch origin failed." in bot.messages[-1][1]
     assert router.git.push_calls == []
+    assert lock_states == [True, True]
 
 
 def test_pull_confirmation_cancel_does_not_refresh(tmp_path: Path):
@@ -6597,11 +6694,13 @@ def test_pull_confirmation_cancel_does_not_refresh(tmp_path: Path):
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
     router.runtime.git = router.git
+    prompt_bot = _run_pull_command(router)
+    cancel_callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][1].callback_data
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="pull:cancel",
+            data=cancel_callback_data,
             answer=None,
             edit_message_text=None,
         ),
@@ -6622,6 +6721,377 @@ def test_pull_confirmation_cancel_does_not_refresh(tmp_path: Path):
 
     assert edited == ["Pull cancelled."]
     assert router.git.refresh_calls == []
+
+
+def test_pull_confirmation_expires_when_active_session_branch_changes(tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_pull", "pull-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    prompt_bot = _run_pull_command(router)
+    callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][0].callback_data
+    store.set_active_session_branch("bot-a", 123, "feature-2")
+    router.git._current_branch = "feature-2"
+
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_pull_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert "expired" in edited[-1].lower()
+    assert router.git.refresh_calls == []
+
+
+def test_log_shows_top_five_commits(tmp_path: Path):
+    router, backend = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+
+    bot = _run_log_command(router)
+
+    assert router.git.git_commands == [(backend, ["log", "-5", "--oneline"])]
+    assert f"${shlex.join(['git', 'log', '-5', '--oneline'])}" in bot.messages[-1][1]
+
+
+def test_reset_selects_four_targets_and_confirms_before_reset(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            current_branch="feature-1",
+            default_branch="main",
+            checkout_result=SimpleNamespace(success=True, message="Checked out branch"),
+        ),
+    )
+    router.runtime.git = router.git
+
+    bot = _run_reset_command(router)
+
+    keyboard = bot.messages[-1][3].inline_keyboard
+    assert [[button.text for button in row] for row in keyboard] == [
+        ["local/main"],
+        ["origin/main"],
+        ["local/feature-1"],
+        ["origin/feature-1"],
+    ]
+
+    edited = []
+    select_callback_data = keyboard[1][0].callback_data
+    select_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=select_callback_data, answer=None, edit_message_text=None),
+    )
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    select_update.callback_query.answer = fake_answer
+    select_update.callback_query.edit_message_text = fake_edit
+    asyncio.run(router.handle_reset_callback(select_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert edited[-1][0] == "Reset the current branch with `git reset --hard origin/main`?"
+    confirm_callback_data = edited[-1][2].inline_keyboard[0][0].callback_data
+    assert confirm_callback_data.startswith("reset:confirm:")
+    assert router.git.git_commands == []
+
+    confirm_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=confirm_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert router.git.refresh_calls == [(backend, "main")]
+    assert router.git.git_commands == [(backend, ["reset", "--hard", "origin/main"])]
+    assert router.git.current_branch(backend) == "feature-1"
+
+
+def test_reset_confirmation_is_bound_to_its_selected_target(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            current_branch="feature-1",
+            default_branch="main",
+            checkout_result=SimpleNamespace(success=True, message="Checked out branch"),
+        ),
+    )
+    router.runtime.git = router.git
+    bot = FakeBot()
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    async def select(callback_data: str) -> str:
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123, type="private"),
+            callback_query=SimpleNamespace(data=callback_data, answer=fake_answer, edit_message_text=fake_edit),
+        )
+        await router.handle_reset_callback(update, SimpleNamespace(args=[], bot=bot))
+        return edited[-1][2].inline_keyboard[0][0].callback_data
+
+    first_keyboard = _run_reset_command(router).messages[-1][3].inline_keyboard
+    first_confirmation = asyncio.run(select(first_keyboard[1][0].callback_data))
+    second_keyboard = _run_reset_command(router).messages[-1][3].inline_keyboard
+    second_confirmation = asyncio.run(select(second_keyboard[2][0].callback_data))
+
+    assert first_confirmation != second_confirmation
+
+    confirm_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=first_confirmation, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert router.git.git_commands == [(backend, ["reset", "--hard", "origin/main"])]
+
+
+def test_reset_selection_expires_when_active_session_branch_changes(tmp_path: Path):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="feature-1", default_branch="main"),
+    )
+    router.runtime.git = router.git
+    callback_data = _run_reset_command(router).messages[-1][3].inline_keyboard[0][0].callback_data
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-2")
+    router.git._current_branch = "feature-2"
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert "expired" in edited[-1].lower()
+    assert router._reset_selections() == {}
+
+
+def test_reset_confirmation_survives_retryable_branch_discrepancy(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="feature-1", default_branch="main"),
+    )
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-1")
+    router.runtime.git = router.git
+    bot = FakeBot()
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    select_callback = _run_reset_command(router).messages[-1][3].inline_keyboard[2][0].callback_data
+    select_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=select_callback, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(select_update, SimpleNamespace(args=[], bot=bot)))
+    confirm_callback = edited[-1][2].inline_keyboard[0][0].callback_data
+    confirm_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=confirm_callback, answer=fake_answer, edit_message_text=fake_edit),
+    )
+
+    router.git._current_branch = "main"
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert "Branch discrepancy detected" in bot.messages[-1][1]
+    assert router.git.git_commands == []
+
+    router.git._current_branch = "feature-1"
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert router.git.git_commands == [(backend, ["reset", "--hard", "feature-1"])]
+
+
+def test_reset_confirmation_stops_when_project_becomes_busy(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="feature-1", default_branch="main"),
+    )
+    router.runtime.git = router.git
+    bot = FakeBot()
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    select_callback_data = _run_reset_command(router).messages[-1][3].inline_keyboard[2][0].callback_data
+    select_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=select_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(select_update, SimpleNamespace(args=[], bot=bot)))
+    confirm_callback_data = edited[-1][2].inline_keyboard[0][0].callback_data
+    router._is_project_busy = lambda _chat_id: True
+
+    confirm_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=None,
+        callback_query=SimpleNamespace(data=confirm_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert router.git.git_commands == []
+    assert f"An agent is currently running on project &#x27;{backend.name}&#x27;." in bot.messages[-1][1]
+
+
+def test_reset_restores_session_branch_when_origin_pull_fails(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            current_branch="feature-1",
+            default_branch="main",
+            checkout_result=SimpleNamespace(success=True, message="Checked out branch"),
+        ),
+    )
+    router.git.refresh_result = SimpleNamespace(success=True, warnings=("git pull failed for branch: main",))
+    router.runtime.git = router.git
+    bot = FakeBot()
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    select_callback_data = _run_reset_command(router).messages[-1][3].inline_keyboard[1][0].callback_data
+    select_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=select_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(select_update, SimpleNamespace(args=[], bot=bot)))
+    confirm_callback_data = edited[-1][2].inline_keyboard[0][0].callback_data
+    confirm_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=confirm_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert router.git.current_branch(backend) == "feature-1"
+    assert router.git.git_commands == []
+    assert "git pull failed for branch: main" in bot.messages[-1][1]
+
+
+@pytest.mark.parametrize("command_name", ["commit", "diff", "log", "pull", "push", "reset"])
+def test_git_commands_warn_and_stop_on_session_branch_discrepancy(tmp_path: Path, command_name: str):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="main", default_branch="main"),
+    )
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-1")
+    router.runtime.git = router.git
+
+    if command_name == "commit":
+        bot = _run_commit_command(router, "/commit git status")
+    elif command_name == "diff":
+        bot = _run_diff_command(router)
+    elif command_name == "log":
+        bot = _run_log_command(router)
+    elif command_name == "pull":
+        bot = _run_pull_command(router)
+    elif command_name == "push":
+        bot = _run_push_command(router)
+    else:
+        bot = _run_reset_command(router)
+
+    assert "Branch discrepancy detected" in bot.messages[-1][1]
+    assert "main" in bot.messages[-1][1]
+    assert "git status" not in bot.messages[-1][1]
+    assert router.git.git_commands == []
+    assert router.git.safe_git_commands == []
+    assert router.git.push_calls == []
+    assert router.git.refresh_calls == []
+
+
+def test_git_command_warns_when_repository_has_detached_head(tmp_path: Path):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch=None, default_branch="main"),
+    )
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-1")
+    router.runtime.git = router.git
+
+    bot = _run_log_command(router)
+
+    assert "Branch discrepancy detected" in bot.messages[-1][1]
+    assert "detached HEAD" in bot.messages[-1][1]
+    assert router.git.git_commands == []
+
+
+def test_reset_acknowledges_callback_and_holds_workspace_lock_during_reset(tmp_path: Path):
+    router, backend = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="feature-1", default_branch="main"),
+    )
+    router.runtime.git = router.git
+    bot = FakeBot()
+    edited = []
+    answers = []
+    lock_states = []
+
+    async def fake_answer():
+        answers.append(True)
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append((text, parse_mode, reply_markup))
+
+    def run_git_command(project_path, args):
+        lock_states.append(router._workspace_locks["backend"].locked())
+        router.git.git_commands.append((project_path, args))
+        return SimpleNamespace(success=True, message="reset complete")
+
+    router.git.run_git_command = run_git_command
+    select_callback_data = _run_reset_command(router).messages[-1][3].inline_keyboard[2][0].callback_data
+    select_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=select_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_reset_callback(select_update, SimpleNamespace(args=[], bot=bot)))
+    confirm_callback_data = edited[-1][2].inline_keyboard[0][0].callback_data
+    confirm_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=confirm_callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+
+    asyncio.run(router.handle_reset_callback(confirm_update, SimpleNamespace(args=[], bot=bot)))
+
+    assert len(answers) == 2
+    assert lock_states == [True]
+    assert router.git.git_commands == [(backend, ["reset", "--hard", "feature-1"])]
+    assert not router._workspace_locks["backend"].locked()
 
 
 def test_diff_lists_tracked_and_untracked_filenames(monkeypatch, tmp_path: Path):
@@ -6653,7 +7123,9 @@ def test_diff_lists_tracked_and_untracked_filenames(monkeypatch, tmp_path: Path)
     labels = [button.text for row in reply_markup.inline_keyboard for button in row]
     callback_data = [button.callback_data for row in reply_markup.inline_keyboard for button in row]
     assert labels == ["1. app.py"]
-    assert callback_data == ["diffshow:0"]
+    assert len(callback_data) == 1
+    assert callback_data[0].startswith("diffshow:")
+    assert callback_data[0].endswith(":0")
 
 
 def test_diff_callback_sends_selected_file_diff(monkeypatch, tmp_path: Path):
@@ -6678,11 +7150,13 @@ def test_diff_callback_sends_selected_file_diff(monkeypatch, tmp_path: Path):
         if include_cached
         else [],
     )
+    prompt_bot = _run_diff_command(router)
+    show_callback_data = prompt_bot.messages[-1][3].inline_keyboard[1][0].callback_data
 
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="diffshow:1",
+            data=show_callback_data,
             answer=None,
         ),
     )
@@ -6699,6 +7173,102 @@ def test_diff_callback_sends_selected_file_diff(monkeypatch, tmp_path: Path):
     assert "src/worker.py (+1 -1) (1/1)" in bot.messages[-2][1]
     assert "old" in bot.messages[-1][1]
     assert "new" in bot.messages[-1][1]
+
+
+def test_diff_callback_uses_the_file_snapshot_shown_to_the_user(monkeypatch, tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_diff", "diff-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    changed_files = ["src/first.py", "src/selected.py"]
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.git_commands.split_changed_files",
+        lambda _project_path: (list(changed_files), []),
+    )
+    collected_files = []
+
+    def fake_collect(_project_path, files, *, against_ref=None, include_cached=False):
+        collected_files.extend(files)
+        return [SimpleNamespace(path=files[0], diff="--- a/file\n+++ b/file\n@@\n-old\n+new")]
+
+    monkeypatch.setattr("coding_agent_telegram.router.git_commands.collect_diffs", fake_collect)
+    prompt_bot = _run_diff_command(router)
+    callback_data = prompt_bot.messages[-1][3].inline_keyboard[1][0].callback_data
+    changed_files[:] = ["src/replacement.py"]
+
+    async def fake_answer():
+        return None
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=callback_data, answer=fake_answer),
+    )
+    asyncio.run(router.handle_diff_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert collected_files == ["src/selected.py"]
+
+
+def test_diff_snapshot_expires_when_same_session_switches_branch(monkeypatch, tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_diff", "diff-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.git_commands.split_changed_files",
+        lambda _project_path: (["src/app.py"], []),
+    )
+    callback_data = _run_diff_command(router).messages[-1][3].inline_keyboard[0][0].callback_data
+    store.set_active_session_branch("bot-a", 123, "feature-2")
+    router.git._current_branch = "feature-2"
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, parse_mode=None, reply_markup=None):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_diff_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert "expired" in edited[-1].lower()
+
+
+def test_diff_paginates_untracked_files_and_bounds_message_size(monkeypatch, tmp_path: Path):
+    backend = (tmp_path / "backend").resolve()
+    backend.mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_diff", "diff-session", "backend", "codex", branch_name="feature-1")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=True, current_branch="feature-1")
+    router.runtime.git = router.git
+    untracked_files = [f"notes/{index}-{'x' * 240}.txt" for index in range(25)]
+    monkeypatch.setattr(
+        "coding_agent_telegram.router.git_commands.split_changed_files",
+        lambda _project_path: ([], untracked_files),
+    )
+
+    bot = _run_diff_command(router)
+
+    assert "Showing 1-10 of 25." in bot.messages[-1][1]
+    assert "notes/0-" in bot.messages[-1][1]
+    assert "notes/10-" not in bot.messages[-1][1]
+    assert len(bot.messages[-1][1]) < 4096
+    reply_markup = bot.messages[-1][3]
+    assert reply_markup is not None
+    assert reply_markup.inline_keyboard[-1][0].text == "Next"
 
 
 def test_diff_limits_buttons_to_ten_per_page(monkeypatch, tmp_path: Path):
@@ -6727,9 +7297,9 @@ def test_diff_limits_buttons_to_ten_per_page(monkeypatch, tmp_path: Path):
     assert [len(row) for row in rows[:-1]] == [1] * 10
     assert len(file_buttons) == 10
     assert [button.text for button in file_buttons[:3]] == ["1. file_1.py", "2. file_2.py", "3. file_3.py"]
-    assert [button.callback_data for button in file_buttons[-2:]] == ["diffshow:8", "diffshow:9"]
+    assert [button.callback_data.rsplit(":", 1)[1] for button in file_buttons[-2:]] == ["8", "9"]
     assert [button.text for button in nav_buttons] == ["Next"]
-    assert [button.callback_data for button in nav_buttons] == ["diffpage:1"]
+    assert [button.callback_data.rsplit(":", 1)[1] for button in nav_buttons] == ["1"]
     assert "Showing 1-10 of 12." in bot.messages[-1][1]
     assert "10. src/file_10.py" in bot.messages[-1][1]
     assert "11. src/file_11.py" not in bot.messages[-1][1]
@@ -6750,12 +7320,14 @@ def test_diff_pagination_edits_message_for_next_page(monkeypatch, tmp_path: Path
         "coding_agent_telegram.router.git_commands.split_changed_files",
         lambda _project_path: (tracked_files, []),
     )
+    prompt_bot = _run_diff_command(router)
+    next_callback_data = prompt_bot.messages[-1][3].inline_keyboard[-1][0].callback_data
 
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="diffpage:1",
+            data=next_callback_data,
             answer=None,
             edit_message_text=None,
         ),
@@ -6782,7 +7354,8 @@ def test_diff_pagination_edits_message_for_next_page(monkeypatch, tmp_path: Path
     labels = [button.text for row in reply_markup.inline_keyboard for button in row]
     callback_data = [button.callback_data for row in reply_markup.inline_keyboard for button in row]
     assert "Prev" in labels
-    assert callback_data[-1] == "diffpage:0"
+    assert callback_data[-1].startswith("diffpage:")
+    assert callback_data[-1].endswith(":0")
 
 
 def test_diff_sends_usage_when_extra_args_provided(tmp_path: Path):
@@ -7433,10 +8006,11 @@ def test_commit_no_args_shows_generate_prompt(monkeypatch, tmp_path: Path):
     assert reply_markup is not None
     buttons = reply_markup.inline_keyboard[0]
     assert buttons[0].text == "Generate command"
-    assert buttons[0].callback_data == "commitgen:confirm"
+    assert buttons[0].callback_data.startswith("commitgen:confirm:")
     assert buttons[0].api_kwargs == {"style": "primary"}
     assert buttons[1].text == "Cancel"
-    assert buttons[1].callback_data == "commitgen:cancel"
+    assert buttons[1].callback_data.startswith("commitgen:cancel:")
+    assert buttons[0].callback_data.rsplit(":", 1)[1] == buttons[1].callback_data.rsplit(":", 1)[1]
     assert buttons[1].api_kwargs == {"style": "danger"}
 
 
@@ -7452,12 +8026,14 @@ def test_commit_generate_callback_sends_generated_command(monkeypatch, tmp_path:
         )
 
     router.runtime.run_active_session = fake_run_active_session
+    prompt_bot = _run_commit_command(router, "/commit")
+    generate_callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][0].callback_data
 
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="commitgen:confirm",
+            data=generate_callback_data,
             answer=None,
             edit_message_text=None,
         ),
@@ -7477,20 +8053,23 @@ def test_commit_generate_callback_sends_generated_command(monkeypatch, tmp_path:
     asyncio.run(router.handle_commit_generate_callback(update, context))
 
     assert edited == ["Generated commit command below."]
-    assert router._generated_commit_commands()[123] == {
+    command_token = bot.messages[-1][3].inline_keyboard[0][0].callback_data.rsplit(":", 1)[1]
+    assert router._generated_commit_commands()[command_token] == {
+        "chat_id": "123",
         "command": 'git add src/app.py && git commit -m "Update app"',
         "session_id": "sess_commit",
         "project_folder": "backend",
+        "branch_name": "",
     }
     assert bot.messages[-1][1] == "Do you want to execute the commit?"
     reply_markup = bot.messages[-1][3]
     assert reply_markup is not None
     buttons = reply_markup.inline_keyboard[0]
     assert buttons[0].text == "Execute commit"
-    assert buttons[0].callback_data == "commitexec:confirm"
+    assert buttons[0].callback_data == f"commitexec:confirm:{command_token}"
     assert buttons[0].api_kwargs == {"style": "primary"}
     assert buttons[1].text == "Cancel"
-    assert buttons[1].callback_data == "commitexec:cancel"
+    assert buttons[1].callback_data == f"commitexec:cancel:{command_token}"
     assert buttons[1].api_kwargs == {"style": "danger"}
 
 
@@ -7518,17 +8097,20 @@ def test_commit_execute_callback_runs_generated_commit_command(monkeypatch, tmp_
             ],
         ),
     )
-    router._generated_commit_commands()[123] = {
+    token = "0123456789ab"
+    router._generated_commit_commands()[token] = {
+        "chat_id": "123",
         "command": 'git add src/app.py && git commit -m "Update app"',
         "session_id": "sess_commit",
         "project_folder": "backend",
+        "branch_name": "",
     }
 
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="commitexec:confirm",
+            data=f"commitexec:confirm:{token}",
             answer=None,
             edit_message_text=None,
         ),
@@ -7560,17 +8142,20 @@ def test_commit_execute_callback_rejects_when_active_session_changes(tmp_path: P
     router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
     (tmp_path / "frontend").mkdir()
     router.deps.store.create_session("bot-a", 123, "sess_other", "other-session", "frontend", "codex")
-    router._generated_commit_commands()[123] = {
+    token = "0123456789ab"
+    router._generated_commit_commands()[token] = {
+        "chat_id": "123",
         "command": 'git add src/app.py && git commit -m "Update app"',
         "session_id": "sess_commit",
         "project_folder": "backend",
+        "branch_name": "",
     }
 
     edited = []
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=123, type="private"),
         callback_query=SimpleNamespace(
-            data="commitexec:confirm",
+            data=f"commitexec:confirm:{token}",
             answer=None,
             edit_message_text=None,
         ),
@@ -7591,7 +8176,114 @@ def test_commit_execute_callback_rejects_when_active_session_changes(tmp_path: P
 
     assert edited == ["The active session or project changed. Please generate the commit command again."]
     assert router.git.safe_git_commands == []
-    assert 123 not in router._generated_commit_commands()
+    assert token not in router._generated_commit_commands()
+
+
+def test_commit_generation_prompt_expires_when_branch_changes(tmp_path: Path):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="feature-1"),
+    )
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-1")
+    prompt_bot = _run_commit_command(router, "/commit")
+    callback_data = prompt_bot.messages[-1][3].inline_keyboard[0][0].callback_data
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-2")
+    router.git._current_branch = "feature-2"
+    run_calls = []
+
+    async def fake_run_active_session(*args, **kwargs):
+        run_calls.append((args, kwargs))
+        return None
+
+    router.runtime.run_active_session = fake_run_active_session
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(data=callback_data, answer=fake_answer, edit_message_text=fake_edit),
+    )
+    asyncio.run(router.handle_commit_generate_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert edited == ["The active session or project changed. Please generate the commit command again."]
+    assert run_calls == []
+
+
+def test_commit_execute_cancel_consumes_only_its_token(tmp_path: Path):
+    router, _ = _make_commit_router(tmp_path, git_manager=FakeGitManager(is_git_repo=True))
+    cancelled_token = "0123456789ab"
+    other_token = "abcdef012345"
+    payload = {
+        "chat_id": "123",
+        "command": 'git add src/app.py && git commit -m "Update app"',
+        "session_id": "sess_commit",
+        "project_folder": "backend",
+        "branch_name": "",
+    }
+    router._generated_commit_commands()[cancelled_token] = dict(payload)
+    router._generated_commit_commands()[other_token] = dict(payload)
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data=f"commitexec:cancel:{cancelled_token}",
+            answer=fake_answer,
+            edit_message_text=fake_edit,
+        ),
+    )
+    asyncio.run(router.handle_commit_execute_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert cancelled_token not in router._generated_commit_commands()
+    assert other_token in router._generated_commit_commands()
+    assert edited == ["Commit command generation cancelled."]
+
+
+def test_commit_execute_rejects_when_branch_changes(tmp_path: Path):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(is_git_repo=True, current_branch="feature-2"),
+    )
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-2")
+    token = "0123456789ab"
+    router._generated_commit_commands()[token] = {
+        "chat_id": "123",
+        "command": 'git add src/app.py && git commit -m "Update app"',
+        "session_id": "sess_commit",
+        "project_folder": "backend",
+        "branch_name": "feature-1",
+    }
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text):
+        edited.append(text)
+
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=SimpleNamespace(
+            data=f"commitexec:confirm:{token}",
+            answer=fake_answer,
+            edit_message_text=fake_edit,
+        ),
+    )
+    asyncio.run(router.handle_commit_execute_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert edited == ["The active session or project changed. Please generate the commit command again."]
+    assert router.git.safe_git_commands == []
 
 
 def test_commit_no_valid_git_commands_found(tmp_path: Path):
@@ -7692,7 +8384,7 @@ def test_push_callback_unknown_action_returns_silently(tmp_path: Path):
     assert bot.messages == []
 
 
-def test_push_callback_empty_branch_warns(tmp_path: Path):
+def test_push_empty_branch_warns(tmp_path: Path):
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
     runner = DummyRunner()
@@ -7704,33 +8396,12 @@ def test_push_callback_empty_branch_warns(tmp_path: Path):
     router.git = FakeGitManager(is_git_repo=True, current_branch=None)
     router.runtime.git = router.git
 
-    edited = []
-    update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=123, type="private"),
-        callback_query=SimpleNamespace(
-            data="push:confirm",
-            answer=None,
-            edit_message_text=None,
-        ),
-    )
-    bot = FakeBot()
-    context = SimpleNamespace(args=[], bot=bot)
+    bot = _run_push_command(router)
 
-    async def fake_answer():
-        return None
-
-    async def fake_edit(text, parse_mode=None):
-        edited.append(text)
-
-    update.callback_query.answer = fake_answer
-    update.callback_query.edit_message_text = fake_edit
-
-    asyncio.run(router.handle_push_callback(update, context))
-
-    assert any("Could not determine the branch" in e for e in edited)
+    assert "Could not determine the branch" in bot.messages[-1][1]
 
 
-def test_push_callback_checkout_failure_sends_edit(tmp_path: Path):
+def test_push_warns_instead_of_checking_out_session_branch(tmp_path: Path):
     backend = (tmp_path / "backend").resolve()
     backend.mkdir()
     runner = DummyRunner()
@@ -7738,7 +8409,7 @@ def test_push_callback_checkout_failure_sends_edit(tmp_path: Path):
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
     store.create_session("bot-a", 123, "sess_push", "push-session", "backend", "codex", branch_name="feature-x")
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
-    # current_branch differs from session branch so checkout is attempted
+    # A discrepancy is reported instead of silently checking out another branch.
     router.git = FakeGitManager(
         is_git_repo=True,
         current_branch="main",
@@ -7746,30 +8417,11 @@ def test_push_callback_checkout_failure_sends_edit(tmp_path: Path):
     )
     router.runtime.git = router.git
 
-    edited = []
-    update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=123, type="private"),
-        callback_query=SimpleNamespace(
-            data="push:confirm",
-            answer=None,
-            edit_message_text=None,
-        ),
-    )
-    bot = FakeBot()
-    context = SimpleNamespace(args=[], bot=bot)
+    bot = _run_push_command(router)
 
-    async def fake_answer():
-        return None
-
-    async def fake_edit(text, parse_mode=None):
-        edited.append(text)
-
-    update.callback_query.answer = fake_answer
-    update.callback_query.edit_message_text = fake_edit
-
-    asyncio.run(router.handle_push_callback(update, context))
-
-    assert any("Push cancelled" in e for e in edited)
+    assert "Branch discrepancy detected" in bot.messages[-1][1]
+    assert "feature-x" in bot.messages[-1][1]
+    assert "main" in bot.messages[-1][1]
     assert router.git.push_calls == []
 
 

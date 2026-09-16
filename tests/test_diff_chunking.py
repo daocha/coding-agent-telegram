@@ -56,15 +56,21 @@ def test_build_summary_includes_branch_next_to_project():
 
 
 def test_parse_status_paths_includes_renames_and_untracked():
-    output = " M src/app.py\n?? src/new.py\nR  old.py -> new.py\n"
+    output = " M src/app.py\0?? src/new.py\0R  new.py\0old.py\0"
     assert _parse_status_paths(output) == ["src/app.py", "src/new.py", "new.py"]
+
+
+def test_parse_status_paths_preserves_unquoted_special_filenames_from_z_mode():
+    output = " M café file.py\0?? trailing-space \0"
+
+    assert _parse_status_paths(output) == ["café file.py", "trailing-space "]
 
 
 def test_split_changed_files_separates_tracked_and_untracked(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         diff_utils_module,
         "_git",
-        lambda _project_path, _args: " M src/app.py\n?? src/new.py\nR  old.py -> new.py\n",
+        lambda _project_path, _args: " M src/app.py\0?? src/new.py\0R  new.py\0old.py\0",
     )
 
     tracked, untracked = split_changed_files(tmp_path)
