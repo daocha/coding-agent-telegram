@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ Deze knop is verlopen. Voer de opdracht opnieuw uit.",
   "git.branch_unknown": "⚠️ De tak voor de huidige sessie kon niet worden bepaald.",
   "git.branch_discrepancy_warning": "⚠️ Takverschil gedetecteerd. De actieve sessietak is `{session_branch}`, maar in de repository is momenteel `{checked_out_branch}` uitgecheckt. Schakel naar de gewenste tak voordat je deze opdracht uitvoert.",
+  "git.branch_discrepancy_switch_to_session": "Schakel naar {branch_name}",
+  "git.branch_discrepancy_use_current": "Wijzig sessietak naar {branch_name}",
   "git.detached_head_label": "losgekoppelde HEAD",
   "git.cancel_button": "Annuleren",
   "git.usage_diff": "Gebruik: /diff",

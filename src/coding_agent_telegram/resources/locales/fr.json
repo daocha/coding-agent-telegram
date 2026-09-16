@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ Ce bouton a expiré. Veuillez relancer la commande.",
   "git.branch_unknown": "⚠️ Impossible de déterminer la branche de la session actuelle.",
   "git.branch_discrepancy_warning": "⚠️ Divergence de branche détectée. La branche de la session active est `{session_branch}`, mais le dépôt utilise actuellement `{checked_out_branch}`. Basculez sur la branche voulue avant d’exécuter cette commande.",
+  "git.branch_discrepancy_switch_to_session": "Basculer vers {branch_name}",
+  "git.branch_discrepancy_use_current": "Définir la branche de session sur {branch_name}",
   "git.detached_head_label": "HEAD détachée",
   "git.cancel_button": "Annuler",
   "git.usage_diff": "Utilisation : /diff",

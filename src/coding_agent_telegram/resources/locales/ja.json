@@ -24,6 +24,8 @@
   "common.button_expired": "⚠️ このボタンの有効期限が切れました。コマンドを再実行してください。",
   "git.branch_unknown": "⚠️ 現在のセッションの ブランチ を特定できませんでした。",
   "git.branch_discrepancy_warning": "⚠️ ブランチの不一致を検出しました。アクティブセッションのブランチは `{session_branch}` ですが、リポジトリでは `{checked_out_branch}` がチェックアウトされています。このコマンドを実行する前に、使用するブランチへ切り替えてください。",
+  "git.branch_discrepancy_switch_to_session": "{branch_name} に切り替える",
+  "git.branch_discrepancy_use_current": "セッションのブランチを {branch_name} に変更",
   "git.detached_head_label": "detached HEAD",
   "git.cancel_button": "キャンセル",
   "git.usage_diff": "使い方: /diff",

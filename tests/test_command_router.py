@@ -7034,6 +7034,55 @@ def test_git_commands_warn_and_stop_on_session_branch_discrepancy(tmp_path: Path
     assert router.git.safe_git_commands == []
     assert router.git.push_calls == []
     assert router.git.refresh_calls == []
+    keyboard = bot.messages[-1][3]
+    assert [button.callback_data for row in keyboard.inline_keyboard for button in row] == [
+        "gitbranchdiscrepancy:stored",
+        "gitbranchdiscrepancy:current",
+    ]
+
+
+def test_git_branch_discrepancy_stored_choice_switches_branch_like_branch_command(tmp_path: Path):
+    router, _ = _make_commit_router(
+        tmp_path,
+        git_manager=FakeGitManager(
+            is_git_repo=True,
+            current_branch="main",
+            default_branch="main",
+            local_branches=["main", "feature-1"],
+            prepare_from_source_result=SimpleNamespace(
+                success=True,
+                message="Switched to existing local branch 'feature-1'.",
+                current_branch="feature-1",
+            ),
+        ),
+    )
+    router.deps.store.set_active_session_branch("bot-a", 123, "feature-1")
+    edited = []
+
+    async def fake_answer():
+        return None
+
+    async def fake_edit(text, reply_markup=None):
+        edited.append((text, reply_markup))
+
+    query = SimpleNamespace(
+        data="gitbranchdiscrepancy:stored",
+        answer=fake_answer,
+        edit_message_text=fake_edit,
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        callback_query=query,
+        message=None,
+    )
+
+    asyncio.run(router.handle_git_branch_discrepancy_callback(update, SimpleNamespace(args=[], bot=FakeBot())))
+
+    assert router.git.prepare_from_source_calls[-1][1:] == ("local", "feature-1", "feature-1")
+    state = router.deps.store.get_chat_state("bot-a", 123)
+    assert state["current_branch"] == "feature-1"
+    assert state["sessions"]["sess_commit"]["branch_name"] == "feature-1"
+    assert "Current branch: feature-1" in edited[-1][0]
 
 
 def test_git_command_warns_when_repository_has_detached_head(tmp_path: Path):

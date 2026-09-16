@@ -11,6 +11,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.diff_utils import chunk_fenced_diff, collect_diffs, split_changed_files
+from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.telegram_sender import send_code_block, send_html_text, send_text, split_assistant_output
 
 from .base import require_allowed_chat
@@ -327,6 +328,25 @@ class GitCommandMixin:
         if not session_branch or session_branch == checked_out_branch:
             return False
         checked_out_label = checked_out_branch or self._t(update, "git.detached_head_label")
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    self._t(update, "git.branch_discrepancy_switch_to_session", branch_name=session_branch),
+                    callback_data="gitbranchdiscrepancy:stored",
+                )
+            ]
+        ]
+        # There is no branch that can be recorded for a detached HEAD, so only
+        # offer the safe restoration action in that case.
+        if checked_out_branch:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        self._t(update, "git.branch_discrepancy_use_current", branch_name=checked_out_branch),
+                        callback_data="gitbranchdiscrepancy:current",
+                    )
+                ]
+            )
         await send_text(
             update,
             context,
@@ -336,8 +356,74 @@ class GitCommandMixin:
                 session_branch=session_branch,
                 checked_out_branch=checked_out_label,
             ),
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
         return True
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_git_branch_discrepancy_callback(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Resolve a discrepancy reported by a Git command via the /branch path."""
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+        await query.answer()
+
+        choice = query.data.partition("gitbranchdiscrepancy:")[2]
+        if choice not in {"stored", "current"}:
+            return
+
+        chat_id = update.effective_chat.id
+        chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
+        active_session_id = chat_state.get("active_session_id")
+        session = chat_state.get("sessions", {}).get(active_session_id) if active_session_id else None
+        if not isinstance(session, dict):
+            await query.edit_message_text(self._t(update, "branch_resolution.no_active_session"))
+            return
+
+        project_folder = str(session.get("project_folder") or "").strip()
+        project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
+        if not project_path.exists() or not project_path.is_dir():
+            await query.edit_message_text(
+                self._t(update, "project.project_folder_missing_retry", project_folder=project_folder)
+            )
+            return
+        if self._is_project_busy(chat_id):
+            await query.edit_message_text(self._t(update, "common.project_busy", project_folder=project_folder))
+            return
+
+        stored_branch = str(session.get("branch_name") or "").strip()
+        current_branch = str(self.git.current_branch(project_path) or "").strip()
+        target_branch = stored_branch if choice == "stored" else current_branch
+        if not target_branch:
+            await query.edit_message_text(self._t(update, "git.branch_unknown"))
+            return
+
+        # This is the operation performed by /branch <target_branch>: prefer a
+        # local branch, otherwise prepare the matching origin branch.
+        source_kind = "local" if self.git.local_branch_exists(project_path, target_branch) else "origin"
+        result = await asyncio.to_thread(
+            self.git.prepare_branch_from_source,
+            project_path,
+            source_kind=source_kind,
+            source_branch=target_branch,
+            new_branch=target_branch,
+        )
+        if not result.success:
+            await query.edit_message_text(result.message)
+            return
+
+        self.deps.store.set_current_branch(self.deps.bot_id, chat_id, result.current_branch)
+        self.deps.store.set_active_session_branch(self.deps.bot_id, chat_id, result.current_branch or "")
+        await query.edit_message_text(
+            "\n".join(
+                [
+                    result.message,
+                    self._t(update, "project.current_branch_html", branch_name=result.current_branch),
+                ]
+            )
+        )
 
     async def _execute_confirmed_reset(
         self,
