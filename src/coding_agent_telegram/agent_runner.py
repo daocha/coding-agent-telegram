@@ -804,6 +804,7 @@ class MultiAgentRunner:
             "--json",
             "--cd",
             str(project_path),
+            "--",
             f"{self.PROMPT_PREFIX}{user_message}",
             ]
         )
@@ -850,6 +851,7 @@ class MultiAgentRunner:
     ) -> list[str]:
         return [
             *self._codex_resume_base(user_message, skip_git_repo_check, image_paths, model=model)[:-1],
+            "--",
             session_id,
             f"{self.PROMPT_PREFIX}{user_message}",
         ]
@@ -893,8 +895,7 @@ class MultiAgentRunner:
         args.extend(
             [
             "--output-format=json",
-            "--prompt",
-            f"{self.PROMPT_PREFIX}{user_message}",
+            f"--prompt={self.PROMPT_PREFIX}{user_message}",
             ]
         )
         return args
@@ -927,8 +928,7 @@ class MultiAgentRunner:
                 "--output-format",
                 "stream-json",
                 "--verbose",
-                "-p",
-                f"{self.PROMPT_PREFIX}{user_message}",
+                f"--print={self.PROMPT_PREFIX}{user_message}",
             ]
         )
         return args
@@ -972,7 +972,7 @@ class MultiAgentRunner:
                 args,
                 provider="codex",
                 cwd=project_path,
-                tail_args=1,
+                tail_args=2,
                 on_stall=on_stall,
                 on_progress=on_progress,
             )
@@ -1030,7 +1030,7 @@ class MultiAgentRunner:
                 args,
                 provider="codex",
                 cwd=project_path,
-                tail_args=2,
+                tail_args=3,
                 on_stall=on_stall,
                 on_progress=on_progress,
             )

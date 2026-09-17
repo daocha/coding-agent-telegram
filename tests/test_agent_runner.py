@@ -114,7 +114,29 @@ def test_codex_runner_resume_uses_resume_subcommand_shape(monkeypatch):
         "--json",
     ]
     assert args[9] == "--output-last-message"
-    assert args[11:] == ["sess_1", runner.PROMPT_PREFIX + "hello again"]
+    assert args[11:] == ["--", "sess_1", runner.PROMPT_PREFIX + "hello again"]
+
+
+def test_codex_runner_isolates_hyphen_prefixed_message_with_separator(monkeypatch):
+    """A user message starting with '-' must not be parsed as a codex CLI flag."""
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "- pls fix A")
+    runner.resume_session("codex", "sess_1", Path("/tmp/project"), "- pls fix A")
+
+    create_args = calls[0][0]
+    assert create_args[-2:] == ["--", "- pls fix A"]
+
+    resume_args = calls[1][0]
+    assert resume_args[-3:] == ["--", "sess_1", "- pls fix A"]
 
 
 def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
@@ -139,8 +161,7 @@ def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
         "copilot",
         "--no-ask-user",
         "--output-format=json",
-        "--prompt",
-        runner.PROMPT_PREFIX + "hello",
+        f"--prompt={runner.PROMPT_PREFIX}hello",
     ]
     assert calls[0][1] == Path("/tmp/project")
     assert result.session_id == "sess_copilot"
@@ -169,10 +190,29 @@ def test_copilot_runner_resume_uses_resume_flag(monkeypatch):
         "--no-ask-user",
         "--allow-all",
         "--output-format=json",
-        "--prompt",
-        runner.PROMPT_PREFIX + "hello again",
+        f"--prompt={runner.PROMPT_PREFIX}hello again",
     ]
     assert result.session_id == "sess_copilot"
+
+
+def test_copilot_runner_isolates_hyphen_prefixed_message(monkeypatch):
+    """A user message starting with '-' must not be parsed as a copilot CLI flag."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"sessionId":"sess_copilot"}\n'),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("copilot", Path("/tmp/project"), "- pls fix A", skip_git_repo_check=False)
+
+    assert calls[0][0][-1] == "--prompt=- pls fix A"
 
 
 def test_codex_runner_attaches_images_for_create_and_resume(monkeypatch):
@@ -210,7 +250,9 @@ def test_copilot_runner_accepts_image_paths_in_prompt(monkeypatch):
     result = runner.create_session("copilot", Path("/tmp/project"), f"Read {image_path}", image_paths=(image_path,))
 
     assert result.success is True
-    assert "Read /tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg" in calls[0][0]
+    assert any(
+        "Read /tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg" in arg for arg in calls[0][0]
+    )
 
 
 def test_copilot_runner_uses_native_home_when_copilot_home_is_unset(monkeypatch):
@@ -636,8 +678,7 @@ def test_claude_runner_uses_print_mode_shape(monkeypatch):
         "--output-format",
         "stream-json",
         "--verbose",
-        "-p",
-        runner.PROMPT_PREFIX + "hello",
+        f"--print={runner.PROMPT_PREFIX}hello",
     ]
     assert calls[0][1] == Path("/tmp/project")
     assert result.success is True
@@ -667,6 +708,29 @@ def test_claude_runner_resume_uses_resume_flag(monkeypatch):
     assert calls[0][0][:3] == ["claude", "--resume", "sess_1"]
     assert result.session_id == "sess_claude"
     assert result.assistant_text == "Done again."
+
+
+def test_claude_runner_isolates_hyphen_prefixed_message(monkeypatch):
+    """A user message starting with '-' must not be parsed as a claude CLI flag."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"result","subtype":"success","is_error":false,"result":"Done.","session_id":"sess_claude"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "- pls fix A")
+
+    assert calls[0][0][-1] == "--print=- pls fix A"
 
 
 def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
@@ -699,8 +763,7 @@ def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
         "--output-format",
         "stream-json",
         "--verbose",
-        "-p",
-        runner.PROMPT_PREFIX + "hello",
+        f"--print={runner.PROMPT_PREFIX}hello",
     ]
 
 
@@ -1172,7 +1235,7 @@ def test_copilot_resume_accepts_image_paths_in_prompt(monkeypatch):
     )
 
     assert result.success is True
-    assert "Read /tmp/image.png" in calls[0][0]
+    assert any("Read /tmp/image.png" in arg for arg in calls[0][0])
 
 
 def test_runner_uses_internal_code_for_generic_command_failure(monkeypatch):
