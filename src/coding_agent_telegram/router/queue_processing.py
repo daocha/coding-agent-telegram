@@ -328,6 +328,7 @@ class QueueProcessingMixin:
             {
                 "kind": "message",
                 "user_message": user_message,
+                "reply_to_message_id": reply_to_message_id,
             },
         )
         continued = await self._continue_pending_action(
@@ -336,6 +337,16 @@ class QueueProcessingMixin:
             drain_queue_after_completion=False,
         )
         if not continued:
+            # A prerequisite such as selecting a replacement project keeps this
+            # message in persistent pending_action state.  That state is now the sole
+            # owner of the question: re-adding its queue file would run it once when
+            # the prerequisite is resolved and again when the queue later drains.
+            pending_action = self._pending_action(chat_id)
+            if isinstance(pending_action, dict) and pending_action.get("awaiting_prerequisite"):
+                queue_file.unlink(missing_ok=True)
+                self._queue_lock_path(queue_file).unlink(missing_ok=True)
+                self._chat_processing_queue_files.pop(chat_id, None)
+                return True
             self._queue_lock_path(queue_file).unlink(missing_ok=True)
             self._chat_processing_queue_files.pop(chat_id, None)
             queue = self._chat_message_queue_files.setdefault(chat_id, deque())

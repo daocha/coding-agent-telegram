@@ -4535,6 +4535,46 @@ def test_grouped_queued_questions_warn_before_resuming_long_idle_session(tmp_pat
     assert buttons == ["longgap:switch", "longgap:compact", "longgap:proceed"]
 
 
+def test_queued_message_waiting_for_replaced_project_runs_once_and_replies_to_original_question(tmp_path: Path):
+    """Resolving a missing project must not duplicate a held queue entry or quote /project."""
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "renamed-project")
+    store.create_session("bot-a", 123, "sess_missing", "old-session", "renamed-project", "codex")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    queue_file = router._next_queue_file_path(123)
+    queued_question = QueuedQuestion("restore the chat history", reply_to_message_id=321)
+    router._write_queue_questions(queue_file, [queued_question])
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    continued = asyncio.run(
+        router._dispatch_queued_questions(
+            123,
+            context,
+            queue_file=queue_file,
+            queued_messages=[queued_question],
+            grouped=False,
+        )
+    )
+
+    assert continued is True
+    assert runner.resume_calls == []
+    assert not queue_file.exists()
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["user_message"] == "restore the chat history"
+    assert pending["reply_to_message_id"] == 321
+
+    project_update = make_update(text="/project replacement-project", message_id=999)
+    asyncio.run(router.handle_project(project_update, SimpleNamespace(args=["replacement-project"], bot=bot)))
+
+    assert [call["user_message"] for call in runner.resume_calls] == ["restore the chat history"]
+    working_entries = [entry for entry in bot.sent_messages if entry["text"] == "Working on it..."]
+    assert working_entries[-1]["reply_to_message_id"] == 321
+
+
 def test_long_gap_warning_skipped_for_small_session_despite_long_idle(tmp_path: Path, monkeypatch):
     """A session with little accumulated context shouldn't nag just because it sat idle
     -- reprocessing it from scratch is cheap regardless, so the size gate should skip
