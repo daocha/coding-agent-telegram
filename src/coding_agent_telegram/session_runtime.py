@@ -10,10 +10,11 @@ from pathlib import Path
 import os
 from typing import Awaitable, Callable, Optional, Sequence
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import AgentRunResult, MultiAgentRunner
+from coding_agent_telegram.claude_health import claude_auth_failure_message, is_claude_auth_failure
 from coding_agent_telegram.config import AppConfig, DEFAULT_MAX_PHOTO_ATTACHMENT_BYTES
 from coding_agent_telegram.diff_utils import (
     TEXTUAL_DIFF_UNAVAILABLE,
@@ -32,6 +33,7 @@ from coding_agent_telegram.i18n import locale_from_update, translate
 from coding_agent_telegram.providers import provider_label as provider_display_label
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.telegram_sender import (
+    affirmative_inline_button_kwargs,
     markdownish_to_html,
     send_code_block,
     send_html_text,
@@ -54,9 +56,89 @@ COMPACT_BOOTSTRAP_TEMPLATE = (
     "{summary}\n\n"
     "Acknowledge that you have loaded the handoff summary and are ready to continue."
 )
+# Mirrors session_lifecycle_commands.SESSION_PRIMING_PROMPT (duplicated rather than
+# imported to avoid a router -> session_runtime -> router import cycle): makes the CLI
+# hand back a session ID without acting on the throwaway prompt.
+NEW_SESSION_PRIMING_PROMPT = "Reply with exactly: ready. Do not make any changes, run any commands, or use any tools."
 
 # Matches absolute filesystem paths (Unix and Windows styles) in error messages.
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|(?<=\s)|(?<=[\"'(]))((?:/[^\s\"',;)]+)+|[A-Za-z]:\\[^\s\"',;)]+)")
+
+# Matches a trailing "-resumeN" suffix so re-compacting an already-compacted
+# session rotates the number instead of stacking suffixes.
+_RESUME_SUFFIX_RE = re.compile(r"-resume\d+$", re.IGNORECASE)
+
+# Matches a trailing "-newN" suffix so repeatedly switching to a fresh session rotates
+# the number instead of stacking suffixes.
+_NEW_SUFFIX_RE = re.compile(r"-new\d+$", re.IGNORECASE)
+
+# Fallback substring marking an agent-run failure as "this session ID can't be resumed"
+# for providers without a structured signal for it, so _replace_invalid_session_if_needed
+# knows to create a replacement session instead of just reporting the failure. Claude has
+# its own precise signal (AgentRunResult.error_code == "session_not_found", set from the
+# CLI's structured "errors" field -- see agent_runner._claude_events_report_session_not_found)
+# and is checked separately below; this generic "resume" substring is the only fallback
+# available for Codex/Copilot, none of which have a documented, stable error string, so it's
+# kept broad and is only ever matched against a failure's error_message, never used to
+# override a success.
+_UNRESUMABLE_SESSION_FALLBACK_PHRASE = "resume"
+
+# Matches a numbered/lettered list line, e.g. "1. Do X" or "a) Do Y".
+_OPTION_LINE_RE = re.compile(r"^\s*(?:[0-9]{1,2}[.)]|[A-Za-z][.)])\s+(.{2,140}?)\s*$")
+# Requires an explicit "which one do you want" style cue near the option list,
+# so an ordinary numbered list in a reply doesn't get mistaken for a menu.
+_OPTION_QUESTION_CUE_RE = re.compile(
+    r"\b(which (one|option|approach|way)|let me know which|should i|shall i|"
+    r"would you like me to|which would you|go with|pick one|choose one|which do you want)\b",
+    re.IGNORECASE,
+)
+_MAX_REPLY_OPTIONS = 6
+_REPLY_OPTION_TAIL_LINES = 12
+# Trailing characters that can sit after a label's question mark and hide it. Claude
+# routinely bolds numbered questions ("1. **Use Redis or in-memory?**"), which would
+# otherwise read as a plain choice rather than a question.
+_OPTION_LABEL_TRAILING_NOISE = "*_`)]. \t"
+# A list of independent questions has every line ending in a question mark; a menu for
+# one decision may still have a single "Something else?" style escape option, so one
+# question mark alone must not suppress the whole menu.
+_MIN_QUESTION_LABELS_FOR_MULTI_QUESTION = 2
+
+
+def _label_is_question(label: str) -> bool:
+    return label.rstrip(_OPTION_LABEL_TRAILING_NOISE).endswith("?")
+
+
+def _detect_reply_options(text: str) -> tuple[str, ...]:
+    """Return option labels if the assistant's reply is asking the user to pick one."""
+    stripped = text.strip()
+    if not stripped:
+        return ()
+    tail_lines = stripped.splitlines()[-_REPLY_OPTION_TAIL_LINES:]
+    if not _OPTION_QUESTION_CUE_RE.search("\n".join(tail_lines)):
+        return ()
+
+    options: list[str] = []
+    question_labels = 0
+    for line in tail_lines:
+        match = _OPTION_LINE_RE.match(line)
+        if match:
+            label = match.group(1).strip()
+            if _label_is_question(label):
+                question_labels += 1
+            options.append(label)
+
+    if question_labels >= _MIN_QUESTION_LABELS_FOR_MULTI_QUESTION:
+        # Each line is its own question (e.g. "1. Should I use A or B?"), not a choice
+        # for one decision — bail out rather than offering buttons that would resend a
+        # question as if it were an answer.
+        return ()
+    if len(options) < 2:
+        return ()
+    return tuple(options[:_MAX_REPLY_OPTIONS])
+
+
+def _session_provider(session: dict[str, str]) -> str:
+    return str(session.get("provider") or "codex").strip().lower() or "codex"
 
 
 def _reply_to_message_id(update: Update) -> int | None:
@@ -143,17 +225,30 @@ class PhotoAttachmentStore:
 
         attachments_root = self.attachments_root(project_folder)
         attachments_root.mkdir(parents=True, exist_ok=True)
-        target = attachments_root / f"{digest}{suffix}"
-        if not target.exists():
-            target.write_bytes(content)
-        return target
+        # Eight hex characters keep paths readable while still providing roughly
+        # four billion possible names. Should a prefix collision ever occur, grow
+        # only that filename until it is unambiguous.
+        for length in range(8, len(digest) + 1, 8):
+            target = attachments_root / f"{digest[:length]}{suffix}"
+            if not target.exists():
+                target.write_bytes(content)
+                return target
+            if target.read_bytes() == content:
+                return target
+        # A full SHA-256 collision is not realistically possible, but keep the
+        # fallback deterministic rather than overwriting an existing attachment.
+        raise PhotoAttachmentError("photo_name_collision", "Could not store photo attachment safely.")
 
-    def build_prompt(self, attachment_path: Path, project_path: Path, caption: str) -> str:
-        rel_path = os.path.relpath(attachment_path, start=project_path).replace(os.sep, "/")
-        lines = [
-            f"An image is attached at {rel_path}.",
-            IMAGE_INSPECTION_PROMPT,
-        ]
+    def build_prompt(self, attachment_paths: Sequence[Path], project_path: Path, caption: str) -> str:
+        rel_paths = [os.path.relpath(path, start=project_path).replace(os.sep, "/") for path in attachment_paths]
+        if len(rel_paths) == 1:
+            lines = [f"An image is attached at {rel_paths[0]}.", IMAGE_INSPECTION_PROMPT]
+        else:
+            lines = [
+                "Images are attached at:",
+                *(f"- {path}" for path in rel_paths),
+                "Open and inspect every image before answering.",
+            ]
         caption = caption.strip()
         if caption:
             lines.extend(["", "User caption:", caption])
@@ -163,6 +258,7 @@ class PhotoAttachmentStore:
 
 
 RunWithTyping = Callable[..., Awaitable[object]]
+RegisterReplyOptions = Callable[[int, tuple[str, ...]], str]
 
 
 class SessionRuntime:
@@ -175,6 +271,7 @@ class SessionRuntime:
         bot_id: str,
         git: GitWorkspaceManager,
         run_with_typing: RunWithTyping,
+        register_reply_options: RegisterReplyOptions,
     ) -> None:
         self.cfg = cfg
         self.store = store
@@ -182,6 +279,7 @@ class SessionRuntime:
         self.bot_id = bot_id
         self.git = git
         self.run_with_typing = run_with_typing
+        self.register_reply_options = register_reply_options
 
     def _locale(self, update: Update | None) -> str:
         return self.cfg.locale
@@ -189,12 +287,34 @@ class SessionRuntime:
     def _t(self, update: Update | None, key: str, **kwargs) -> str:
         return translate(self._locale(update), key, **kwargs)
 
+    def _claude_auth_error_text(self, provider: str, error_message: Optional[str]) -> Optional[str]:
+        """Returns the same guidance text the background Claude auth health
+        check sends (see claude_health.py) when a run just failed for that
+        reason, so a user who hits it live (before the periodic check would
+        have caught it) gets the fix instructions immediately instead of the
+        raw CLI error."""
+        if provider != "claude" or not is_claude_auth_failure(error_message):
+            return None
+        return claude_auth_failure_message(self.cfg.locale, error_message)
+
+    def _agent_failure_text(self, update: Update | None, provider: str, result: AgentRunResult) -> str:
+        if getattr(result, "error_code", None) == "agent_aborted":
+            return self._t(update, "runtime.agent_run_aborted")
+        error_message = result.error_message
+        claude_auth_text = self._claude_auth_error_text(provider, error_message)
+        if claude_auth_text:
+            return claude_auth_text
+        if error_message:
+            return _sanitize_agent_error(error_message, error_code=getattr(result, "error_code", None))
+        return self._t(update, "runtime.agent_run_failed")
+
     def _take_reply_to_message_id(self, reply_state: dict[str, int | None]) -> int | None:
         reply_to_message_id = reply_state.get("reply_to_message_id")
         reply_state["reply_to_message_id"] = None
         return reply_to_message_id
 
-    def _next_rotated_session_name(self, chat_id: int, base_name: str) -> str:
+    def _next_unique_session_name(self, chat_id: int, base_name: str, *, suffix_template: str) -> str:
+        """Find the first unused name of the form suffix_template.format(base=base_name, n=1), n=2, ...)."""
         existing = {
             data.get("name", "").strip().lower()
             for data in self.store.list_sessions(self.bot_id, chat_id).values()
@@ -202,10 +322,27 @@ class SessionRuntime:
         }
         suffix = 1
         while True:
-            candidate = f"{base_name}-{suffix}"
+            candidate = suffix_template.format(base=base_name, n=suffix)
             if candidate.lower() not in existing:
                 return candidate
             suffix += 1
+
+    def _next_rotated_session_name(self, chat_id: int, base_name: str) -> str:
+        return self._next_unique_session_name(chat_id, base_name, suffix_template="{base}-{n}")
+
+    def _next_resume_session_name(self, chat_id: int, base_name: str) -> str:
+        """Like ``_next_rotated_session_name``, but for compaction: strips any existing
+        ``-resumeN`` suffix first so repeated compaction produces "name-resume1",
+        "name-resume2", ... instead of "name-resume1-resume1-resume1"."""
+        stripped_base_name = _RESUME_SUFFIX_RE.sub("", base_name)
+        return self._next_unique_session_name(chat_id, stripped_base_name, suffix_template="{base}-resume{n}")
+
+    def _next_switch_session_name(self, chat_id: int, base_name: str) -> str:
+        """Like ``_next_resume_session_name``, but for switching to a clean session with no
+        handoff summary: strips any existing ``-newN`` suffix first so repeated switching
+        produces "name-new1", "name-new2", ... instead of stacking suffixes."""
+        stripped_base_name = _NEW_SUFFIX_RE.sub("", base_name)
+        return self._next_unique_session_name(chat_id, stripped_base_name, suffix_template="{base}-new{n}")
 
     def should_skip_git_repo_check(self, project_folder: str) -> bool:
         return self.cfg.codex_skip_git_repo_check or self.store.is_project_trusted(project_folder)
@@ -253,8 +390,9 @@ class SessionRuntime:
             return None
 
         project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
+        provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
+        model = (session.get("model") or "").strip() or None
         logger.info(
             "Running message for chat %s on session '%s' (%s) in project '%s' with provider '%s'. "
             "Prompt (first 200 chars): %.200r",
@@ -295,6 +433,7 @@ class SessionRuntime:
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
+            model=model,
             stall_message=self._t(update, "runtime.active_run_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
@@ -331,13 +470,7 @@ class SessionRuntime:
                 active_id,
                 result.error_message or "unknown error",
             )
-            error_text = (
-                _sanitize_agent_error(result.error_message, error_code=getattr(result, "error_code", None))
-                if result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, result)
             await send_text(update, context, error_text)
             return result
 
@@ -351,6 +484,9 @@ class SessionRuntime:
                 project_folder,
                 provider,
                 branch_name=branch_name,
+                # Not a user-initiated new session -- the CLI just rotated the id for
+                # the same conversation, so the model override carries over.
+                model=model,
             )
             logger.info(
                 "Resume returned a different session id for chat %s; switched from '%s' (%s) to '%s' (%s).",
@@ -400,7 +536,7 @@ class SessionRuntime:
             return None
 
         project_folder = session["project_folder"]
-        provider = session.get("provider", "codex")
+        provider = _session_provider(session)
         branch_name = session.get("branch_name", "")
         session_name = session["name"]
         logger.info(
@@ -428,6 +564,7 @@ class SessionRuntime:
             COMPACT_SUMMARY_PROMPT,
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            model=(session.get("model") or "").strip() or None,
             stall_message=self._t(update, "runtime.active_run_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
@@ -439,13 +576,7 @@ class SessionRuntime:
             )
             return None
         if not summary_result.success:
-            error_text = (
-                _sanitize_agent_error(summary_result.error_message, error_code=getattr(summary_result, "error_code", None))
-                if summary_result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(summary_result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, summary_result)
             await send_text(update, context, error_text)
             return summary_result
 
@@ -470,23 +601,20 @@ class SessionRuntime:
             COMPACT_BOOTSTRAP_TEMPLATE.format(summary=compact_summary),
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            # Seeds context and returns a session ID only. The summary lists "next
+            # steps", which an autopilot agent would otherwise start executing here.
+            priming_only=True,
             stall_message=self._t(update, "runtime.replacement_session_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
         if create_result is None:
             return None
         if not create_result.success or not create_result.session_id:
-            error_text = (
-                _sanitize_agent_error(create_result.error_message, error_code=getattr(create_result, "error_code", None))
-                if create_result.error_message
-                else self._t(update, "runtime.agent_run_failed")
-            )
-            if getattr(create_result, "error_code", None) == "agent_aborted":
-                error_text = self._t(update, "runtime.agent_run_aborted")
+            error_text = self._agent_failure_text(update, provider, create_result)
             await send_text(update, context, error_text)
             return create_result
 
-        switched_session_name = self._next_rotated_session_name(chat_id, session_name)
+        switched_session_name = self._next_resume_session_name(chat_id, session_name)
         self.store.create_session(
             self.bot_id,
             chat_id,
@@ -502,6 +630,85 @@ class SessionRuntime:
             self._t(
                 update,
                 "runtime.session_compacted",
+                session_name=switched_session_name,
+                session_id=create_result.session_id,
+            ),
+        )
+        return create_result
+
+    async def switch_to_new_session(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> AgentRunResult | None:
+        """Abandon the active session's context entirely and start a clean one.
+
+        Unlike ``compact_active_session``, this never resumes the old (possibly cold)
+        session, so it carries none of that unavoidable full-transcript reprocess cost --
+        at the price of the new session having no memory of the old one at all.
+        """
+        chat_id = update.effective_chat.id
+        active_id, session, project_path = await self._active_session_or_notify(update, context)
+        if active_id is None or session is None or project_path is None:
+            return None
+
+        project_folder = session["project_folder"]
+        provider = _session_provider(session)
+        branch_name = session.get("branch_name", "")
+        session_name = session["name"]
+        logger.info(
+            "Switching chat %s from session '%s' (%s) to a fresh session in project '%s' with provider '%s'.",
+            chat_id,
+            session_name,
+            active_id,
+            project_folder,
+            provider,
+        )
+
+        if branch_name and self.git.is_git_repo(project_path):
+            checkout = await self._checkout_branch(update, context, project_path, branch_name)
+            if not checkout:
+                return None
+
+        await send_text(update, context, self._t(update, "runtime.switching_session"))
+        create_result = await self.run_with_typing(
+            update,
+            context,
+            self.agent_runner.create_session,
+            provider,
+            project_path,
+            NEW_SESSION_PRIMING_PROMPT,
+            workspace_lock_key=project_folder,
+            skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
+            # Priming-only, same reasoning as compact_active_session's replacement
+            # session: the throwaway prompt must not be actionable.
+            priming_only=True,
+            stall_message=self._t(update, "runtime.replacement_session_stall"),
+            progress_label=self._t(update, "runtime.live_agent_output"),
+        )
+        if create_result is None:
+            return None
+        if not create_result.success or not create_result.session_id:
+            error_text = self._agent_failure_text(update, provider, create_result)
+            await send_text(update, context, error_text)
+            return create_result
+
+        switched_session_name = self._next_switch_session_name(chat_id, session_name)
+        self.store.create_session(
+            self.bot_id,
+            chat_id,
+            create_result.session_id,
+            switched_session_name,
+            project_folder,
+            provider,
+            branch_name=branch_name,
+        )
+        await send_text(
+            update,
+            context,
+            self._t(
+                update,
+                "runtime.session_switched",
                 session_name=switched_session_name,
                 session_id=create_result.session_id,
             ),
@@ -538,7 +745,17 @@ class SessionRuntime:
         user_message: str,
         image_paths: Sequence[Path],
     ):
-        if result.success or not result.error_message or "resume" not in result.error_message.lower():
+        if result.success or not result.error_message:
+            return result, active_id, session_name
+        # Claude has its own precise, structured signal (checked first); the substring
+        # fallback only kicks in for other providers, since for Claude it would also
+        # match a genuine (if failed) turn's model-generated result text that happens to
+        # mention "resume" for an unrelated reason -- exactly the false-positive this
+        # structured signal exists to avoid.
+        is_unresumable = getattr(result, "error_code", None) == "session_not_found" or (
+            provider != "claude" and _UNRESUMABLE_SESSION_FALLBACK_PHRASE in result.error_message.lower()
+        )
+        if not is_unresumable:
             return result, active_id, session_name
 
         logger.info(
@@ -547,6 +764,9 @@ class SessionRuntime:
             active_id,
             chat_id,
         )
+        # Not a user-initiated new session -- the old one just expired underneath the
+        # same conversation, so the model override carries over rather than resetting.
+        model = (session.get("model") or "").strip() or None
         create_result = await self.run_with_typing(
             update,
             context,
@@ -557,6 +777,7 @@ class SessionRuntime:
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.should_skip_git_repo_check(project_folder),
             image_paths=image_paths,
+            model=model,
             stall_message=self._t(update, "runtime.replacement_session_stall"),
             progress_label=self._t(update, "runtime.live_agent_output"),
         )
@@ -574,6 +795,7 @@ class SessionRuntime:
             project_folder,
             provider,
             branch_name=branch_name,
+            model=model,
         )
         logger.info(
             "Created a replacement session for chat %s after resume failure: old='%s' (%s) new='%s' (%s).",
@@ -688,6 +910,18 @@ class SessionRuntime:
             return
 
         total = len(segments)
+
+        # If an agent's final reply reads like it's asking the user to pick between a
+        # few options, detect them now so we can offer buttons after the reply is sent.
+        # This is deliberately provider-neutral: Codex and Copilot run as one-shot
+        # subprocesses just like Claude, so a Telegram reply must become the next
+        # session turn rather than trying to hold an interactive CLI prompt open.
+        # Tapping one sends the option text back as the next chat message — the same
+        # as if the user had typed it.
+        reply_options: tuple[str, ...] = ()
+        if segments[-1].kind == "prose" and update.effective_chat is not None:
+            reply_options = _detect_reply_options(segments[-1].text)
+
         for index, segment in enumerate(segments, start=1):
             if segment.kind == "code":
                 await send_code_block(
@@ -700,7 +934,7 @@ class SessionRuntime:
                 )
                 continue
 
-            provider_label = provider_display_label(provider) or "Codex"
+            provider_label = provider_display_label(provider) or "Agent"
             title_prefix = (
                 self._t(update, "runtime.provider_output_single", provider=provider_label)
                 if total == 1
@@ -719,6 +953,32 @@ class SessionRuntime:
                     message,
                     reply_to_message_id=self._take_reply_to_message_id(reply_state),
                 )
+
+        if reply_options and update.effective_chat is not None:
+            token = self.register_reply_options(update.effective_chat.id, reply_options)
+            await send_html_text(
+                update,
+                context,
+                f"<b>{html.escape(self._t(update, 'runtime.reply_options_prompt'))}</b>",
+            )
+            # Each option gets its own message with a single button right under it, so
+            # the full option text is always visible next to the button that picks it —
+            # no truncation, no guessing which button maps to which paragraph.
+            for index, option in enumerate(reply_options):
+                await send_html_text(
+                    update,
+                    context,
+                    html.escape(option),
+                    reply_markup=self._reply_option_keyboard(update, token, index),
+                )
+
+    def _reply_option_keyboard(self, update: Update, token: str, index: int) -> InlineKeyboardMarkup:
+        button = InlineKeyboardButton(
+            self._t(update, "runtime.reply_option_select_button"),
+            callback_data=f"agentopt:{token}:{index}",
+            **affirmative_inline_button_kwargs(),
+        )
+        return InlineKeyboardMarkup([[button]])
 
     def _chunk_assistant_prose(self, title_prefix: str, text: str) -> list[str]:
         normalized = text.strip()

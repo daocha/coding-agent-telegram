@@ -14,6 +14,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from coding_agent_telegram.i18n import DEFAULT_LOCALE, normalize_locale
+from coding_agent_telegram.models import DEFAULT_MODEL_CHOICES
 from coding_agent_telegram.providers import SUPPORTED_PROVIDERS
 
 DEFAULT_SNAPSHOT_TEXT_FILE_MAX_BYTES = 200_000
@@ -25,6 +26,30 @@ DEFAULT_ENV_FILE_NAME = ".env_coding_agent_telegram"
 DEFAULT_AGENT_HARD_TIMEOUT_SECONDS = 0
 DEFAULT_OPENAI_WHISPER_MODEL = "base"
 DEFAULT_OPENAI_WHISPER_TIMEOUT_SECONDS = 120
+# How long a session can sit idle before resuming it risks a costly prompt-cache
+# miss (see README FAQ: "does this app burn more tokens than the terminal?"). This is
+# only the idle-time half of the check -- session_gap.py also reports accumulated
+# session size where a provider exposes one, and small/cheap sessions are gated out so
+# they don't nag even past this threshold (see _LONG_GAP_PROVIDER_CONFIG in
+# router/message_commands.py).
+#
+# Claude: no official idle-based cache-expiry number is published, but the extended
+# prompt-cache checkpoint was empirically confirmed (against real session transcripts)
+# to hold for about an hour before a full-context reprocess kicks in.
+DEFAULT_CLAUDE_LONG_GAP_SECONDS = 3600
+# Codex: OpenAI doesn't document an idle-based cache-expiry number either, and its API
+# prompt cache is generally shorter-lived than Claude's extended checkpoint anyway --
+# by the time either 30 or 60 minutes of idle has passed, the cache is almost
+# certainly gone regardless, so there's no accuracy cost to picking the larger number.
+# Matches Claude's threshold for a simpler mental model, now that the size gate above
+# already filters out small sessions that wouldn't be worth nagging about anyway.
+DEFAULT_CODEX_LONG_GAP_SECONDS = 3600
+# Copilot: GitHub's docs state Copilot CLI has no inactivity timeout at all, and it
+# already auto-compacts its own context (around ~80-95% usage) without any idle
+# involvement. There's nothing analogous to warn about here, so this defaults to
+# disabled (0) rather than inventing an idle-cache-expiry assumption that doesn't
+# apply to this provider. Set a positive value to opt into an idle-based nudge anyway.
+DEFAULT_COPILOT_LONG_GAP_SECONDS = 0
 
 
 @dataclass(frozen=True)
@@ -42,6 +67,9 @@ class AppConfig:
     codex_model: str
     copilot_model: str
     claude_model: str
+    codex_model_choices: tuple[str, ...]
+    copilot_model_choices: tuple[str, ...]
+    claude_model_choices: tuple[str, ...]
     copilot_autopilot: bool
     copilot_no_ask_user: bool
     copilot_allow_all: bool
@@ -66,6 +94,10 @@ class AppConfig:
     default_agent_provider: str
     agent_hard_timeout_seconds: int
     app_internal_root: Path
+    long_gap_warning_enabled: bool
+    claude_long_gap_seconds: int
+    codex_long_gap_seconds: int
+    copilot_long_gap_seconds: int
     locale: str = DEFAULT_LOCALE
 
 
@@ -80,6 +112,14 @@ def _parse_csv_env(name: str) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _parse_model_choices_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Like ``_parse_csv_env``, but an unset var falls back to ``default`` while an
+    explicitly empty one (``NAME=``) is honored as "no curated choices"."""
+    if os.getenv(name) is None:
+        return default
+    return tuple(_parse_csv_env(name))
 
 
 def _parse_allowed_chat_ids() -> set[int]:
@@ -203,6 +243,52 @@ def create_initial_env_file(env_path: Path, template_path: Optional[Path] = None
     return app_locale
 
 
+def upsert_env_value(
+    env_path: Path,
+    key: str,
+    value: str,
+    *,
+    comments: Optional[list[str]] = None,
+) -> None:
+    """Insert or overwrite a single ``KEY=value`` line in an env file in place,
+    preserving the rest of the file. Creates the file's parent dir if needed.
+    """
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    replacement = f"{key}={value}"
+    for index, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[index] = replacement
+            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return
+    if lines and lines[-1].strip():
+        lines.append("")
+    if comments:
+        lines.extend(comments)
+    lines.append(replacement)
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_env_value(env_path: Path, key: str) -> Optional[str]:
+    """Return the current value of ``key`` in an env file, or None if unset."""
+    if not env_path.exists():
+        return None
+    prefix = f"{key}="
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):]
+    return None
+
+
+def remove_env_value(env_path: Path, key: str) -> None:
+    """Remove the ``key=...`` line from an env file in place, if present."""
+    if not env_path.exists():
+        return
+    prefix = f"{key}="
+    lines = [line for line in env_path.read_text(encoding="utf-8").splitlines() if not line.startswith(prefix)]
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def resolve_env_file_path(env_file: Optional[Path] = None) -> Path:
     if env_file is not None:
         return env_file
@@ -280,6 +366,9 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
         codex_model=os.getenv("CODEX_MODEL", "").strip(),
         copilot_model=os.getenv("COPILOT_MODEL", "").strip(),
         claude_model=os.getenv("CLAUDE_MODEL", "").strip(),
+        codex_model_choices=_parse_model_choices_env("CODEX_MODEL_CHOICES", DEFAULT_MODEL_CHOICES["codex"]),
+        copilot_model_choices=_parse_model_choices_env("COPILOT_MODEL_CHOICES", DEFAULT_MODEL_CHOICES["copilot"]),
+        claude_model_choices=_parse_model_choices_env("CLAUDE_MODEL_CHOICES", DEFAULT_MODEL_CHOICES["claude"]),
         copilot_autopilot=_parse_bool(os.getenv("COPILOT_AUTOPILOT", "true"), default=True),
         copilot_no_ask_user=_parse_bool(os.getenv("COPILOT_NO_ASK_USER", "true"), default=True),
         copilot_allow_all=_parse_bool(os.getenv("COPILOT_ALLOW_ALL", "true"), default=True),
@@ -316,5 +405,15 @@ def load_config(env_file: Optional[Path] = None) -> AppConfig:
             os.getenv("AGENT_HARD_TIMEOUT_SECONDS", str(DEFAULT_AGENT_HARD_TIMEOUT_SECONDS))
         ),
         app_internal_root=app_internal_root,
+        long_gap_warning_enabled=_parse_bool(os.getenv("LONG_GAP_WARNING_ENABLED", "true"), default=True),
+        claude_long_gap_seconds=int(
+            os.getenv("CLAUDE_LONG_GAP_SECONDS", str(DEFAULT_CLAUDE_LONG_GAP_SECONDS))
+        ),
+        codex_long_gap_seconds=int(
+            os.getenv("CODEX_LONG_GAP_SECONDS", str(DEFAULT_CODEX_LONG_GAP_SECONDS))
+        ),
+        copilot_long_gap_seconds=int(
+            os.getenv("COPILOT_LONG_GAP_SECONDS", str(DEFAULT_COPILOT_LONG_GAP_SECONDS))
+        ),
         locale=locale,
     )

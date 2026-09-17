@@ -5,6 +5,7 @@ import shutil  # Backward compatibility for tests/monkeypatches using the legacy
 from .session_branch_resolution import SessionBranchResolutionMixin
 from .session_common import SessionCommonMixin
 from .session_lifecycle_commands import SessionLifecycleCommandMixin
+from .session_model_commands import SessionModelCommandMixin
 from .session_provider_commands import SessionProviderCommandMixin
 from .session_status_commands import SessionStatusCommandMixin
 
@@ -12,6 +13,7 @@ from .session_status_commands import SessionStatusCommandMixin
 class SessionCommandMixin(
     SessionCommonMixin,
     SessionProviderCommandMixin,
+    SessionModelCommandMixin,
     SessionBranchResolutionMixin,
     SessionLifecycleCommandMixin,
     SessionStatusCommandMixin,

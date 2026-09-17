@@ -1,6 +1,6 @@
 <div align="center">
   <img width="600" alt="Coding Agent Telegram" src="https://github.com/user-attachments/assets/aca106f8-0d64-40e9-94d9-2542da5dfde9" />
-  <h1>Coding Agent Telegram 🚀</h1>
+  <h1>Claude Code / Codex / Copilot Coding Agent Telegram 🚀</h1>
   <p>
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.md">English</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.de.md">Deutsch</a> |
@@ -179,6 +179,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+インストールされた `coding-agent-telegram` コマンドには `./startup.sh` と同じ polling watchdog が含まれています。bot がクラッシュした場合や Telegram heartbeat が古くなった場合に再起動し、DNS またはネットワークが利用できない間はバックオフして再試行します。
+
 ### 方法C: クローンしたリポジトリから実行
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
@@ -272,6 +274,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     <td>新しいセッション用のプロバイダーを選択します。選択は変更するまで bot と chat ごとに保存されます。</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>現在のプロバイダーのモデル一覧から、アクティブなセッションのモデルを選択します。選択はそのセッションの <code>state.json</code> に保存され、セッションを再開するたびに使用されます。新しいセッションを開始すると（<code>/new</code>、新しいセッションへの <code>/switch</code>、または <code>/compact</code>）、常にプロバイダーに設定された既定モデルにリセットされます。</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>選定済みの一覧にない特定のモデル ID を設定します。既知の選択肢でない場合、bot はまず使い捨ての読み取り専用呼び出しで CLI に問い合わせ、その ID が実際に受け入れられるかを保存前に確認します。CLI がそれを拒否した場合は、エラーが chat に返され、何も保存されません。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>現在のプロジェクトフォルダを設定します。フォルダが存在しない場合は作成して trusted として扱います。既存で untrusted の場合は明示的に trust を確認します。</td>
   </tr>
@@ -286,6 +296,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>/current</code></td>
     <td>現在の bot と chat の アクティブなセッション を表示します。</td>
+  </tr>
+  <tr>
+    <td><code>/status</code></td>
+    <td>各 provider の quota 使用状況（5時間・週次の使用率とリセット時刻）を表示します。有料の API 呼び出しは一切発生しません：Codex は常に無料のローカルクエリであり、Claude の数値は bot 経由の直近の実際の Claude 利用からのみ再利用され、「X前に確認」と表示されます（対象は OAuth でログインした Pro/Max アカウントのみ）。2つのウィンドウは個別に管理されるため、一方がすでにリセット時刻を過ぎている場合（またはまだ一度も観測されていない場合）、もう一方に新しいデータがあっても、次の Claude のやり取りで更新されるまで N/A と表示されます。Copilot にはこれに対応する API がないため、利用不可として表示されます。</td>
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
@@ -317,11 +331,19 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>確認後に、アクティブなセッションのブランチで <code>origin</code> から pull します。必要に応じてデフォルト ブランチも更新します。</td>
+    <td>確認後に、アクティブなセッションのブランチで <code>origin</code> から Git pull します。必要に応じてデフォルト ブランチも更新します。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>現在の アクティブなセッション に対して <code>origin &lt;branch&gt;</code> を push します。push 前に bot が確認します。</td>
+    <td>現在の アクティブなセッション に対して <code>origin &lt;branch&gt;</code> へ Git push します。push 前に bot が確認します。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>アクティブなセッションの project で最新の Git コミット 5 件を表示します。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>local または <code>origin</code> のデフォルト／現在のブランチを選択し、<code>git reset --hard</code> を確認します。remote の対象は先に pull されます。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -405,6 +427,18 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
     </td>
   </tr>
   <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td><code>/model</code> コマンドが Codex 向けに提示する、カンマ区切りのモデル一覧です。未設定の場合は、同梱の <code>.env.example</code> の値を使用します。</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td><code>/model</code> コマンドが Copilot 向けに提示する、カンマ区切りのモデル一覧です。未設定の場合は、同梱の <code>.env.example</code> の値を使用します。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td><code>/model</code> コマンドが Claude Code 向けに提示する、カンマ区切りのモデル一覧です。未設定の場合は、同梱の <code>.env.example</code> の値を使用します。テンプレートが利用できない場合は <code>sonnet,opus,fable,haiku</code> を使用します。</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Codex に渡す approval mode。既定: <code>never</code>.</td>
   </tr>
@@ -435,6 +469,22 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
   <tr>
     <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>単一の エージェント実行 に対するハードタイムアウト。既定: <code>0</code>（無効）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>しばらく idle で、かつ再処理が高くつく程度に context が蓄積された session を resume する前に、provider の prompt cache が切れている可能性がある旨を警告し、先に compact するか、そのまま続行するかのボタンを出します。既定: <code>true</code>。詳細は下の FAQ を参照。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Claude Code の session に対して警告が発火するまでの idle しきい値（秒）。既定: <code>3600</code>（1時間。Claude Code の拡張 prompt cache ウィンドウに合わせています）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Codex の session に対して警告が発火するまでの idle しきい値（秒）。既定: <code>3600</code>（1時間。Claude と同じ値です。OpenAI は Codex について idle ベースの cache 失効時間を文書化しておらず、また Codex 自身の cache は Claude より短命なことが多いため、Claude の閾値に合わせても精度は損なわれません。size gate と組み合わせることで小さい session が警告を出さないようにもしています）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Copilot の session に対して警告が発火するまでの idle しきい値（秒）。既定: <code>0</code>（無効）。GitHub 公式ドキュメントによれば Copilot CLI に inactivity timeout はなく、すでに context を自前で（使用率 80〜95% あたりで）native に auto-compact しています。ここには警告すべき idle 起因のリスクがないため、存在しない API を仮定するのではなく Copilot 自身の仕組みに任せています。それでも Copilot に idle ベースの通知が欲しい場合は正の値を設定してください。</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -679,6 +729,71 @@ package version は Git tag から導出されます。
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ FAQ / トラブルシューティング
+
+<details>
+<summary><b>普通のターミナルで <code>claude --resume</code> を実行しても、Telegram から作った session が表示されないのはなぜですか？</b></summary>
+
+これは Claude Code CLI の想定どおりの挙動であり、このアプリのバグではありません。
+
+この bot が作る session は、Claude Code の headless な `-p`/print モードを通じて実行されます。Claude Code はそうやって開始された session を transcript 上で `entrypoint: "sdk-cli"` としてマークします。これは、ターミナルで直接 `claude` と入力して始めた session の `entrypoint: "cli"` とは異なります。session ID を指定しない対話的な `claude --resume` ピッカーは `cli` entrypoint の session しか一覧表示しません — headless / SDK 駆動の実行は意図的に隠されており、手動で再開すべき会話ではなく自動化の出力として扱われます。
+
+session データ自体が失われたり別物になったりしているわけではありません。`~/.claude/projects/<encoded-project-path>/<session-id>.jsonl` に保存された、ごく普通の resume 可能な Claude Code session です。ID さえ分かれば直接 resume できます。
+
+```bash
+claude --resume <session-id>
+```
+
+このアプリが native の picker に頼らず独自の session discovery（`/switch` が使用）を持っているのはまさにこのためです — JSONL ファイルを直接スキャンしてプロジェクトパスで照合するので、単純な `claude --resume` には決して現れなくても、Telegram で作った session はここに表示されます。
+
+Codex と Copilot は自分たちの resume/list コマンドでこの「対話的 vs headless」という区別をしないため、これらの provider の session は普通のターミナルでも問題なく表示され続けます。
+</details>
+
+<details>
+<summary><b>このアプリは Claude Code のターミナルを直接使う場合より多くの token を消費しますか？</b></summary>
+
+呼び出しごとの本質的な overhead の違いによるものではありません — headless（`-p`）も対話的な Claude Code も、同じ下層プロトコルと同じ課金体系を使っています。しかし実際には、24時間365日の Telegram 利用は、典型的なターミナル利用よりも顕著に多くの token を消費し得ます。それには重なり合う2つの理由があります。
+
+- **session が際限なく肥大化しうる。** bot は同じ session を何時間、何日にもわたって都合よく resume し続けるため、rotate しない限り数百 turn・数メガバイトの transcript が積み上がることがあります。対話的なターミナルであれば、タスクを終えて次回は新しく始めるのが自然で、context は小さく保たれやすいです。
+- **Telegram メッセージ間の idle 間隔が prompt cache を失効させる。** Claude の prompt cache は TTL が短いです。その window 内に返信すれば、続く turn は安価な cache read で済みます。長い間隔が空くと（例えば寝て翌朝返信するなど）、次のメッセージ送信時に蓄積された context 全体を、はるかに高価な cache write としてゼロから再処理しなければなりません — しかもこのコストは、その時点までに session がどれだけ大きくなっているかに比例して増えます。だからこそ、たとえ「ピーク」時間帯より前でも、その日最初のメッセージを送った瞬間に使用量が跳ね上がることがあるのです。
+
+**軽減策:** session を無期限に走らせ続けるのではなく、特に長時間 idle だったと気づいたときは、長く使う session に対して定期的に `/compact`（このアプリが Telegram コマンドとしてサポート）を実行してください。関連のない作業には新しく `/new` session を始めることも、context — ひいてはコスト — を抑えるのに役立ちます。
+
+このアプリは今ではこれを自動でも行います。provider ごとに2つの signal を組み合わせることで、実際に問題になりそうなときだけ割り込むようにしています: idle しきい値（`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`）に加えて、session がすでに蓄積した context の量（idle が長くても小さく安価な session なら、ゼロから再処理してもたいしたことがないため警告をスキップします）です。既定値は Claude Code と Codex がともに1時間 — Claude の数字は実際の証跡に基づいていますが（上記参照）、OpenAI は Codex について文書化していないものの、Codex 自身の cache は Claude より短命なことが多いため、Claude の閾値に合わせても精度は損なわれず、単に割り込みが減るだけです（今回 size gate と組み合わせたことでなおさらです）。Copilot は既定で無効です。[GitHub 公式ドキュメント](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management)によれば Copilot CLI に inactivity timeout はなく、すでに context を自前で（使用率 80〜95% あたりで）native に auto-compact しているため、idle に関して警告すべきことは何もなく、独自の仕組みを仮定するのではなく Copilot 自身の仕組みに任せています。それでも Copilot に idle ベースの通知が欲しい場合は `COPILOT_LONG_GAP_SECONDS` に正の値を設定してください。
+
+しきい値と size gate の両方を満たすと、あなたのメッセージを保留してこう尋ねます。
+
+> ⏳ この session は {gap} の間 idle でした。今 resume すると会話全体をゼロから再処理する可能性が高く（provider の応答 cache はおそらく失効しています）、通常よりかなり多くの token を消費するおそれがあります。compact も要約を作成するために現在のコンテキストを一度再処理するため、この session がすでに大きい場合は同様に多くの token を消費する可能性があります。新しい session に切り替えれば、この再処理を完全に回避できますが、その代わりこれまでの会話の記憶は一切引き継がれません。新しい session に切り替えますか、先に compact しますか、それともそのまま続行しますか？
+>
+> [🆕 新しい session に切り替え]
+> [🔄 先に compact]
+> [⚠️ そのまま続行]
+
+`/compact` 自体もこのコストと無縁ではないことに注意してください: 現在の（おそらく冷えた）session を resume して自分自身を要約するよう求める仕組みなので、ただ返信する場合と同じ 1 回限りの transcript 全体の再処理コストを負います — 違いは、結果として得られる session が小さく始まるため、それ以降の毎ターンではなく一度だけそのコストを支払えばよいという点です。**新しい session に切り替え** は、その再処理を完全に回避できる唯一の選択肢です: 古い session を一度も resume せずにそのコンテキストを手放し、完全にゼロから始めます — その代償として、コンテキストを要約に圧縮するのではなく完全に失います。
+
+**新しい session に切り替え** を選ぶと、まったく新しい空の session を開始し、そこであなたのメッセージを続行します — 名前は元の session 名に `-newN` という連番のサフィックスを付けたもの（例: `fix-bug` → `fix-bug-new1` → 再度切り替えると `fix-bug-new2`）になるので、`/switch` でも元の session と区別できます。**先に compact** を選ぶと、session を要約し、その要約から新しい session を開始したうえで、あなたのメッセージをその新しい session 上で続行します — 同様に命名されますが、代わりに `-resumeN` サフィックスが付きます（例: `fix-bug` → `fix-bug-resume1` → 次の compaction で `fix-bug-resume2`）。**そのまま続行** を選ぶと、既存の session 上でいつもどおり続行するだけです。この仕組み全体は `LONG_GAP_WARNING_ENABLED=false` で無効化できます。
+</details>
+
+<details>
+<summary><b>Claude セッションが突然「Failed to authenticate: OAuth session expired and could not be refreshed」で失敗する</b></summary>
+
+これは `claude auth status` がログイン済みと報告している場合でも、再ログイン直後であっても発生することがあります。Claude Code が通常使用するインタラクティブな OAuth セッションは、実際のログインには問題がなくても、この bot がセッションを作成する headless かつ切り離された subprocess 方式に限って動作しなくなることがあります — これは Claude Code CLI の自動更新後に観測されており、断続的に発生することもあります。
+
+ユーザーが `/new`、再開したセッション、または任意のメッセージでリアルタイムにこれに遭遇した場合、bot はこの特定の失敗を認識し、生の CLI エラーの代わりに修正手順を即座に返信します。
+
+**修正するには**、この bot を実行しているホスト上で:
+
+1. `claude setup-token` を実行し、開いたブラウザでアクセスを承認してください。**実際のトークンはその後ターミナルに表示されます（`sk-ant-oat01-` で始まります）。ブラウザ側には表示されません** — ターミナルではなくブラウザのページから何かをコピーしてしまうのはよくある間違いで、それでは動作しません。これにより長期間有効な（約 1 年間の）認証トークンが作成されます。これは headless/自動化用途向けの Anthropic 公式にサポートされた仕組みで（GitHub Actions でも使われているものと同じです）、インタラクティブな OAuth セッションとは異なり、切り離されたバックグラウンドプロセスからの Keychain・セッションリフレッシュの動作に依存しません。そのため一度設定すれば、期限が来るまで再度触る必要はないと想定されます。
+2. 表示されたトークンをコピーし、このアプリの実行方法に合ったコマンドで保存してください — bot 自身の返信が自動的に正しいものを選びますが、参考までに:
+   - `pip` またはワンライナーの `install.sh` でインストールした場合（Quick Start 方法A/B）: `coding-agent-telegram claude-auth <token>`
+   - クローンしたリポジトリから `./startup.sh` で実行している場合（Quick Start 方法C）: `./startup.sh claude-auth <token>`
+
+   どちらのコマンドも、トークンを env ファイルに `CLAUDE_CODE_OAUTH_TOKEN` として保存し、Claude の認証を即座に再チェックします。そのため、ブラインドな再起動と祈りではなく、その場で成功/失敗が分かります。
+3. bot を再起動して、実行中のプロセスに変更を反映させてください。
+
+コマンドを使わずに、env ファイル（`.env_coding_agent_telegram`）に直接 `CLAUDE_CODE_OAUTH_TOKEN=<token>` を自分で設定することもできます — 上記の 2 つのコマンドは、まさにそれを行い、さらに検証も行う便利なラッパーにすぎません。
+</details>
 
 ## 📌 メモ
 

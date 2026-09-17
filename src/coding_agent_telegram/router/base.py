@@ -6,6 +6,7 @@ import html
 import logging
 import os
 import re
+import secrets
 import shlex
 from collections import deque
 from concurrent.futures import CancelledError, Future
@@ -27,12 +28,22 @@ from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.session_runtime import PhotoAttachmentStore, SessionRuntime
 from coding_agent_telegram.session_store import SessionStore
 from coding_agent_telegram.speech_to_text import WhisperSpeechToText
-from coding_agent_telegram.telegram_sender import send_text
+from coding_agent_telegram.telegram_sender import (
+    affirmative_inline_button_kwargs,
+    negative_inline_button_kwargs,
+    send_text,
+)
 
 
 logger = logging.getLogger(__name__)
 TYPING_REFRESH_TIMEOUT_SECONDS = 4
 PROGRESS_PREVIEW_MAX_CHARS = 600
+# Cap on pending agent-reply-option tokens. Consumed tokens are popped in
+# message_commands.py, but a button the user never taps leaves its token behind
+# forever -- bound the dict so an idle bot serving many chats can't grow it without
+# limit. Dicts preserve insertion order, so evicting the oldest entries is a cheap
+# approximation of "least likely to still be tapped".
+MAX_AGENT_REPLY_OPTION_TOKENS = 500
 
 
 def require_allowed_chat(*, answer_callback: bool = False):
@@ -118,6 +129,7 @@ class CommandRouterBase:
             bot_id=deps.bot_id,
             git=self.git,
             run_with_typing=self._run_with_typing,
+            register_reply_options=self._register_agent_reply_options,
         )
         # Per-workspace asyncio locks keyed by project_folder name.
         # Prevents concurrent agent runs on the same workspace regardless of
@@ -131,7 +143,16 @@ class CommandRouterBase:
         self._chat_next_queue_file_index: dict[int, int] = {}
         self._chat_message_queue_draining: set[int] = set()
         self._last_run_results: dict[int, object] = {}
+        # Monotonic deadline before which a session's idle gap provably cannot have
+        # crossed its provider's long-gap threshold, keyed by "provider:session_id".
+        # Lets a burst of quick messages on an active session skip the
+        # filesystem/sqlite lookup instead of repeating it on every message. Stores the
+        # crossing time rather than the check time so a session checked just *under*
+        # the threshold can't stay cached past it -- see _maybe_warn_long_gap in
+        # message_commands.py.
+        self._session_gap_safe_until: dict[str, float] = {}
         self._branch_source_tokens: dict[str, tuple[str, str, str]] = {}
+        self._agent_reply_option_tokens: dict[str, tuple[int, tuple[str, ...]]] = {}
 
     def _register_branch_source_token(self, source_kind: str, source_branch: str, new_branch: str) -> str:
         key = f"{source_kind}:{source_branch}:{new_branch}"
@@ -141,6 +162,14 @@ class CommandRouterBase:
 
     def _lookup_branch_source_token(self, token: str) -> tuple[str, str, str] | None:
         return self._branch_source_tokens.get(token)
+
+    def _register_agent_reply_options(self, chat_id: int, options: tuple[str, ...]) -> str:
+        if len(self._agent_reply_option_tokens) >= MAX_AGENT_REPLY_OPTION_TOKENS:
+            oldest_token = next(iter(self._agent_reply_option_tokens))
+            del self._agent_reply_option_tokens[oldest_token]
+        token = secrets.token_hex(6)
+        self._agent_reply_option_tokens[token] = (chat_id, options)
+        return token
 
     def _sorted_sessions(self, sessions: dict[str, dict[str, str]]) -> list[tuple[str, dict[str, str]]]:
         indexed_sessions = list(enumerate(sessions.items()))
@@ -227,10 +256,10 @@ class CommandRouterBase:
         return translate(self._locale(update), key, **kwargs)
 
     def _affirmative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
-        return {"api_kwargs": {"style": "primary"}}
+        return affirmative_inline_button_kwargs()
 
     def _negative_inline_button_kwargs(self) -> dict[str, dict[str, str]]:
-        return {"api_kwargs": {"style": "danger"}}
+        return negative_inline_button_kwargs()
 
     async def _notify_if_current_project_busy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         chat = update.effective_chat

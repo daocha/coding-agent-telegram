@@ -1,6 +1,6 @@
 <div align="center">
   <img width="600" alt="Coding Agent Telegram" src="https://github.com/user-attachments/assets/aca106f8-0d64-40e9-94d9-2542da5dfde9" />
-  <h1>Coding Agent Telegram 🚀</h1>
+  <h1>Claude Code / Codex / Copilot Coding Agent Telegram 🚀</h1>
   <p>
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.md">English</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.de.md">Deutsch</a> |
@@ -179,6 +179,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+Lệnh `coding-agent-telegram` đã cài đặt có cùng watchdog polling như `./startup.sh`: lệnh sẽ khởi động lại bot sau khi bị lỗi hoặc khi heartbeat Telegram quá cũ, đồng thời lùi thời gian thử lại khi DNS hoặc mạng không khả dụng.
+
 ### Cách C: Chạy từ repository đã clone
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
@@ -272,6 +274,14 @@ Hiện tại bot chấp nhận:
     <td>Chọn nhà cung cấp cho các phiên mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>
   <tr>
+    <td width="332"><code>/model</code></td>
+    <td>Chọn model cho phiên đang hoạt động, từ danh sách model của nhà cung cấp hiện tại. Lựa chọn này được lưu trên phiên đó trong <code>state.json</code> và được dùng mỗi khi phiên được resume. Bắt đầu một phiên mới (<code>/new</code>, <code>/switch</code> sang một phiên mới, hoặc <code>/compact</code>) luôn đặt lại về model mặc định đã cấu hình của nhà cung cấp.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/model &lt;model_id&gt;</code></td>
+    <td>Đặt một model id cụ thể không có trong danh sách được chọn sẵn. Nếu đây chưa phải là một lựa chọn đã biết, bot sẽ thử gọi CLI trước bằng một lệnh gọi chỉ-đọc dùng một lần để xác nhận id đó thực sự được chấp nhận trước khi lưu — nếu CLI từ chối, lỗi sẽ được trả về chat và không có gì được lưu.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>Đặt thư mục project hiện tại. Nếu thư mục chưa tồn tại, app sẽ tạo và đánh dấu là trusted. Nếu đã tồn tại nhưng vẫn untrusted, app sẽ yêu cầu xác nhận trust rõ ràng.</td>
   </tr>
@@ -286,6 +296,10 @@ Hiện tại bot chấp nhận:
   <tr>
     <td width="332"><code>/current</code></td>
     <td>Hiển thị phiên hoạt động cho bot và chat hiện tại.</td>
+  </tr>
+  <tr>
+    <td><code>/status</code></td>
+    <td>Hiển thị mức sử dụng quota của từng provider: phần trăm sử dụng trong 5 giờ và hàng tuần, kèm thời gian đặt lại. Không bao giờ tạo ra một lệnh gọi API có tính phí: Codex luôn là một truy vấn cục bộ miễn phí, còn số liệu của Claude chỉ được tái sử dụng từ hoạt động Claude thực gần nhất qua bot, hiển thị dạng "quan sát lần cuối X trước" (chỉ áp dụng cho tài khoản Pro/Max đăng nhập qua OAuth). Hai cửa sổ được theo dõi riêng biệt: nếu một cửa sổ đã qua thời gian đặt lại (hoặc chưa từng được quan sát), nó sẽ hiển thị N/A cho đến khi lượt Claude tiếp theo của bạn làm mới nó, ngay cả khi cửa sổ còn lại vẫn có dữ liệu mới. Copilot không có API được hỗ trợ cho việc này nên sẽ báo là không khả dụng.</td>
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
@@ -317,11 +331,19 @@ Hiện tại bot chấp nhận:
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>Sau khi xác nhận, thực hiện pull từ <code>origin</code> cho branch của phiên đang hoạt động. Bot cũng làm mới branch mặc định khi cần.</td>
+    <td>Sau khi xác nhận, thực hiện Git pull từ <code>origin</code> cho branch của phiên đang hoạt động. Bot cũng làm mới branch mặc định khi cần.</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>Push <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+    <td>Thực hiện Git push đến <code>origin &lt;branch&gt;</code> cho phiên hoạt động hiện tại. Bot sẽ hỏi xác nhận trước khi push.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>Hiển thị năm commit Git mới nhất của project trong phiên đang hoạt động.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>Chọn branch mặc định/hiện tại ở local hoặc <code>origin</code>, sau đó xác nhận <code>git reset --hard</code>. Mục tiêu remote sẽ được pull trước.</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -401,6 +423,18 @@ Hiện tại bot chấp nhận:
     <td>Ghi đè model Claude Code nếu cần. Để trống để dùng model mặc định của Claude Code CLI. Ví dụ: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> <a href="https://code.claude.com/docs/en/model-config" target="_blank">Claude Code model configuration</a></td>
   </tr>
   <tr>
+    <td width="332"><code>CODEX_MODEL_CHOICES</code></td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Codex. Khi chưa đặt, giá trị trong <code>.env.example</code> đi kèm sẽ được dùng.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Copilot. Khi chưa đặt, giá trị trong <code>.env.example</code> đi kèm sẽ được dùng.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>Danh sách model, phân tách bằng dấu phẩy, được lệnh <code>/model</code> đưa ra cho Claude Code. Khi chưa đặt, giá trị trong <code>.env.example</code> đi kèm sẽ được dùng; nếu không có mẫu, dùng <code>sonnet,opus,fable,haiku</code>.</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>Chế độ approval truyền cho Codex. Mặc định: <code>never</code>.</td>
   </tr>
@@ -431,6 +465,22 @@ Hiện tại bot chấp nhận:
   <tr>
     <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>Timeout cứng cho một lần lần chạy tác nhân. Mặc định: <code>0</code> (tắt).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>Trước khi resume một session đã idle một thời gian <em>và</em> đã tích lũy đủ context khiến việc xử lý lại tốn kém, cảnh báo rằng prompt cache của provider có thể đã hết hạn — kèm các nút để compact trước hoặc cứ tiếp tục. Mặc định: <code>true</code>. Xem FAQ bên dưới.</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Claude Code. Mặc định: <code>3600</code> (1 giờ, khớp với cửa sổ prompt-cache mở rộng của Claude Code).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Codex. Mặc định: <code>3600</code> (1 giờ, giống Claude; OpenAI không tài liệu hóa số liệu hết hạn cache dựa trên idle cho Codex, và cache riêng của Codex nhìn chung cũng ngắn hạn hơn Claude, nên khớp với ngưỡng của Claude không làm giảm độ chính xác -- kết hợp với size gate để các session nhỏ không gây phiền).</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Ngưỡng idle tính bằng giây trước khi cảnh báo kích hoạt cho session Copilot. Mặc định: <code>0</code> (tắt). Tài liệu chính thức của GitHub nêu rõ Copilot CLI không có inactivity timeout và đã tự động nén (auto-compact) context của chính nó (quanh mức sử dụng 80-95%) -- không có rủi ro nào liên quan đến idle cần cảnh báo ở đây, nên phần này để cơ chế riêng của Copilot xử lý thay vì tự bịa ra một cái. Đặt giá trị dương nếu bạn vẫn muốn có nhắc nhở dựa trên idle cho Copilot.</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -675,6 +725,71 @@ Phiên bản package được suy ra từ Git tags.
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ FAQ / Khắc phục sự cố
+
+<details>
+<summary><b>Vì sao <code>claude --resume</code> trong terminal thường không hiển thị các session tạo từ Telegram?</b></summary>
+
+Đây là hành vi bình thường của Claude Code CLI, không phải lỗi của app này.
+
+Các session do bot này tạo chạy qua chế độ headless `-p`/print của Claude Code. Claude Code gắn nhãn mọi session khởi động theo cách đó trong transcript là `entrypoint: "sdk-cli"`, khác với `entrypoint: "cli"` của một session bạn khởi động bằng cách gõ trực tiếp `claude` trong terminal. Bộ chọn `claude --resume` tương tác (không kèm session ID) chỉ liệt kê các session có entrypoint `cli` — nó cố tình ẩn các lần chạy headless/do SDK điều khiển, coi đó là output tự động hóa chứ không phải cuộc hội thoại được thiết kế để resume bằng tay.
+
+Bản thân dữ liệu session không hề mất hay khác đi — đó vẫn là một session Claude Code bình thường, resume được đầy đủ, lưu tại `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl`. Khi đã có ID, bạn có thể resume trực tiếp:
+
+```bash
+claude --resume <session-id>
+```
+
+Đây chính là lý do app này có cơ chế dò session riêng (được `/switch` sử dụng) thay vì dựa vào bộ chọn native — nó quét trực tiếp các tệp JSONL và khớp theo project path, nên các session tạo từ Telegram vẫn xuất hiện ở đó dù không bao giờ xuất hiện trong `claude --resume` thông thường.
+
+Codex và Copilot không tạo ra sự phân biệt tương tác-so-với-headless này trong các lệnh resume/list riêng của chúng, đó là lý do session của các provider này vẫn hiển thị bình thường trong terminal thông thường.
+</details>
+
+<details>
+<summary><b>App này có tốn nhiều token hơn việc dùng trực tiếp terminal Claude Code không?</b></summary>
+
+Không phải do chênh lệch overhead cố hữu trên mỗi lần gọi — headless (`-p`) và Claude Code tương tác dùng cùng giao thức nền và cùng biểu giá. Nhưng trong thực tế, việc dùng Telegram 24/7 có thể tốn token nhiều hơn rõ rệt so với dùng terminal thông thường, vì hai lý do cộng dồn:
+
+- **Session có thể phình to không giới hạn.** Vì bot tiện lợi tiếp tục resume cùng một session qua nhiều giờ hoặc nhiều ngày, một session có thể tích lũy hàng trăm lượt và transcript nặng vài megabyte nếu bạn không bao giờ luân chuyển nó. Trong terminal tương tác, bạn thường sẽ hoàn thành một việc rồi bắt đầu mới ở lần sau, giữ context nhỏ hơn một cách tự nhiên.
+- **Khoảng idle giữa các tin nhắn Telegram làm hết hạn prompt cache.** Prompt cache của Claude có TTL ngắn. Nếu bạn trả lời trong khoảng đó, các lượt tiếp theo là cache read rẻ. Nếu có khoảng nghỉ dài (ví dụ bạn ngủ rồi trả lời vào sáng hôm sau), *toàn bộ* context đã tích lũy phải được xử lý lại từ đầu ở tin nhắn tiếp theo dưới dạng một lần cache write đắt hơn nhiều — và chi phí này tăng theo kích thước session đã đạt được tại thời điểm đó. Đó là lý do usage có thể tăng vọt ngay khi bạn gửi tin nhắn đầu tiên trong ngày, kể cả trước giờ "cao điểm".
+
+**Cách giảm thiểu:** định kỳ chạy `/compact` trên các session tồn tại lâu (app này hỗ trợ như một lệnh Telegram) thay vì để một session chạy vô thời hạn, đặc biệt nếu bạn nhận thấy nó đã idle một thời gian dài. Bắt đầu một session `/new` mới cho công việc không liên quan cũng giúp giữ context — và chi phí — trong tầm kiểm soát.
+
+Giờ đây app cũng tự động làm việc này, bằng cách kết hợp hai tín hiệu theo từng provider để chỉ làm gián đoạn bạn khi thực sự đáng: một ngưỡng idle (`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`) *và* lượng context mà session đã tích lũy (bỏ qua cảnh báo cho các session nhỏ/rẻ ngay cả khi đã idle một lúc, vì xử lý lại từ đầu khi đó gần như không đáng kể). Mặc định: 1 giờ cho cả Claude Code lẫn Codex -- con số của Claude có bằng chứng thực tế hỗ trợ (xem ở trên), và dù OpenAI không tài liệu hóa cho Codex, cache riêng của Codex nhìn chung cũng ngắn hạn hơn Claude, nên khớp với ngưỡng của Claude không tốn gì về độ chính xác mà chỉ giúp giảm số lần gián đoạn, nhất là khi giờ đã kết hợp với size gate; và tắt theo mặc định cho Copilot, vì [tài liệu chính thức của GitHub](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management) nêu rõ Copilot CLI hoàn toàn không có inactivity timeout và đã tự động nén context của chính nó (quanh mức sử dụng 80-95%) -- không có gì liên quan đến idle cần cảnh báo ở đó, nên phần này để cơ chế riêng của Copilot xử lý thay vì tự bịa ra một cái. Đặt `COPILOT_LONG_GAP_SECONDS` thành giá trị dương nếu bạn vẫn muốn có nhắc nhở dựa trên idle cho Copilot.
+
+Khi cả ngưỡng idle và size gate đều thỏa mãn, app sẽ giữ tin nhắn của bạn lại và hỏi:
+
+> ⏳ Session này đã idle {gap}. Resume ngay bây giờ nhiều khả năng sẽ xử lý lại toàn bộ cuộc hội thoại từ đầu (cache phản hồi của provider có lẽ đã hết hạn), có thể tốn token nhiều hơn đáng kể so với bình thường. Compact cũng phải xử lý lại context hiện tại một lần để viết bản tóm tắt, nên cũng có thể tốn nhiều token nếu session này đã lớn. Chuyển sang session mới sẽ bỏ qua hoàn toàn việc xử lý lại đó, nhưng sẽ bắt đầu mà không có bất kỳ ký ức nào về cuộc hội thoại này. Chuyển sang session mới, compact trước, hay cứ tiếp tục?
+>
+> [🆕 Chuyển sang session mới]
+> [🔄 Compact trước]
+> [⚠️ Cứ tiếp tục]
+
+Lưu ý rằng bản thân `/compact` cũng không miễn phí chi phí này: nó hoạt động bằng cách resume session hiện tại (có thể đã nguội) và yêu cầu nó tự tóm tắt, nên vẫn phải trả chi phí xử lý lại toàn bộ transcript một lần giống như khi trả lời bình thường — điểm khác là bạn chỉ phải trả chi phí đó một lần thay vì ở mỗi lượt tiếp theo, vì session kết quả bắt đầu nhỏ. **Chuyển sang session mới** là lựa chọn duy nhất tránh hoàn toàn việc xử lý lại đó: nó từ bỏ context của session cũ mà không bao giờ resume nó, rồi bắt đầu hoàn toàn mới — đánh đổi bằng việc mất hoàn toàn context đó thay vì nén nó thành bản tóm tắt.
+
+Chọn **Chuyển sang session mới** sẽ khởi tạo một session mới hoàn toàn trống, rồi tiếp tục với tin nhắn của bạn ở đó — được đặt tên theo session cũ với hậu tố `-newN` tăng dần (ví dụ `fix-bug` → `fix-bug-new1` → `fix-bug-new2` nếu chuyển lần nữa), để bạn vẫn phân biệt được với bản gốc trong `/switch`. Chọn **Compact trước** sẽ tóm tắt session, khởi tạo một session mới từ bản tóm tắt đó, rồi tiếp tục với tin nhắn của bạn trên session mới — được đặt tên tương tự nhưng dùng hậu tố `-resumeN` (ví dụ `fix-bug` → `fix-bug-resume1` → `fix-bug-resume2` ở lần compact tiếp theo). Chọn **Cứ tiếp tục** thì chỉ đơn giản là tiếp tục trên session hiện có như bình thường. Có thể tắt toàn bộ cơ chế kiểm tra này bằng `LONG_GAP_WARNING_ENABLED=false`.
+</details>
+
+<details>
+<summary><b>Các phiên Claude đột nhiên thất bại với "Failed to authenticate: OAuth session expired and could not be refreshed"</b></summary>
+
+Điều này có thể xảy ra ngay cả khi `claude auth status` báo bạn đã đăng nhập, và ngay cả ngay sau khi bạn vừa đăng nhập lại. Phiên OAuth tương tác mà Claude Code thường dùng có thể ngừng hoạt động riêng đối với cách bot này tạo phiên theo kiểu headless, subprocess tách biệt, mà không phải do lỗi đăng nhập thực sự của bạn — điều này đã được ghi nhận sau khi Claude Code CLI tự động cập nhật, và cũng có thể xảy ra không liên tục.
+
+Nếu người dùng gặp phải trực tiếp qua `/new`, một phiên được resume, hoặc bất kỳ tin nhắn nào, bot sẽ nhận ra lỗi cụ thể này và trả lời ngay với hướng dẫn khắc phục, thay vì lỗi CLI thô.
+
+**Để khắc phục**, trên máy chủ đang chạy bot:
+
+1. Chạy `claude setup-token` và chấp thuận quyền truy cập trong trình duyệt vừa mở. **Token thật sau đó được in ra trong terminal của bạn (bắt đầu bằng `sk-ant-oat01-`), không hiển thị ở đâu trong trình duyệt** — sao chép thứ gì đó từ chính trang trình duyệt thay vì terminal là lỗi thường gặp và sẽ không hoạt động. Việc này tạo ra một token xác thực tồn tại lâu dài (khoảng 1 năm), là cơ chế được Anthropic chính thức hỗ trợ cho việc sử dụng headless/tự động hóa (giống cơ chế dùng cho GitHub Actions) — khác với phiên OAuth tương tác, nó không phụ thuộc vào việc Keychain/làm mới phiên hoạt động từ một tiến trình nền tách biệt, nên sau khi thiết lập, dự kiến sẽ không cần đụng vào lại cho đến khi nó hết hạn.
+2. Sao chép token được in ra, sau đó lưu nó bằng lệnh phù hợp với cách bạn chạy ứng dụng này — phản hồi của chính bot sẽ tự động chọn lệnh đúng, nhưng để tham khảo:
+   - Cài qua `pip` hoặc `install.sh` một dòng (Quick Start Cách A/B): `coding-agent-telegram claude-auth <token>`
+   - Chạy từ repository đã clone bằng `./startup.sh` (Quick Start Cách C): `./startup.sh claude-auth <token>`
+
+   Cả hai lệnh đều lưu token dưới dạng `CLAUDE_CODE_OAUTH_TOKEN` trong file env của bạn và kiểm tra lại ngay xác thực Claude, nên bạn biết ngay kết quả đạt/không đạt thay vì khởi động lại mù quáng rồi hy vọng.
+3. Khởi động lại bot để tiến trình đang chạy nhận thay đổi này.
+
+Bạn cũng có thể bỏ qua lệnh và tự đặt `CLAUDE_CODE_OAUTH_TOKEN=<token>` trực tiếp trong file env (`.env_coding_agent_telegram`) — hai lệnh ở trên chỉ là lớp bọc tiện lợi để làm đúng việc đó, cộng thêm bước xác minh.
+</details>
 
 ## 📌 Ghi chú
 

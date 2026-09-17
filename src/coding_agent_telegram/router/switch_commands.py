@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import html
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -7,6 +8,12 @@ from telegram.ext import ContextTypes
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.i18n import translate
 from coding_agent_telegram.native_sessions import discover_native_project_sessions
+from coding_agent_telegram.session_gap import (
+    gap_seconds_since,
+    humanize_gap_seconds,
+    humanize_token_count,
+    native_session_activity,
+)
 from coding_agent_telegram.telegram_sender import send_html_text, send_text
 
 from .base import logger, require_allowed_chat
@@ -20,6 +27,24 @@ class SwitchCommandMixin:
     def _switch_status_label(self, chat_id: int, status: str) -> str:
         key = "switch.status_active" if status == "active" else "switch.status_idle"
         return translate(self._chat_locale(chat_id), key)
+
+    async def _switch_activity_line(self, chat_id: int, provider: str, session_id: str) -> str | None:
+        """Best-effort "last active"/"tokens used" line sourced from the same native
+        transcript/db lookup the long-gap warning uses (session_gap.py), not from the
+        bot's own state.json bookkeeping timestamps -- those only move when the bot
+        itself dispatches a message, so they'd miss activity from native CLI use and
+        go stale exactly for the sessions where this is most useful to see. Returns
+        None when no native activity signal exists at all (e.g. the transcript was
+        cleaned up, or the provider has no local record of it)."""
+        last_activity, size_tokens = await asyncio.to_thread(native_session_activity, provider, session_id)
+        if last_activity is None:
+            return None
+        locale = self._chat_locale(chat_id)
+        gap_seconds = gap_seconds_since(last_activity)
+        parts = [translate(locale, "switch.last_active_ago", duration=humanize_gap_seconds(gap_seconds))]
+        if size_tokens is not None:
+            parts.append(translate(locale, "switch.tokens_used", tokens=humanize_token_count(size_tokens)))
+        return " | ".join(parts)
 
     def _switch_listing_entries(self, chat_id: int) -> tuple[list[dict[str, str]], str | None]:
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
@@ -86,7 +111,7 @@ class SwitchCommandMixin:
         entries.sort(key=lambda item: (item["updated_at"] or item["created_at"], item["session_id"]), reverse=True)
         return entries, current_project_folder
 
-    def _build_switch_page_from_entries(
+    async def _build_switch_page_from_entries(
         self,
         chat_id: int,
         entries: list[dict[str, str]],
@@ -121,6 +146,9 @@ class SwitchCommandMixin:
                 f"{idx}. {marker} {html.escape(entry['name'])} | <code>{html.escape(entry['project_folder'])}</code> &lt;{html.escape(branch_name)}&gt; | {html.escape(entry['provider'])} | {html.escape(status_label)}"
             )
             lines.append(f"session_id: {entry['session_id']}")
+            activity_line = await self._switch_activity_line(chat_id, entry["provider"], entry["session_id"])
+            if activity_line:
+                lines.append(activity_line)
             lines.append(f"{translate(locale, 'switch.initialized_label')}: {html.escape(entry['initialized_from'])}")
             lines.append("")
 
@@ -164,7 +192,7 @@ class SwitchCommandMixin:
                 await send_text(update, context, self._t(update, "switch.no_sessions_found"))
                 return
             logger.info("Listed sessions page 1 for chat %s (%d sessions total).", chat_id, len(entries))
-            text, reply_markup = self._build_switch_page_from_entries(chat_id, entries, current_project_folder, 1)
+            text, reply_markup = await self._build_switch_page_from_entries(chat_id, entries, current_project_folder, 1)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=text,
@@ -186,7 +214,7 @@ class SwitchCommandMixin:
                 await send_text(update, context, self._t(update, "switch.invalid_page_number"))
                 return
             logger.info("Listed sessions page %d for chat %s (%d sessions total).", page, chat_id, len(entries))
-            text, reply_markup = self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page)
+            text, reply_markup = await self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=text,
@@ -284,7 +312,7 @@ class SwitchCommandMixin:
         if not entries:
             await query.edit_message_text(self._t(update, "switch.no_sessions_found"))
             return
-        text, reply_markup = self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page)
+        text, reply_markup = await self._build_switch_page_from_entries(chat_id, entries, current_project_folder, page)
         await query.edit_message_text(
             text=text,
             parse_mode="HTML",
