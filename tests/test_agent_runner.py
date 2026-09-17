@@ -678,7 +678,9 @@ def test_claude_runner_uses_print_mode_shape(monkeypatch):
         "--output-format",
         "stream-json",
         "--verbose",
-        f"--print={runner.PROMPT_PREFIX}hello",
+        "-p",
+        "--",
+        f"{runner.PROMPT_PREFIX}hello",
     ]
     assert calls[0][1] == Path("/tmp/project")
     assert result.success is True
@@ -730,7 +732,7 @@ def test_claude_runner_isolates_hyphen_prefixed_message(monkeypatch):
 
     runner.create_session("claude", Path("/tmp/project"), "- pls fix A")
 
-    assert calls[0][0][-1] == "--print=- pls fix A"
+    assert calls[0][0][-2:] == ["--", "- pls fix A"]
 
 
 def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
@@ -763,7 +765,9 @@ def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
         "--output-format",
         "stream-json",
         "--verbose",
-        f"--print={runner.PROMPT_PREFIX}hello",
+        "-p",
+        "--",
+        f"{runner.PROMPT_PREFIX}hello",
     ]
 
 

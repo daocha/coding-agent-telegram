@@ -928,7 +928,9 @@ class MultiAgentRunner:
                 "--output-format",
                 "stream-json",
                 "--verbose",
-                f"--print={self.PROMPT_PREFIX}{user_message}",
+                "-p",
+                "--",
+                f"{self.PROMPT_PREFIX}{user_message}",
             ]
         )
         return args
