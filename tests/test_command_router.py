@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 from coding_agent_telegram.agent_runner import AgentProgressInfo, AgentRunResult, AgentStallInfo
 from coding_agent_telegram.command_router import CommandRouter, RouterDeps
+from coding_agent_telegram.router.queue_processing import QueuedQuestion
 from coding_agent_telegram.router.session_lifecycle_commands import SESSION_PRIMING_PROMPT
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.session_store import SessionStore
@@ -4480,6 +4481,58 @@ def test_long_gap_warning_sent_and_holds_message_when_native_session_idle_past_t
         "suppress_working_notice": False,
         "image_paths": [],
     }
+
+
+def test_grouped_queued_questions_warn_before_resuming_long_idle_session(tmp_path: Path, monkeypatch):
+    """Grouping a queue batch must not bypass the same long-gap guard as a new message."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    cfg = AppConfig(**{**cfg.__dict__, "long_gap_warning_enabled": True, "codex_long_gap_seconds": 600})
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_idle", "idle-session", "backend", "codex")
+    seed_codex_native_session(
+        home,
+        session_id="sess_idle",
+        cwd=backend,
+        title="idle-session",
+        branch="",
+        created_at=int(time.time()) - 7200,
+        updated_at=int(time.time()) - 7200,
+        tokens_used=100_000,
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    queue_file = router._next_queue_file_path(123)
+    queued_questions = [QueuedQuestion("first queued question"), QueuedQuestion("second queued question")]
+    router._write_queue_questions(queue_file, queued_questions)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    continued = asyncio.run(
+        router._dispatch_queued_questions(
+            123,
+            context,
+            queue_file=queue_file,
+            queued_messages=queued_questions,
+            grouped=True,
+        )
+    )
+
+    assert continued is True
+    assert runner.resume_calls == []
+    assert not queue_file.exists()
+    assert 123 not in router._chat_processing_queue_files
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["kind"] == "long_gap_confirm"
+    assert "Answer the following queued user questions in order." in pending["user_message"]
+    assert "first queued question" in pending["user_message"]
+    assert "second queued question" in pending["user_message"]
+    buttons = [button.callback_data for row in bot.messages[-1][3].inline_keyboard for button in row]
+    assert buttons == ["longgap:switch", "longgap:compact", "longgap:proceed"]
 
 
 def test_long_gap_warning_skipped_for_small_session_despite_long_idle(tmp_path: Path, monkeypatch):

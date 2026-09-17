@@ -294,6 +294,23 @@ class QueueProcessingMixin:
         else:
             user_message = queued_messages[0].text
             reply_to_message_id = queued_messages[0].reply_to_message_id
+
+        # Queue dispatch resumes the very same provider session as an ordinary
+        # message.  It must therefore pass through the same idle/cache warning before
+        # it starts the run.  In particular, choosing "Group questions" is only a
+        # batching decision; it must not bypass the user's compact/new-session choice.
+        #
+        # The queue file has already been claimed above.  If the message is held for a
+        # long-gap decision, it is now represented by that pending action instead, so
+        # retire the claimed file and let the callback replay the held message exactly
+        # once.  Returning True lets the drain loop observe the pending action and
+        # stop without putting this batch back on the queue.
+        if await self._maybe_warn_long_gap(queued_update, context, user_message, suppress_working_notice=False):
+            queue_file.unlink(missing_ok=True)
+            self._queue_lock_path(queue_file).unlink(missing_ok=True)
+            self._chat_processing_queue_files.pop(chat_id, None)
+            return True
+
         logger.debug(
             "Dispatching queued question(s) for chat %s grouped=%s count=%s reply_to_message_id=%s.",
             chat_id,

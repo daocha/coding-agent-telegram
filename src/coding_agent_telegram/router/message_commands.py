@@ -251,6 +251,25 @@ class MessageCommandMixin:
             return 0
         return getattr(self.deps.cfg, provider_config.threshold_field, 0)
 
+    def _mark_active_session_recently_resumed(self, chat_id: int) -> None:
+        """Suppress another idle prompt while an accepted resume warms the session.
+
+        A successful provider turn normally updates its native transcript immediately.
+        This local marker also covers the short interval before that write is visible,
+        and prevents queued messages behind an explicit "Proceed anyway" from asking
+        the same long-gap question again.
+        """
+        active_id, session, _project_path = self._active_session_context(chat_id)
+        if active_id is None or session is None:
+            return
+        provider = str(session.get("provider") or "codex").strip().lower() or "codex"
+        threshold_seconds = self._long_gap_threshold_seconds(provider)
+        if threshold_seconds <= 0:
+            return
+        now_monotonic = time.monotonic()
+        self._prune_session_gap_cache(now_monotonic)
+        self._session_gap_safe_until[f"{provider}:{active_id}"] = now_monotonic + threshold_seconds
+
     async def _maybe_warn_long_gap(
         self,
         update: Update,
@@ -432,6 +451,10 @@ class MessageCommandMixin:
 
         if action == "longgap:proceed":
             await query.edit_message_text(self._t(update, "runtime.long_gap_proceeding"))
+            # The user has approved resuming this session.  Queue entries waiting
+            # behind the held message share that newly-warmed session, rather than
+            # needing a duplicate confirmation based on the same old activity time.
+            self._mark_active_session_recently_resumed(chat_id)
             await replay()
             return
 
