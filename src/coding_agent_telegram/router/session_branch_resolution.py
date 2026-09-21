@@ -18,6 +18,8 @@ class SessionBranchResolutionMixin:
                         self._t(update, "branch_resolution.use_branch", branch_name=stored_branch),
                         callback_data="branchdiscrepancy:stored",
                     ),
+                ],
+                [
                     InlineKeyboardButton(
                         self._t(update, "branch_resolution.use_branch", branch_name=current_branch),
                         callback_data="branchdiscrepancy:current",

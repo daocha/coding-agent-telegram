@@ -27,5 +27,5 @@ if [[ -z "$COMMAND_PATH" && ":$PATH:" != *":$SCRIPT_DIR:"* ]]; then
   echo "Note: $SCRIPT_DIR is not currently on PATH."
 fi
 
-echo "Starting coding-agent-telegram..."
+echo "Starting coding-agent-telegram with its recovery supervisor..."
 exec "$PYTHON_BIN" -m coding_agent_telegram

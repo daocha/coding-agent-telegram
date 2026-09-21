@@ -43,9 +43,11 @@ def _describe_message_types(message) -> list[str]:
 def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_LOCALE) -> list[BotCommand]:
     commands = [
         BotCommand("provider", translate(locale, "bot.command.provider")),
+        BotCommand("model", translate(locale, "bot.command.model")),
         BotCommand("project", translate(locale, "bot.command.project")),
         BotCommand("branch", translate(locale, "bot.command.branch")),
         BotCommand("current", translate(locale, "bot.command.current")),
+        BotCommand("status", translate(locale, "bot.command.status")),
         BotCommand("new", translate(locale, "bot.command.new")),
         BotCommand("switch", translate(locale, "bot.command.switch")),
         BotCommand("compact", translate(locale, "bot.command.compact")),
@@ -55,6 +57,8 @@ def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_L
         commands.append(BotCommand("commit", translate(locale, "bot.command.commit")))
     commands.append(BotCommand("pull", translate(locale, "bot.command.pull")))
     commands.append(BotCommand("push", translate(locale, "bot.command.push")))
+    commands.append(BotCommand("log", translate(locale, "bot.command.log")))
+    commands.append(BotCommand("reset", translate(locale, "bot.command.reset")))
     commands.append(BotCommand("abort", translate(locale, "bot.command.abort")))
     return commands
 
@@ -150,9 +154,11 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
 
     app.add_handler(MessageHandler(allowed_private, log_incoming_private_message, block=False), group=-1)
     app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
+    app.add_handler(CommandHandler("model", router.handle_model, filters=allowed_private))
     app.add_handler(CommandHandler("project", router.handle_project, filters=allowed_private))
     app.add_handler(CommandHandler("branch", router.handle_branch, filters=allowed_private))
     app.add_handler(CommandHandler("current", router.handle_current, filters=allowed_private))
+    app.add_handler(CommandHandler("status", router.handle_status, filters=allowed_private))
     app.add_handler(CommandHandler("new", router.handle_new, filters=allowed_private, block=False))
     app.add_handler(CommandHandler("switch", router.handle_switch, filters=allowed_private))
     app.add_handler(CommandHandler("compact", router.handle_compact, filters=allowed_private))
@@ -160,6 +166,8 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
     app.add_handler(CommandHandler("commit", router.handle_commit, filters=allowed_private))
     app.add_handler(CommandHandler("pull", router.handle_pull, filters=allowed_private))
     app.add_handler(CommandHandler("push", router.handle_push, filters=allowed_private))
+    app.add_handler(CommandHandler("log", router.handle_log, filters=allowed_private))
+    app.add_handler(CommandHandler("reset", router.handle_reset, filters=allowed_private))
     app.add_handler(CommandHandler("abort", router.handle_abort, filters=allowed_private))
     app.add_handler(
         CallbackQueryHandler(
@@ -168,16 +176,26 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
             block=False,
         )
     )
+    app.add_handler(CallbackQueryHandler(router.handle_model_callback, pattern=r"^model:(default|set:\d+)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_batch_callback, pattern=r"^queuebatch:(group|single|cancel)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_queue_continue_callback, pattern=r"^queuecontinue:(yes|no)$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_agent_reply_option_callback, pattern=r"^agentopt:[0-9a-f]{12}:[0-9]$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_long_gap_callback, pattern=r"^longgap:(compact|proceed|switch)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_source_callback, pattern=r"^branchsource:[0-9a-f]{12}$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_branch_discrepancy_callback, pattern=r"^branchdiscrepancy:(stored|current)$", block=False))
-    app.add_handler(CallbackQueryHandler(router.handle_commit_generate_callback, pattern=r"^commitgen:(confirm|cancel)$"))
-    app.add_handler(CallbackQueryHandler(router.handle_commit_execute_callback, pattern=r"^commitexec:(confirm|cancel)$"))
-    app.add_handler(CallbackQueryHandler(router.handle_diff_callback, pattern=r"^diff(?:show|page):\d+$"))
+    app.add_handler(CallbackQueryHandler(router.handle_git_branch_discrepancy_callback, pattern=r"^gitbranchdiscrepancy:(stored|current)$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_commit_generate_callback, pattern=r"^commitgen:(confirm|cancel):[0-9a-f]{12}$"))
+    app.add_handler(CallbackQueryHandler(router.handle_commit_execute_callback, pattern=r"^commitexec:(confirm|cancel):[0-9a-f]{12}$"))
+    app.add_handler(CallbackQueryHandler(router.handle_diff_callback, pattern=r"^diff(?:show|page):[0-9a-f]{12}:\d+$"))
     app.add_handler(CallbackQueryHandler(router.handle_switch_page_callback, pattern=r"^switchpage:\d+$"))
-    app.add_handler(CallbackQueryHandler(router.handle_pull_callback, pattern=r"^pull:(confirm|cancel)$"))
-    app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel)$"))
+    app.add_handler(CallbackQueryHandler(router.handle_pull_callback, pattern=r"^pull:(confirm|cancel):[0-9a-f]{12}$"))
+    app.add_handler(CallbackQueryHandler(router.handle_push_callback, pattern=r"^push:(confirm|cancel):[0-9a-f]{12}$"))
+    app.add_handler(
+        CallbackQueryHandler(
+            router.handle_reset_callback,
+            pattern=r"^reset:(?:select:[0-9a-f]{12}:(?:local|origin)-(?:default|current)|(?:confirm|cancel):[0-9a-f]{12})$",
+        )
+    )
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo, block=False))
     app.add_handler(MessageHandler(allowed_private & tg_filters.AUDIO, router.handle_audio, block=False))

@@ -114,7 +114,29 @@ def test_codex_runner_resume_uses_resume_subcommand_shape(monkeypatch):
         "--json",
     ]
     assert args[9] == "--output-last-message"
-    assert args[11:] == ["sess_1", runner.PROMPT_PREFIX + "hello again"]
+    assert args[11:] == ["--", "sess_1", runner.PROMPT_PREFIX + "hello again"]
+
+
+def test_codex_runner_isolates_hyphen_prefixed_message_with_separator(monkeypatch):
+    """A user message starting with '-' must not be parsed as a codex CLI flag."""
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "- pls fix A")
+    runner.resume_session("codex", "sess_1", Path("/tmp/project"), "- pls fix A")
+
+    create_args = calls[0][0]
+    assert create_args[-2:] == ["--", "- pls fix A"]
+
+    resume_args = calls[1][0]
+    assert resume_args[-3:] == ["--", "sess_1", "- pls fix A"]
 
 
 def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
@@ -131,14 +153,15 @@ def test_copilot_runner_uses_prompt_mode_shape(monkeypatch):
         sandbox_mode="workspace-write",
     )
 
-    result = runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+    result = runner.create_session(
+        "copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False, priming_only=True
+    )
 
     assert calls[0][0] == [
         "copilot",
         "--no-ask-user",
         "--output-format=json",
-        "--prompt",
-        runner.PROMPT_PREFIX + "hello",
+        f"--prompt={runner.PROMPT_PREFIX}hello",
     ]
     assert calls[0][1] == Path("/tmp/project")
     assert result.session_id == "sess_copilot"
@@ -167,10 +190,29 @@ def test_copilot_runner_resume_uses_resume_flag(monkeypatch):
         "--no-ask-user",
         "--allow-all",
         "--output-format=json",
-        "--prompt",
-        runner.PROMPT_PREFIX + "hello again",
+        f"--prompt={runner.PROMPT_PREFIX}hello again",
     ]
     assert result.session_id == "sess_copilot"
+
+
+def test_copilot_runner_isolates_hyphen_prefixed_message(monkeypatch):
+    """A user message starting with '-' must not be parsed as a copilot CLI flag."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(calls, process_stdout='{"sessionId":"sess_copilot"}\n'),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("copilot", Path("/tmp/project"), "- pls fix A", skip_git_repo_check=False)
+
+    assert calls[0][0][-1] == "--prompt=- pls fix A"
 
 
 def test_codex_runner_attaches_images_for_create_and_resume(monkeypatch):
@@ -194,7 +236,9 @@ def test_codex_runner_attaches_images_for_create_and_resume(monkeypatch):
     assert str(image_path) in calls[1][0]
 
 
-def test_copilot_runner_rejects_image_attachments():
+def test_copilot_runner_accepts_image_paths_in_prompt(monkeypatch):
+    calls: list = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
     runner = MultiAgentRunner(
         codex_bin="codex",
         copilot_bin="copilot",
@@ -203,10 +247,12 @@ def test_copilot_runner_rejects_image_attachments():
     )
 
     image_path = Path("/tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg")
-    result = runner.create_session("copilot", Path("/tmp/project"), "hello", image_paths=(image_path,))
+    result = runner.create_session("copilot", Path("/tmp/project"), f"Read {image_path}", image_paths=(image_path,))
 
-    assert result.success is False
-    assert result.error_message == "Image attachments are not supported for Copilot sessions."
+    assert result.success is True
+    assert any(
+        "Read /tmp/project/.coding-agent-telegram/telegram_attachments/img.jpg" in arg for arg in calls[0][0]
+    )
 
 
 def test_copilot_runner_uses_native_home_when_copilot_home_is_unset(monkeypatch):
@@ -221,9 +267,12 @@ def test_copilot_runner_uses_native_home_when_copilot_home_is_unset(monkeypatch)
         sandbox_mode="workspace-write",
     )
 
-    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True)
+    runner.create_session(
+        "copilot", Path("/tmp/project"), "hello", skip_git_repo_check=True, priming_only=True
+    )
 
     assert "COPILOT_HOME" not in calls[0][2]
+    # skip_git_repo_check must not smuggle a permission grant into a priming run.
     assert "--allow-all" not in calls[0][0]
     assert "--allow-all-tools" not in calls[0][0]
 
@@ -466,6 +515,42 @@ def test_codex_runner_passes_model_when_configured(monkeypatch):
     assert calls[0][0][:4] == ["codex", "exec", "-m", "gpt-5-codex"]
 
 
+def test_codex_runner_create_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        codex_model="gpt-5-codex",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "hello", skip_git_repo_check=False, model="o4-mini")
+
+    assert calls[0][0][:4] == ["codex", "exec", "-m", "o4-mini"]
+
+
+def test_codex_runner_resume_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        codex_model="gpt-5-codex",
+    )
+
+    runner.resume_session(
+        "codex", "sess_1", Path("/tmp/project"), "hello again", skip_git_repo_check=False, model="o4-mini"
+    )
+
+    assert calls[0][0][:5] == ["codex", "exec", "resume", "-m", "o4-mini"]
+
+
 def test_copilot_runner_passes_model_when_configured(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
@@ -478,7 +563,9 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
         copilot_model="gpt-5",
     )
 
-    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+    runner.create_session(
+        "copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False, priming_only=True
+    )
 
     assert calls[0][0][:5] == [
         "copilot",
@@ -489,11 +576,29 @@ def test_copilot_runner_passes_model_when_configured(monkeypatch):
     ]
 
 
-def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
+def test_copilot_runner_resume_session_model_override_takes_precedence(monkeypatch):
     calls = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
     runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        copilot_model="gpt-5",
+    )
+
+    runner.resume_session(
+        "copilot", "sess_1", Path("/tmp/project"), "hello again", skip_git_repo_check=False, model="claude-sonnet-4.6"
+    )
+
+    assert calls[0][0][:2] == ["copilot", "--resume=sess_1"]
+    assert "--model" in calls[0][0]
+    assert calls[0][0][calls[0][0].index("--model") + 1] == "claude-sonnet-4.6"
+
+
+def _copilot_tool_permission_runner() -> MultiAgentRunner:
+    return MultiAgentRunner(
         codex_bin="codex",
         copilot_bin="copilot",
         approval_policy="never",
@@ -507,12 +612,39 @@ def test_copilot_runner_passes_tool_permission_flags(monkeypatch):
         copilot_available_tools=("shell", "apply_patch"),
     )
 
-    runner.create_session("copilot", Path("/tmp/project"), "hello", skip_git_repo_check=False)
+
+def test_copilot_priming_session_creation_withholds_tool_permission_flags(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = _copilot_tool_permission_runner()
+
+    runner.create_session(
+        "copilot", Path("/tmp/project"), "prime me", skip_git_repo_check=False, priming_only=True
+    )
 
     assert "--allow-all-tools" not in calls[0][0]
     assert "--allow-tool" not in calls[0][0]
     assert "--deny-tool" not in calls[0][0]
     assert "--available-tools" not in calls[0][0]
+
+
+def test_copilot_session_creation_with_real_prompt_passes_tool_permission_flags(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = _copilot_tool_permission_runner()
+
+    # The replacement-session path (a resume that failed) passes the real user request
+    # here, so it must run with the operator's configured permissions -- otherwise
+    # Copilot is left unable to act on a request Codex and Claude would have executed.
+    runner.create_session("copilot", Path("/tmp/project"), "fix the bug", skip_git_repo_check=False)
+
+    args = calls[0][0]
+    assert "--allow-all-tools" in args
+    assert args[args.index("--allow-tool") + 1] == "shell(git)"
+    assert args[args.index("--deny-tool") + 1] == "shell(rm)"
+    assert args[args.index("--available-tools") + 1] == "shell,apply_patch"
 
 
 # ---------------------------------------------------------------------------
@@ -547,7 +679,8 @@ def test_claude_runner_uses_print_mode_shape(monkeypatch):
         "stream-json",
         "--verbose",
         "-p",
-        runner.PROMPT_PREFIX + "hello",
+        "--",
+        f"{runner.PROMPT_PREFIX}hello",
     ]
     assert calls[0][1] == Path("/tmp/project")
     assert result.success is True
@@ -577,6 +710,29 @@ def test_claude_runner_resume_uses_resume_flag(monkeypatch):
     assert calls[0][0][:3] == ["claude", "--resume", "sess_1"]
     assert result.session_id == "sess_claude"
     assert result.assistant_text == "Done again."
+
+
+def test_claude_runner_isolates_hyphen_prefixed_message(monkeypatch):
+    """A user message starting with '-' must not be parsed as a claude CLI flag."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout='{"type":"result","subtype":"success","is_error":false,"result":"Done.","session_id":"sess_claude"}\n',
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "- pls fix A")
+
+    assert calls[0][0][-2:] == ["--", "- pls fix A"]
 
 
 def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
@@ -610,8 +766,43 @@ def test_claude_runner_passes_model_and_tool_flags_when_configured(monkeypatch):
         "stream-json",
         "--verbose",
         "-p",
-        runner.PROMPT_PREFIX + "hello",
+        "--",
+        f"{runner.PROMPT_PREFIX}hello",
     ]
+
+
+def test_claude_runner_resume_session_model_override_takes_precedence(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_model="sonnet",
+    )
+
+    runner.resume_session("claude", "sess_1", Path("/tmp/project"), "hello again", model="opus")
+
+    assert calls[0][0][:5] == ["claude", "--resume", "sess_1", "--model", "opus"]
+
+
+def test_claude_runner_create_session_without_override_uses_configured_default(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_model="sonnet",
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "hello")
+
+    assert calls[0][0][:3] == ["claude", "--model", "sonnet"]
 
 
 def test_claude_runner_reports_failure_from_result_event(monkeypatch):
@@ -636,6 +827,69 @@ def test_claude_runner_reports_failure_from_result_event(monkeypatch):
     assert result.success is False
     assert result.error_message == "error_max_turns"
     assert result.session_id == "sess_claude"
+    assert result.error_code is None
+
+
+def test_claude_runner_prefers_errors_array_over_generic_subtype(monkeypatch):
+    """A resume against a session ID Claude has no local transcript for fails with an
+    empty "result" and the generic subtype "error_during_execution" -- the actual reason
+    only shows up in the "errors" array. That's the message worth surfacing/matching
+    against for resume-failure recovery, not the opaque subtype."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"",'
+                '"session_id":"sess_claude","errors":["No conversation found with session ID: sess_claude"]}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "No conversation found with session ID: sess_claude"
+    assert result.error_code == "session_not_found"
+
+
+def test_claude_runner_does_not_set_session_not_found_code_for_other_errors(monkeypatch):
+    """error_code="session_not_found" is a precise signal, not a generic is_error flag --
+    a failure for some other reason (even one that also lacks "result" text) must not be
+    mistaken for an unresumable session, or _replace_invalid_session_if_needed would
+    discard a perfectly resumable session over an unrelated failure."""
+    calls = []
+    monkeypatch.setattr(
+        "coding_agent_telegram.agent_runner.subprocess.Popen",
+        make_fake_popen(
+            calls,
+            process_stdout=(
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"",'
+                '"session_id":"sess_claude","errors":["Network error while contacting the API"]}\n'
+            ),
+        ),
+    )
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    result = runner.resume_session("claude", "sess_claude", Path("/tmp/project"), "hello")
+
+    assert result.success is False
+    assert result.error_message == "Network error while contacting the API"
+    assert result.error_code is None
 
 
 def test_claude_runner_extracts_assistant_message_text_as_progress(monkeypatch):
@@ -762,6 +1016,102 @@ def test_claude_runner_ignores_image_paths_without_error(monkeypatch):
     assert result.success is True
 
 
+def test_claude_priming_session_creation_runs_read_only(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_permission_mode="bypassPermissions",
+    )
+
+    runner.create_session("claude", Path("/tmp/project"), "prime me", priming_only=True)
+
+    args = calls[0][0]
+    assert args[args.index("--permission-mode") + 1] == "plan"
+    assert "bypassPermissions" not in args
+
+
+def test_codex_priming_session_creation_runs_read_only(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+    )
+
+    runner.create_session("codex", Path("/tmp/project"), "prime me", priming_only=True)
+
+    args = calls[0][0]
+    assert "approval_policy=never" in args
+    assert "sandbox_mode=read-only" in args
+    assert "sandbox_mode=workspace-write" not in args
+
+
+def test_codex_session_creation_with_real_prompt_keeps_configured_sandbox_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="on-failure",
+        sandbox_mode="workspace-write",
+    )
+
+    # The replacement-session path passes the real user request here, so it must not
+    # be downgraded to read-only.
+    runner.create_session("codex", Path("/tmp/project"), "fix the bug")
+
+    args = calls[0][0]
+    assert "sandbox_mode=workspace-write" in args
+    assert "approval_policy=on-failure" in args
+
+
+def test_claude_session_creation_with_real_prompt_keeps_configured_permission_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_permission_mode="bypassPermissions",
+    )
+
+    # The replacement-session path passes the real user request here, so it must not
+    # be downgraded to read-only.
+    runner.create_session("claude", Path("/tmp/project"), "fix the bug")
+
+    args = calls[0][0]
+    assert args[args.index("--permission-mode") + 1] == "bypassPermissions"
+
+
+def test_claude_resume_keeps_configured_permission_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
+
+    runner = MultiAgentRunner(
+        codex_bin="codex",
+        copilot_bin="copilot",
+        approval_policy="never",
+        sandbox_mode="workspace-write",
+        claude_permission_mode="bypassPermissions",
+    )
+
+    runner.resume_session("claude", "sess_abc", Path("/tmp/project"), "keep working")
+
+    args = calls[0][0]
+    assert args[args.index("--permission-mode") + 1] == "bypassPermissions"
+
+
 # ---------------------------------------------------------------------------
 # _validate_session_id
 # ---------------------------------------------------------------------------
@@ -870,7 +1220,7 @@ def test_resume_session_returns_failure_for_unsupported_provider(monkeypatch):
     assert calls == []
 
 
-def test_copilot_resume_rejects_image_attachments(monkeypatch):
+def test_copilot_resume_accepts_image_paths_in_prompt(monkeypatch):
     calls: list = []
     monkeypatch.setattr("coding_agent_telegram.agent_runner.subprocess.Popen", make_fake_popen(calls))
 
@@ -884,13 +1234,12 @@ def test_copilot_resume_rejects_image_attachments(monkeypatch):
         "copilot",
         "sess_1",
         Path("/tmp/project"),
-        "hello",
+        "Read /tmp/image.png",
         image_paths=[Path("/tmp/image.png")],
     )
 
-    assert result.success is False
-    assert "not supported" in (result.error_message or "").lower()
-    assert calls == []  # no subprocess launched
+    assert result.success is True
+    assert any("Read /tmp/image.png" in arg for arg in calls[0][0])
 
 
 def test_runner_uses_internal_code_for_generic_command_failure(monkeypatch):

@@ -1,6 +1,6 @@
 <div align="center">
   <img width="600" alt="Coding Agent Telegram" src="https://github.com/user-attachments/assets/aca106f8-0d64-40e9-94d9-2542da5dfde9" />
-  <h1>Coding Agent Telegram 🚀</h1>
+  <h1>Claude Code / Codex / Copilot Coding Agent Telegram 🚀</h1>
   <p>
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.md">English</a> |
     <a href="https://github.com/daocha/coding-agent-telegram/blob/main/README.de.md">Deutsch</a> |
@@ -181,6 +181,8 @@ pip install coding-agent-telegram
 coding-agent-telegram
 ```
 
+已安装的 `coding-agent-telegram` 命令包含与 `./startup.sh` 相同的轮询看门狗：bot 崩溃或 Telegram 心跳过期后会自动重启；DNS 或网络不可用时会采用退避策略重试。
+
 ### 方案 C：从克隆的仓库运行
 ```bash
 git clone https://github.com/daocha/coding-agent-telegram
@@ -274,6 +276,14 @@ bot 当前接受：
     <td>为新会话选择提供方。该选择会按 bot 和 chat 保存，直到你手动修改。</td>
   </tr>
   <tr>
+    <td><code>/model</code></td>
+    <td>从当前提供方的模型列表中，为活动会话选择模型。选择会保存在该会话的 <code>state.json</code> 中，并在每次恢复会话时使用。开始新会话（<code>/new</code>、切换到新会话的 <code>/switch</code> 或 <code>/compact</code>）时，始终会重置为提供方配置的默认模型。</td>
+  </tr>
+  <tr>
+    <td><code>/model &lt;model_id&gt;</code></td>
+    <td>设置不在精选列表中的特定模型 ID。如果它尚未是已知选项，bot 会先通过一次性只读调用测试 CLI，确认该 ID 确实被接受后才保存。若 CLI 拒绝，错误会返回到聊天，且不会保存任何设置。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/project &lt;project_folder&gt;</code></td>
     <td>设置当前 project 文件夹。如果文件夹不存在，应用会创建并标记为 trusted；如果已存在但仍是 untrusted，应用会明确要求确认 trust。</td>
   </tr>
@@ -288,6 +298,10 @@ bot 当前接受：
   <tr>
     <td width="332"><code>/current</code></td>
     <td>显示当前 bot 和 chat 的活动会话。</td>
+  </tr>
+  <tr>
+    <td><code>/status</code></td>
+    <td>显示各 provider 的配额使用情况：5小时和每周使用率百分比，以及重置时间。绝不会产生付费 API 调用：Codex 始终是免费的本地查询，Claude 的数据也只会复用你最近一次通过 bot 产生的真实 Claude 使用记录，显示为”最近一次观测于 X 前”（仅适用于通过 OAuth 登录的 Pro/Max 账户）。两个窗口分别独立追踪：如果某个窗口已经过了重置时间（或从未被观测到），即使另一个窗口仍有最新数据，它也会显示为 N/A，直到你下一次使用 Claude 时才会刷新。Copilot 没有支持此功能的 API，因此会显示为不可用。</td>
   </tr>
   <tr>
     <td width="332"><code>/new [session_name]</code></td>
@@ -319,11 +333,19 @@ bot 当前接受：
   </tr>
   <tr>
     <td width="332"><code>/pull</code></td>
-    <td>确认后，从 <code>origin</code> 拉取活动会话当前分支。适用时，bot 也会一并刷新默认分支。</td>
+    <td>确认后，通过 Git 从 <code>origin</code> 拉取活动会话当前分支。适用时，bot 也会一并刷新默认分支。</td>
   </tr>
   <tr>
     <td width="332"><code>/push</code></td>
-    <td>为当前活动会话执行 <code>origin &lt;branch&gt;</code> push。push 前 bot 会要求确认。</td>
+    <td>为当前活动会话通过 Git push 到 <code>origin &lt;branch&gt;</code>。push 前 bot 会要求确认。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/log</code></td>
+    <td>显示活动会话项目最近的五条 Git 提交。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>/reset</code></td>
+    <td>选择 local 或 <code>origin</code> 上的默认/当前分支，然后确认执行 <code>git reset --hard</code>。远程目标会先被拉取。</td>
   </tr>
   <tr>
     <td width="332"><code>/abort</code></td>
@@ -407,6 +429,18 @@ bot 当前接受：
     </td>
   </tr>
   <tr>
+    <td><code>CODEX_MODEL_CHOICES</code></td>
+    <td>以逗号分隔的模型列表，供 Codex 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值。</td>
+  </tr>
+  <tr>
+    <td><code>COPILOT_MODEL_CHOICES</code></td>
+    <td>以逗号分隔的模型列表，供 Copilot 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值。</td>
+  </tr>
+  <tr>
+    <td><code>CLAUDE_MODEL_CHOICES</code></td>
+    <td>以逗号分隔的模型列表，供 Claude Code 的 <code>/model</code> 命令选用。未设置时，使用随附的 <code>.env.example</code> 中的值；若模板不可用，则使用 <code>sonnet,opus,fable,haiku</code>。</td>
+  </tr>
+  <tr>
     <td width="332"><code>CODEX_APPROVAL_POLICY</code></td>
     <td>传递给 Codex 的 approval mode。默认：<code>never</code>。</td>
   </tr>
@@ -437,6 +471,22 @@ bot 当前接受：
   <tr>
     <td width="332"><code>AGENT_HARD_TIMEOUT_SECONDS</code></td>
     <td>单次 代理运行 的硬超时。默认：<code>0</code>（关闭）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>LONG_GAP_WARNING_ENABLED</code></td>
+    <td>在恢复一个已经空闲一段时间<em>并且</em>已积累足够多 context（重新处理成本较高）的 session 之前，提醒用户 provider 的 prompt cache 很可能已经过期 —— 并提供按钮让你选择先 compact 还是直接继续。默认：<code>true</code>。参见下方 FAQ。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CLAUDE_LONG_GAP_SECONDS</code></td>
+    <td>Claude Code session 触发该提醒前的空闲阈值（秒）。默认：<code>3600</code>（1 小时，对应 Claude Code 的扩展 prompt-cache 保留窗口）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>CODEX_LONG_GAP_SECONDS</code></td>
+    <td>Codex session 触发该提醒前的空闲阈值（秒）。默认：<code>3600</code>（1 小时，与 Claude 相同；OpenAI 并未为 Codex 公布基于空闲时间的 cache 失效数字，而且 Codex 自身的 cache 通常也比 Claude 更短命，因此对齐 Claude 的阈值不会损失准确性 —— 并结合 size gate，避免小 session 频繁打扰）。</td>
+  </tr>
+  <tr>
+    <td width="332"><code>COPILOT_LONG_GAP_SECONDS</code></td>
+    <td>Copilot session 触发该提醒前的空闲阈值（秒）。默认：<code>0</code>（关闭）。GitHub 官方文档指出 Copilot CLI 没有 inactivity timeout，并且已经原生自动压缩自身 context（使用率约 80-95% 时）—— 这里没有需要提醒的空闲相关风险，因此交由 Copilot 自身机制处理，而不是臆造一个并不存在的 API。如果仍希望针对 Copilot 启用基于空闲时间的提醒，可设置为正数。</td>
   </tr>
   <tr>
     <td width="332"><code>SNAPSHOT_TEXT_FILE_MAX_BYTES</code></td>
@@ -681,6 +731,71 @@ log 会**同时写入 stdout 和轮转日志文件**，路径为：
 - TestPyPI/testing: `v2026.3.26.dev1`
 - PyPI prerelease: `v2026.3.26rc1`
 - PyPI stable: `v2026.3.26`
+
+## ❓ 常见问题 / 故障排查
+
+<details>
+<summary><b>为什么在普通终端里运行 <code>claude --resume</code> 看不到从 Telegram 创建的 session？</b></summary>
+
+这是 Claude Code CLI 的预期行为，不是本应用的 bug。
+
+本 bot 创建的 session 是通过 Claude Code 的 headless `-p`/print 模式运行的。Claude Code 会在 transcript 中把这样启动的 session 标记为 `entrypoint: "sdk-cli"`，而你直接在终端输入 `claude` 启动的 session 则是 `entrypoint: "cli"`。不带 session ID 的交互式 `claude --resume` 选择器只会列出 `entrypoint` 为 `cli` 的 session —— 它有意隐藏 headless/由 SDK 驱动的运行，把它们当作自动化输出而非需要手动接续的对话。
+
+session 数据本身并没有丢失或不同——它是一个完全正常、可以完整恢复的 Claude Code session，保存在 `~/.claude/projects/<encoded-project-path>/<session-id>.jsonl` 下。只要拿到 ID，就可以直接恢复：
+
+```bash
+claude --resume <session-id>
+```
+
+这正是本应用要自带一套 session 发现机制（供 `/switch` 使用）而不是依赖原生选择器的原因——它直接扫描 JSONL 文件，并按项目路径匹配，所以即便在普通的 `claude --resume` 中永远不会出现，Telegram 创建的 session 依然会在这里显示出来。
+
+Codex 和 Copilot 自身的 resume/list 命令并不做这种交互式与 headless 的区分，这就是为什么这两个 provider 的 session 在普通终端里依旧能正常显示。
+</details>
+
+<details>
+<summary><b>这个应用会比直接使用 Claude Code 终端消耗更多 token 吗？</b></summary>
+
+不是因为每次调用本身存在固有的额外开销差异——headless（`-p`）和交互式 Claude Code 使用的是相同的底层协议和计费方式。但在实际使用中，24/7 的 Telegram 使用方式确实可能比典型的终端使用消耗明显更多 token，原因有两个会相互叠加：
+
+- **session 可能无限增长。** 由于 bot 会很方便地在数小时甚至数天内持续恢复同一个 session，如果你从不轮换它，一个 session 可能会累积数百个回合和数兆字节的 transcript。而在交互式终端中，你更自然的做法是完成一个任务后下次重新开始，context 因此更容易保持较小。
+- **Telegram 消息之间的空闲间隔会让 prompt cache 过期。** Claude 的 prompt cache TTL 很短。如果你在这个窗口内回复，后续回合就是便宜的 cache read。如果间隔很长（比如你睡了一觉第二天早上才回复），下一条消息就必须把*全部*已累积的 context 作为代价高得多的 cache write 从头重新处理——而且这个成本会随着 session 当时已有的大小而增长。这就是为什么即便还没到"高峰"时段，你当天发出第一条消息时用量也可能骤增。
+
+**缓解方法：** 对长期使用的 session 定期运行 `/compact`（本应用已支持作为 Telegram 命令），而不是让一个 session 无限期运行下去，尤其是当你发现它已经空闲了很长时间时。为不相关的工作开一个新的 `/new` session，也有助于把 context——以及成本——控制在合理范围内。
+
+现在应用也会自动执行这一步，通过结合每个 provider 的两个信号，只在确实可能有影响时才打断你：一个空闲时间阈值（`CLAUDE_LONG_GAP_SECONDS` / `CODEX_LONG_GAP_SECONDS` / `COPILOT_LONG_GAP_SECONDS`），*以及* session 已经积累了多少 context（对于小型、成本低的 session，即便已经空闲了一段时间，也会跳过提醒，因为从头重新处理它们的代价可以忽略不计）。默认值：Claude Code 和 Codex 均为 1 小时 —— Claude 的数字背后有真实证据支撑（见上文），虽然 OpenAI 并未为 Codex 公布相应数字，但 Codex 自身的 cache 通常也比 Claude 更短命，因此对齐 Claude 的阈值不会损失准确性，只会减少打扰次数，尤其是现在还结合了 size gate；而 Copilot 默认关闭，因为[GitHub 官方文档](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management)明确指出 Copilot CLI 完全没有 inactivity timeout，并且已经原生自动压缩自身 context（使用率约 80-95% 时）—— 这里没有任何与空闲相关的问题需要提醒，因此交由 Copilot 自身机制处理，而不是臆造一个。如果仍希望针对 Copilot 启用基于空闲时间的提醒，可将 `COPILOT_LONG_GAP_SECONDS` 设为正数。
+
+当空闲阈值和 size gate 同时满足时，它会先扣住你的消息并询问：
+
+> ⏳ 这个 session 已经空闲了 {gap}。现在恢复很可能会从头重新处理整段对话（provider 的响应 cache 大概率已经过期），可能会比平时多消耗不少 token。compact 同样需要重新处理一次当前上下文来生成摘要，所以如果这个 session 已经很大，也会消耗不少 token。切换到新 session 可以完全跳过这次重新处理，但会失去这段对话的所有记忆。要切换到新 session、先 compact，还是直接继续？
+>
+> [🆕 切换到新 session]
+> [🔄 先 compact]
+> [⚠️ 直接继续]
+
+请注意，`/compact` 本身也不能免除这项开销：它的原理是恢复当前（可能已经变冷的）session，让它对自己做总结，因此仍要付出和直接回复一样的一次性全量 transcript 重新处理成本——区别只在于之后只需要付一次，而不是每一轮都付，因为得到的新 session 从很小的规模开始。**切换到新 session** 是唯一能完全避免这次重新处理的选项：它不会恢复旧 session，而是直接放弃其上下文、完全重新开始——代价是彻底失去那部分上下文，而不是把它压缩成摘要。
+
+选择**切换到新 session** 会开启一个全新的空 session，并在其上继续处理你的消息——新 session 会以旧 session 名称加上递增的 `-newN` 后缀命名（例如 `fix-bug` → `fix-bug-new1` → 再次切换后变为 `fix-bug-new2`），这样你在 `/switch` 中依然能与原始 session 区分开来。选择**先 compact** 会先总结当前 session，再基于该摘要开启一个新 session，然后在新 session 上继续处理你的消息——命名方式类似，但改用 `-resumeN` 后缀（例如 `fix-bug` → `fix-bug-resume1` → 下次 compact 时变为 `fix-bug-resume2`）。选择**直接继续**则只会像平时一样在现有 session 上继续。可以用 `LONG_GAP_WARNING_ENABLED=false` 关闭整个检查机制。
+</details>
+
+<details>
+<summary><b>Claude session 突然报错 "Failed to authenticate: OAuth session expired and could not be refreshed"</b></summary>
+
+即使 `claude auth status` 显示已登录，甚至你刚刚重新登录之后，这个问题依然可能出现。Claude Code 平时使用的交互式 OAuth session，可能会单独在这个 bot 创建 session 所用的 headless、独立子进程方式下失效，而与你实际的登录状态无关——这种情况在 Claude Code CLI 自动更新之后出现过，也可能是间歇性的。
+
+如果用户通过 `/new`、恢复某个 session，或发送任意消息实时遇到了这个问题，bot 会识别出这个特定的失败，并立即回复修复说明，而不是原始的 CLI 报错。
+
+**修复方法**：在运行此 bot 的主机上：
+
+1. 运行 `claude setup-token`，并在打开的浏览器中批准访问。**真正的令牌之后会打印在你的终端里（以 `sk-ant-oat01-` 开头），浏览器里不会显示**——从浏览器页面本身而不是终端复制内容是个常见的错误，那样是不行的。这会创建一个长期有效（约 1 年）的身份验证令牌——这是 Anthropic 官方支持的 headless/自动化用途机制（与 GitHub Actions 所用的相同）。与交互式 OAuth session 不同，它不依赖于从独立后台进程中正常刷新 Keychain/session，因此设置一次后，预计在到期之前都无需再次处理。
+2. 复制打印出的令牌，然后根据你运行本应用的方式，用对应的命令保存它——bot 自身的回复会自动选择正确的命令，这里列出以供参考：
+   - 通过 `pip` 或一行式 `install.sh` 安装（Quick Start 方案 A/B）：`coding-agent-telegram claude-auth <token>`
+   - 从克隆的仓库中用 `./startup.sh` 运行（Quick Start 方案 C）：`./startup.sh claude-auth <token>`
+
+   这两个命令都会把令牌以 `CLAUDE_CODE_OAUTH_TOKEN` 的形式保存到你的 env 文件中，并立即重新验证 Claude 身份验证，因此你会马上知道成功还是失败，而不是盲目重启后干等。
+3. 重启 bot，让正在运行的进程应用这一改动。
+
+你也可以跳过该命令，直接在你的 env 文件（`.env_coding_agent_telegram`）里自行设置 `CLAUDE_CODE_OAUTH_TOKEN=<token>`——上面两个命令只是对这一操作的便捷封装，外加自动验证。
+</details>
 
 ## 📌 说明
 

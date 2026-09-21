@@ -240,15 +240,17 @@ class QueueProcessingMixin:
             chat_id=chat_id,
             text="\n".join(lines),
             reply_markup=InlineKeyboardMarkup(
-                [[
-                    InlineKeyboardButton(translate(locale, "queue.button_group"), callback_data="queuebatch:group"),
-                    InlineKeyboardButton(translate(locale, "queue.button_single"), callback_data="queuebatch:single"),
-                    InlineKeyboardButton(
-                        translate(locale, "queue.button_cancel"),
-                        callback_data="queuebatch:cancel",
-                        **self._negative_inline_button_kwargs(),
-                    ),
-                ]]
+                [
+                    [InlineKeyboardButton(translate(locale, "queue.button_group"), callback_data="queuebatch:group")],
+                    [InlineKeyboardButton(translate(locale, "queue.button_single"), callback_data="queuebatch:single")],
+                    [
+                        InlineKeyboardButton(
+                            translate(locale, "queue.button_cancel"),
+                            callback_data="queuebatch:cancel",
+                            **self._negative_inline_button_kwargs(),
+                        ),
+                    ],
+                ]
             ),
         )
 
@@ -292,6 +294,23 @@ class QueueProcessingMixin:
         else:
             user_message = queued_messages[0].text
             reply_to_message_id = queued_messages[0].reply_to_message_id
+
+        # Queue dispatch resumes the very same provider session as an ordinary
+        # message.  It must therefore pass through the same idle/cache warning before
+        # it starts the run.  In particular, choosing "Group questions" is only a
+        # batching decision; it must not bypass the user's compact/new-session choice.
+        #
+        # The queue file has already been claimed above.  If the message is held for a
+        # long-gap decision, it is now represented by that pending action instead, so
+        # retire the claimed file and let the callback replay the held message exactly
+        # once.  Returning True lets the drain loop observe the pending action and
+        # stop without putting this batch back on the queue.
+        if await self._maybe_warn_long_gap(queued_update, context, user_message, suppress_working_notice=False):
+            queue_file.unlink(missing_ok=True)
+            self._queue_lock_path(queue_file).unlink(missing_ok=True)
+            self._chat_processing_queue_files.pop(chat_id, None)
+            return True
+
         logger.debug(
             "Dispatching queued question(s) for chat %s grouped=%s count=%s reply_to_message_id=%s.",
             chat_id,
@@ -309,6 +328,7 @@ class QueueProcessingMixin:
             {
                 "kind": "message",
                 "user_message": user_message,
+                "reply_to_message_id": reply_to_message_id,
             },
         )
         continued = await self._continue_pending_action(
@@ -317,6 +337,16 @@ class QueueProcessingMixin:
             drain_queue_after_completion=False,
         )
         if not continued:
+            # A prerequisite such as selecting a replacement project keeps this
+            # message in persistent pending_action state.  That state is now the sole
+            # owner of the question: re-adding its queue file would run it once when
+            # the prerequisite is resolved and again when the queue later drains.
+            pending_action = self._pending_action(chat_id)
+            if isinstance(pending_action, dict) and pending_action.get("awaiting_prerequisite"):
+                queue_file.unlink(missing_ok=True)
+                self._queue_lock_path(queue_file).unlink(missing_ok=True)
+                self._chat_processing_queue_files.pop(chat_id, None)
+                return True
             self._queue_lock_path(queue_file).unlink(missing_ok=True)
             self._chat_processing_queue_files.pop(chat_id, None)
             queue = self._chat_message_queue_files.setdefault(chat_id, deque())

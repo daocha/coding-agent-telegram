@@ -1,18 +1,37 @@
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from coding_agent_telegram.claude_health import claude_auth_failure_message, is_claude_auth_failure
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.telegram_sender import send_text
 
 from .base import logger, require_allowed_chat
 
 
+# Sent only to make the CLI open a session and return its ID. Kept explicitly inert:
+# an instruction like "Create session: <name>" reads as a real task to an autonomous
+# agent, which would then act on it (e.g. creating a git branch named after the
+# session) without the bot knowing.
+SESSION_PRIMING_PROMPT = (
+    "Reply with exactly: ready. Do not make any changes, run any commands, or use any tools."
+)
+
+
 class SessionLifecycleCommandMixin:
     _CREATE_SESSION_TEXT_RE = re.compile(r"^\s*create\s+session\s*:\s*(.*?)\s*$", re.IGNORECASE)
+
+    def _hold_pending_action_for_prerequisite(self, chat_id: int, pending_action: dict[str, object] | None) -> None:
+        """Persist that a pending action is waiting for user-resolvable setup."""
+        if pending_action is None:
+            return
+        held_action = dict(pending_action)
+        held_action["awaiting_prerequisite"] = True
+        self._store_pending_action(chat_id, held_action)
 
     def _parse_create_session_text(self, text: str) -> tuple[bool, str | None]:
         match = self._CREATE_SESSION_TEXT_RE.match(text)
@@ -53,6 +72,7 @@ class SessionLifecycleCommandMixin:
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         provider = self._selected_provider(chat_state)
         if not provider:
+            self._hold_pending_action_for_prerequisite(chat_id, pending_action)
             await self._prompt_for_provider_selection(
                 update,
                 context,
@@ -65,7 +85,7 @@ class SessionLifecycleCommandMixin:
 
         project_folder = str(chat_state.get("current_project_folder") or "").strip()
         if not project_folder:
-            self._store_pending_action(chat_id, pending_action)
+            self._hold_pending_action_for_prerequisite(chat_id, pending_action)
             await send_text(
                 update,
                 context,
@@ -75,13 +95,13 @@ class SessionLifecycleCommandMixin:
 
         project_path = resolve_project_path(self.deps.cfg.workspace_root, project_folder)
         if not project_path.exists() or not project_path.is_dir():
-            self._store_pending_action(chat_id, pending_action)
+            self._hold_pending_action_for_prerequisite(chat_id, pending_action)
             await send_text(update, context, self._t(update, "project.project_folder_missing_retry", project_folder=project_folder))
             return None
 
         branch_name = str(chat_state.get("current_branch") or "").strip()
         if self.git.is_git_repo(project_path) and not branch_name:
-            self._store_pending_action(chat_id, pending_action)
+            self._hold_pending_action_for_prerequisite(chat_id, pending_action)
             await self._send_branch_selection_prompt(
                 update,
                 context,
@@ -137,9 +157,10 @@ class SessionLifecycleCommandMixin:
             self.deps.agent_runner.create_session,
             provider,
             project_path,
-            f"Create session: {creation_label}",
+            SESSION_PRIMING_PROMPT,
             workspace_lock_key=project_folder,
             skip_git_repo_check=self.runtime.should_skip_git_repo_check(project_folder),
+            priming_only=True,
             stall_message=self._t(update, "runtime.replacement_session_stall"),
         )
 
@@ -147,7 +168,12 @@ class SessionLifecycleCommandMixin:
             return False
 
         if not result.success or not result.session_id:
-            await send_text(update, context, result.error_message or self._t(update, "lifecycle.failed_create_session"))
+            error_text = (
+                claude_auth_failure_message(self.deps.cfg.locale, result.error_message)
+                if provider == "claude" and is_claude_auth_failure(result.error_message)
+                else result.error_message or self._t(update, "lifecycle.failed_create_session")
+            )
+            await send_text(update, context, error_text)
             return False
 
         if use_session_id_as_name:
@@ -202,6 +228,10 @@ class SessionLifecycleCommandMixin:
             if resolved is None:
                 return False
             provider, project_folder, branch_name, project_path = resolved
+            if pending_action.get("awaiting_prerequisite"):
+                pending_action = dict(pending_action)
+                pending_action.pop("awaiting_prerequisite", None)
+                self._store_pending_action(chat_id, pending_action)
             kind = str(pending_action.get("kind") or "")
 
             if kind == "new_session":
@@ -241,9 +271,19 @@ class SessionLifecycleCommandMixin:
                         return False
                 if not await self._ensure_active_session_ready_for_run(update, context):
                     return False
+                # A deferred queued message may be resumed by a control command such
+                # as /project.  Keep its response associated with the original user
+                # question instead of making Telegram quote that control command.
+                reply_to_message_id = pending_action.get("reply_to_message_id")
+                run_update = update
+                if isinstance(reply_to_message_id, int):
+                    run_update = SimpleNamespace(
+                        effective_chat=update.effective_chat,
+                        message=SimpleNamespace(message_id=reply_to_message_id),
+                    )
                 try:
                     self._last_run_results[chat_id] = await self.runtime.run_active_session(
-                        update,
+                        run_update,
                         context,
                         user_message=user_message,
                         suppress_working_notice=bool(pending_action.get("suppress_working_notice")),
@@ -291,6 +331,7 @@ class SessionLifecycleCommandMixin:
             return await self._resolve_branch_discrepancy_if_needed(update, context)
 
         pending_action = dict(pending_action)
+        pending_action["awaiting_prerequisite"] = True
         pending_action["branch_resolution"] = {
             "kind": "discrepancy",
             "session_id": active_session_id,
