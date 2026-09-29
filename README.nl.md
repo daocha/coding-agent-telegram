@@ -614,6 +614,14 @@ Komt er een bericht binnen terwijl er al een agent draait op hetzelfde project, 
 
 De lock wordt in het geheugen gehouden, niet op schijf. Daardoor wordt hij automatisch vrijgegeven wanneer de agent klaar is, faalt of de server herstart.
 
+### Vragen van Claude
+
+Claude gebruikt gestructureerde `AskUserQuestion`-verzoeken om keuzes in Telegram weer te geven, ook voor meerdere vragen en meervoudige selectie. Selecteer antwoorden en druk op **Antwoorden versturen**, of typ een antwoord of een nieuwe vraag. Getypte tekst wordt direct doorgegeven aan het wachtende Claude-verzoek en komt niet daarachter in de wachtrij. Annuleren sluit de vragen; `/abort` stopt de uitvoering. De knoppen vervallen wanneer het verzoek eindigt of de bot opnieuw start.
+
+Gewone tekst en genummerde lijsten van Claude maken nooit knoppen aan. Codex en Copilot behouden hun bestaande tekstgebaseerde antwoordsnelkoppelingen; die knoppen zijn optioneel en blokkeren geen getypte vervolgvragen.
+
+Dit gebruikt het bidirectionele `stream-json`-besturingsprotocol van de Claude CLI, dat ook door de Agent SDK wordt gebruikt, zonder een SDK-afhankelijkheid toe te voegen of de Python-vereiste te wijzigen. De verbindingshandshake is gecontroleerd met Claude Code 2.1.284. Houd Claude Code up-to-date. De instelling `dontAsk` of het verbieden van `AskUserQuestion` schakelt gestructureerde vragen uit; de bot overschrijft deze machtigingsinstellingen niet.
+
 ### 💬 Vragen in de wachtrij
 
 Als er al een agent-run actief is op het huidige project, worden latere tekstberichten niet geweigerd maar in een wachtrij geplaatst.

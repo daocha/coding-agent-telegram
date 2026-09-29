@@ -616,6 +616,14 @@ Wenn eine Nachricht ankommt, während bereits ein Agent auf demselben Projekt l�
 
 Der Lock wird nur im Speicher gehalten, nicht auf der Festplatte. Er wird automatisch freigegeben, wenn der Agent fertig ist, fehlschlägt oder der Server neu startet. Es gibt keine veralteten Lock-Dateien nach einem Absturz.
 
+### Fragen von Claude
+
+Claude verwendet strukturierte `AskUserQuestion`-Anfragen, um Auswahlmöglichkeiten in Telegram anzuzeigen, auch für mehrere Fragen und Mehrfachauswahl. Wähle Antworten aus und drücke **Antworten senden**, oder tippe eine Antwort oder eine neue Frage. Eine Texteingabe wird sofort an die wartende Claude-Anfrage zurückgegeben, statt dahinter eingereiht zu werden. Abbrechen schließt die Fragen; `/abort` beendet den Lauf. Die Schaltflächen verlieren ihre Gültigkeit, wenn die Anfrage endet oder der Bot neu startet.
+
+Normaler Fließtext und nummerierte Listen von Claude erzeugen keine Schaltflächen. Codex und Copilot behalten ihre bisherigen textbasierten Antwort-Schaltflächen; diese sind optional und blockieren keine eingetippten Folgefragen.
+
+Dafür wird das bidirektionale `stream-json`-Steuerprotokoll der Claude CLI verwendet, das auch das Agent SDK nutzt. Es kommt keine SDK-Abhängigkeit hinzu, und die Python-Anforderung bleibt unverändert. Der Verbindungsaufbau wurde mit Claude Code 2.1.284 geprüft. Halte Claude Code aktuell. Die Einstellung `dontAsk` oder das Sperren von `AskUserQuestion` deaktiviert strukturierte Fragen; der Bot überschreibt diese Berechtigungseinstellungen nicht.
+
 ### 💬 Fragen in der Queue
 
 Wenn im aktuellen Projekt bereits ein Agentenlauf aktiv ist, werden spätere Textnachrichten nicht abgewiesen. Sie landen stattdessen in einer Queue:

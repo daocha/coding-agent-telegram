@@ -614,6 +614,14 @@ bot 会强制这个限制，避免两个 agent 同时写入同一个 workspace�
 
 这个 lock 只保存在内存中，不写入磁盘，所以当 agent 完成、失败或 server 重启时会自动释放。
 
+### Claude 的问题
+
+Claude 使用结构化的 `AskUserQuestion` 请求在 Telegram 中显示选项，支持多个问题和多选。选择答案后点击 **提交答案**，也可以直接输入回复或新问题。输入的文本会立即传给正在等待的 Claude 请求，而不会排在该请求后面。取消会关闭问题；`/abort` 会停止本次运行。请求结束或机器人重启后，按钮将失效。
+
+Claude 的普通文本和编号列表不会生成按钮。Codex 和 Copilot 保留现有的文本识别式快捷回复按钮；这些按钮是可选的，不会阻止用户输入后续问题。
+
+此功能使用 Claude CLI 的双向 `stream-json` 控制协议，与 Agent SDK 使用的协议相同，无需新增 SDK 依赖，也不改变 Python 版本要求。连接握手已在 Claude Code 2.1.284 上验证。请保持 Claude Code 为最新版本。设置 `dontAsk` 或禁止 `AskUserQuestion` 会禁用结构化问题；机器人不会覆盖这些权限设置。
+
 ### 💬 排队问题
 
 如果当前 project 已经有一个 代理运行 在执行，后续文本消息不会被拒绝，而是会进入队列。

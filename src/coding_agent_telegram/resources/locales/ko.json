@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude가 질문을 보냈습니다. 답변을 선택해 제출하거나, 버튼을 선택하지 않고 답변 또는 새 질문을 입력하여 계속할 수 있습니다.",
+  "claude.questions_submit": "답변 제출",
+  "claude.questions_incomplete": "각 질문에 대한 답변을 선택해 주세요.",
   "bot.command.abort": "현재 에이전트 실행 중단",
   "bot.command.branch": "Git 브랜치 생성 및 전환",
   "bot.command.commit": "검증된 Git commit 명령 실행",
