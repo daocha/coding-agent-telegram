@@ -87,6 +87,12 @@ class MessageCommandMixin:
         suppress_working_notice: bool = False,
     ) -> None:
         chat_id = update.effective_chat.id
+        # A new message supersedes suggested replies from earlier turns. These
+        # shortcuts must never act as a pending decision or remain actionable
+        # after the conversation moves on.
+        for token, (option_chat_id, _) in list(self._agent_reply_option_tokens.items()):
+            if option_chat_id == chat_id:
+                self._agent_reply_option_tokens.pop(token, None)
         pending_action = self._pending_action(chat_id)
         should_prioritize_existing_queue = (
             self._has_pending_queue_files(chat_id)

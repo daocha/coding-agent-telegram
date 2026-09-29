@@ -3846,6 +3846,31 @@ def test_new_message_queues_behind_existing_backlog_and_triggers_drain(tmp_path:
     assert not router._has_pending_queue_files(123)
 
 
+def test_switch_clears_stale_pending_action_and_drains_queued_question(tmp_path: Path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_native", "native-session", "backend", "claude")
+    store.set_pending_action(
+        "bot-a", 123, {"kind": "new_session", "session_name": None, "use_session_id_as_name": True}
+    )
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+
+    queue_file, _ = router._enqueue_chat_message(123, "stuck question", reply_to_message_id=101)
+
+    bot = FakeBot()
+    context = SimpleNamespace(args=["sess_native"], bot=bot)
+    asyncio.run(router.handle_switch(make_update(text="/switch sess_native"), context))
+
+    assert store.get_chat_state("bot-a", 123).get("pending_action") is None
+    assert runner.create_calls == []
+    assert [call["user_message"] for call in runner.resume_calls] == ["stuck question"]
+    assert not queue_file.exists()
+
+
 def test_message_prompts_for_branch_discrepancy_before_running_bot_managed_session(tmp_path: Path):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -12567,3 +12592,29 @@ def test_status_command_rejects_extra_args(tmp_path: Path):
 
     assert bot.messages[-1][1] == "Usage: /status"
     assert not runner.create_calls
+
+
+def test_claude_reply_options_allow_unrelated_followup(tmp_path: Path):
+    (tmp_path / "backend").mkdir()
+    runner = ReplyOptionsRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.create_session("bot-a", 123, "sess_opt", "opt-session", "backend", "claude")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router.git = FakeGitManager(is_git_repo=False)
+    bot = FakeBot()
+    context = SimpleNamespace(args=[], bot=bot)
+
+    asyncio.run(router.handle_message(make_update(text="How should I fix this?"), context))
+    old_tokens = set(router._agent_reply_option_tokens)
+    assert old_tokens
+    other_chat_token = router._register_agent_reply_options(456, ("Keep this",))
+    bot.messages.clear()
+
+    asyncio.run(router.handle_message(make_update(text="Explain the error instead."), context))
+
+    assert runner.resume_calls[-1]["user_message"] == "Explain the error instead."
+    assert len(runner.resume_calls) == 2
+    assert any("Done." in message[1] for message in bot.messages)
+    assert not old_tokens.intersection(router._agent_reply_option_tokens)
+    assert other_chat_token in router._agent_reply_option_tokens
