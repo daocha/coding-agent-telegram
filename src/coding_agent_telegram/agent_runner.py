@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
+from coding_agent_telegram.claude_control import ClaudeControl, QuestionHandler
 from coding_agent_telegram.usage_status import observe_claude_rate_limit_event
 
 
@@ -302,6 +303,27 @@ class MultiAgentRunner:
                     return True
         return False
 
+    @staticmethod
+    def _log_claude_run_usage(events: list[dict], session_id: Optional[str]) -> None:
+        result = next(
+            (ev for ev in reversed(events) if isinstance(ev, dict) and ev.get("type") == "result"),
+            None,
+        )
+        if result is None:
+            return
+        usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+        logger.info(
+            "Claude run usage: session=%s turns=%s cost_usd=%s input=%s cache_creation=%s cache_read=%s output=%s models=%s",
+            session_id,
+            result.get("num_turns"),
+            result.get("total_cost_usd"),
+            usage.get("input_tokens"),
+            usage.get("cache_creation_input_tokens"),
+            usage.get("cache_read_input_tokens"),
+            usage.get("output_tokens"),
+            sorted((result.get("modelUsage") or {}).keys()) if isinstance(result.get("modelUsage"), dict) else None,
+        )
+
     def _parse_claude_jsonl(self, stdout: str) -> Tuple[Optional[str], bool, str, Optional[str], list[dict]]:
         events = self._parse_json_lines(stdout)
 
@@ -340,7 +362,7 @@ class MultiAgentRunner:
                         if isinstance(result_text, str) and result_text
                         else (first_error or subtype or "Claude run failed.")
                     )
-            else:
+            elif ev.get("type") == "assistant" and not ev.get("parent_tool_use_id"):
                 extracted_text = self._extract_claude_assistant_text(ev)
                 if extracted_text:
                     assistant_text = extracted_text
@@ -514,7 +536,16 @@ class MultiAgentRunner:
         env: Optional[dict[str, str]] = None,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
         on_progress: Optional[Callable[[AgentProgressInfo], None]] = None,
+        on_question: Optional[QuestionHandler] = None,
     ) -> AgentRunResult:
+        control_prompt = None
+        if provider == "claude" and on_question is not None:
+            # The existing command ends in -- <prompt>. Send the prompt over stdin
+            # instead, keeping stdin open for structured question replies.
+            control_prompt = args[-1]
+            env = {**(os.environ if env is None else env), "CLAUDE_CODE_SDK_READS_SESSION_STATE": "1"}
+            args = args[:-2] + ["--input-format", "stream-json", "--permission-prompt-tool", "stdio"]
+        popen_extra = {"stdin": subprocess.PIPE} if control_prompt is not None else {}
         proc = subprocess.Popen(
             args,
             cwd=cwd,
@@ -523,7 +554,9 @@ class MultiAgentRunner:
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
+            **popen_extra,
         )
+        control = ClaudeControl(proc.stdin, control_prompt, on_question) if control_prompt is not None else None
         process_key = str(cwd.resolve()) if cwd is not None else None
         if process_key is not None:
             with self._running_processes_lock:
@@ -580,6 +613,15 @@ class MultiAgentRunner:
             try:
                 for line in iter(stream.readline, ""):
                     chunks.append(line)
+                    if control is not None and not is_stderr:
+                        try:
+                            event = json.loads(line)
+                            if isinstance(event, dict):
+                                control.handle(event)
+                        except (ValueError, OSError):
+                            logger.exception("Claude control protocol failed.")
+                            control.error = "Claude structured question connection failed."
+                            self._terminate_process(proc, force=True)
                     record_activity(line, is_stderr=is_stderr)
             finally:
                 stream.close()
@@ -596,6 +638,12 @@ class MultiAgentRunner:
             kwargs={"is_stderr": True},
             daemon=True,
         )
+        if control is not None:
+            try:
+                control.start()
+            except (OSError, ValueError):
+                control.error = "Claude structured question connection could not be started."
+                self._terminate_process(proc, force=True)
         stdout_thread.start()
         stderr_thread.start()
 
@@ -619,7 +667,13 @@ class MultiAgentRunner:
 
         stall_reported = False
         while proc.poll() is None:
-            if on_stall and not stall_reported:
+            if control is not None and control.waiting:
+                with state_lock:
+                    last_activity = time.monotonic()
+            if control is not None and not control.initialized and time.monotonic() - start_time > 60:
+                control.error = "Claude structured question initialization timed out."
+                self._terminate_process(proc, force=True)
+            if on_stall and not stall_reported and not (control and control.waiting):
                 now = time.monotonic()
                 with state_lock:
                     idle_seconds = now - last_activity
@@ -645,6 +699,8 @@ class MultiAgentRunner:
                         logger.exception("Agent stall callback failed.")
             time.sleep(self.STALL_POLL_INTERVAL_SECONDS)
 
+        if control is not None:
+            control.close()
         stdout_thread.join()
         stderr_thread.join()
         _proc_exited.set()
@@ -666,8 +722,13 @@ class MultiAgentRunner:
                 observe_claude_rate_limit_event(events)
             except Exception:
                 logger.exception("Failed to cache Claude rate-limit data from a completed run.")
+            self._log_claude_run_usage(events, session_id)
         else:
             session_id, parsed_success, assistant_text, error_message, events = self._parse_copilot_jsonl(stdout)
+
+        if control is not None and control.error:
+            parsed_success = False
+            error_message = control.error
 
         if aborted:
             success = False
@@ -947,6 +1008,7 @@ class MultiAgentRunner:
         model: Optional[str] = None,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
         on_progress: Optional[Callable[[AgentProgressInfo], None]] = None,
+        on_question: Optional[QuestionHandler] = None,
     ) -> AgentRunResult:
         """Create a session.
 
@@ -1004,6 +1066,7 @@ class MultiAgentRunner:
                 cwd=project_path,
                 on_stall=on_stall,
                 on_progress=on_progress,
+                on_question=on_question,
             )
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])
@@ -1020,6 +1083,7 @@ class MultiAgentRunner:
         model: Optional[str] = None,
         on_stall: Optional[Callable[[AgentStallInfo], None]] = None,
         on_progress: Optional[Callable[[AgentProgressInfo], None]] = None,
+        on_question: Optional[QuestionHandler] = None,
     ) -> AgentRunResult:
         if provider == "codex":
             args = [
@@ -1058,6 +1122,7 @@ class MultiAgentRunner:
                 cwd=project_path,
                 on_stall=on_stall,
                 on_progress=on_progress,
+                on_question=on_question,
             )
         else:
             return AgentRunResult(None, False, "", f"Unsupported provider: {provider}", [])

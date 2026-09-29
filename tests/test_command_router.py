@@ -3571,7 +3571,7 @@ def test_claude_output_uses_claude_label(tmp_path: Path):
     assert not any("Codex output" in message[1] for message in bot.messages)
 
 
-@pytest.mark.parametrize("provider", ["claude", "codex", "copilot"])
+@pytest.mark.parametrize("provider", ["codex", "copilot"])
 def test_provider_reply_with_options_offers_buttons_and_resends_choice(tmp_path: Path, provider: str):
     backend = tmp_path / "backend"
     backend.mkdir()
@@ -12594,12 +12594,13 @@ def test_status_command_rejects_extra_args(tmp_path: Path):
     assert not runner.create_calls
 
 
-def test_claude_reply_options_allow_unrelated_followup(tmp_path: Path):
+@pytest.mark.parametrize("provider", ["claude", "codex", "copilot"])
+def test_reply_options_allow_unrelated_followup(tmp_path: Path, provider: str):
     (tmp_path / "backend").mkdir()
     runner = ReplyOptionsRunner()
     cfg = make_config(tmp_path)
     store = SessionStore(cfg.state_file, cfg.state_backup_file)
-    store.create_session("bot-a", 123, "sess_opt", "opt-session", "backend", "claude")
+    store.create_session("bot-a", 123, "sess_opt", "opt-session", "backend", provider)
     router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
     router.git = FakeGitManager(is_git_repo=False)
     bot = FakeBot()
@@ -12607,7 +12608,7 @@ def test_claude_reply_options_allow_unrelated_followup(tmp_path: Path):
 
     asyncio.run(router.handle_message(make_update(text="How should I fix this?"), context))
     old_tokens = set(router._agent_reply_option_tokens)
-    assert old_tokens
+    assert bool(old_tokens) == (provider != "claude")
     other_chat_token = router._register_agent_reply_options(456, ("Keep this",))
     bot.messages.clear()
 

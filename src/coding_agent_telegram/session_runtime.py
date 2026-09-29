@@ -916,13 +916,13 @@ class SessionRuntime:
 
         # If an agent's final reply reads like it's asking the user to pick between a
         # few options, detect them now so we can offer buttons after the reply is sent.
-        # This is deliberately provider-neutral: Codex and Copilot run as one-shot
-        # subprocesses just like Claude, so a Telegram reply must become the next
+        # Claude uses structured AskUserQuestion requests instead. For Codex and
+        # Copilot, a Telegram reply must become the next
         # session turn rather than trying to hold an interactive CLI prompt open.
         # Tapping one sends the option text back as the next chat message — the same
         # as if the user had typed it.
         reply_options: tuple[str, ...] = ()
-        if segments[-1].kind == "prose" and update.effective_chat is not None:
+        if provider != "claude" and segments[-1].kind == "prose" and update.effective_chat is not None:
             reply_options = _detect_reply_options(segments[-1].text)
 
         for index, segment in enumerate(segments, start=1):
