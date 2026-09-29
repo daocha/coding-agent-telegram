@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude 有问题需要确认。请选择答案后提交，或直接输入回复或新问题，无需点击按钮。",
+  "claude.questions_submit": "提交答案",
+  "claude.questions_incomplete": "请为每个问题选择答案。",
   "bot.command.abort": "中止当前代理运行",
   "bot.command.branch": "创建并切换到 Git 分支",
   "bot.command.commit": "执行已校验的 Git commit 命令",

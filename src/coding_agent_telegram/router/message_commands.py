@@ -87,6 +87,17 @@ class MessageCommandMixin:
         suppress_working_notice: bool = False,
     ) -> None:
         chat_id = update.effective_chat.id
+        # A new message supersedes suggested replies from earlier turns. These
+        # shortcuts must never act as a pending decision or remain actionable
+        # after the conversation moves on.
+        for token, (option_chat_id, _) in list(self._agent_reply_option_tokens.items()):
+            if option_chat_id == chat_id:
+                self._agent_reply_option_tokens.pop(token, None)
+        if self.claude_questions.pending:
+            active_id = self.deps.store.get_chat_state(self.deps.bot_id, chat_id).get("active_session_id")
+            if self.claude_questions.redirect(chat_id, user_message, session_id=active_id):
+                logger.info("Forwarded typed reply to a pending Claude question for chat %s.", chat_id)
+                return
         pending_action = self._pending_action(chat_id)
         should_prioritize_existing_queue = (
             self._has_pending_queue_files(chat_id)
@@ -478,6 +489,10 @@ class MessageCommandMixin:
             #   the photo path shares the same busy-handling as handle_photo already had.
             await self.runtime.compact_active_session(update, context)
             await replay()
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_claude_question_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.claude_questions.handle_callback(update, context)
 
     @require_allowed_chat(answer_callback=True)
     async def handle_agent_reply_option_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

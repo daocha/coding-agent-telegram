@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude hat Fragen. Wähle Antworten aus und sende sie ab, oder gib eine Antwort oder eine neue Frage ein, um ohne Auswahl der Schaltflächen fortzufahren.",
+  "claude.questions_submit": "Antworten senden",
+  "claude.questions_incomplete": "Bitte wähle für jede Frage eine Antwort aus.",
   "bot.command.abort": "Aktuellen Agent-Lauf abbrechen",
   "bot.command.branch": "Git Zweig erstellen und wechseln",
   "bot.command.commit": "Geprüfte Git commit-Befehle ausführen",

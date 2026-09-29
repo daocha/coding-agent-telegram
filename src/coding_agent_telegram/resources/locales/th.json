@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude มีคำถาม โปรดเลือกคำตอบแล้วส่ง หรือพิมพ์คำตอบหรือคำถามใหม่เพื่อดำเนินการต่อโดยไม่ต้องเลือกปุ่ม",
+  "claude.questions_submit": "ส่งคำตอบ",
+  "claude.questions_incomplete": "โปรดเลือกคำตอบสำหรับแต่ละคำถาม",
   "bot.command.abort": "ยกเลิกงานเอเจนต์ปัจจุบัน",
   "bot.command.branch": "สร้างและสลับไปยัง Git สาขา",
   "bot.command.commit": "รันคำสั่ง Git commit ที่ผ่านการตรวจสอบ",

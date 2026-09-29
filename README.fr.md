@@ -614,6 +614,14 @@ Si un message arrive alors qu'un agent tourne déjà sur ce projet, le bot répo
 
 Le verrou est conservé uniquement en mémoire, pas sur disque. Il est libéré automatiquement quand l'agent se termine, échoue ou quand le serveur redémarre.
 
+### Questions de Claude
+
+Claude utilise des requêtes structurées `AskUserQuestion` pour afficher des choix dans Telegram, y compris plusieurs questions et des sélections multiples. Sélectionnez vos réponses et appuyez sur **Envoyer les réponses**, ou saisissez une réponse ou une nouvelle question. Le texte saisi est immédiatement transmis à la requête Claude en attente, au lieu d’être placé dans la file derrière elle. Annuler ferme les questions ; `/abort` arrête l’exécution. Les boutons expirent lorsque leur requête se termine ou que le bot redémarre.
+
+Le texte ordinaire et les listes numérotées de Claude ne créent jamais de boutons. Codex et Copilot conservent leurs raccourcis de réponse basés sur le texte ; ces boutons sont facultatifs et ne bloquent pas les questions suivantes saisies au clavier.
+
+Cette fonction utilise le protocole de contrôle bidirectionnel `stream-json` de la CLI Claude, également utilisé par l’Agent SDK, sans ajouter de dépendance au SDK ni modifier la version de Python requise. La négociation de connexion a été vérifiée avec Claude Code 2.1.284. Maintenez Claude Code à jour. Configurer `dontAsk` ou interdire `AskUserQuestion` désactive les questions structurées ; le bot ne remplace pas ces paramètres d’autorisation.
+
 ### 💬 Questions en file d'attente
 
 Si le projet courant a déjà une exécution d'agent active, les messages texte suivants ne sont pas rejetés. Ils sont mis en file d'attente :

@@ -262,6 +262,7 @@ class SwitchCommandMixin:
         if not self.deps.store.switch_session(self.deps.bot_id, chat_id, session_id):
             await send_text(update, context, self._t(update, "switch.session_not_found"))
             return
+        self._store_pending_action(chat_id, None)
         logger.info(
             "Switched chat %s to session '%s' (%s) in project '%s'.",
             chat_id,
@@ -289,6 +290,7 @@ class SwitchCommandMixin:
                 )
             ),
         )
+        await self._drain_chat_message_queue(chat_id, context)
 
     @require_allowed_chat(answer_callback=True)
     async def handle_switch_page_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

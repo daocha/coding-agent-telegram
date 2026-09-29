@@ -88,8 +88,8 @@ _OPTION_LINE_RE = re.compile(r"^\s*(?:[0-9]{1,2}[.)]|[A-Za-z][.)])\s+(.{2,140}?)
 # Requires an explicit "which one do you want" style cue near the option list,
 # so an ordinary numbered list in a reply doesn't get mistaken for a menu.
 _OPTION_QUESTION_CUE_RE = re.compile(
-    r"\b(which (one|option|approach|way)|let me know which|should i|shall i|"
-    r"would you like me to|which would you|go with|pick one|choose one|which do you want)\b",
+    r"\b(which (?:one|option|approach|way) (?:would|do|should) you|"
+    r"let me know which|which would you|pick one|choose one|which do you want)\b",
     re.IGNORECASE,
 )
 _MAX_REPLY_OPTIONS = 6
@@ -114,7 +114,10 @@ def _detect_reply_options(text: str) -> tuple[str, ...]:
     if not stripped:
         return ()
     tail_lines = stripped.splitlines()[-_REPLY_OPTION_TAIL_LINES:]
-    if not _OPTION_QUESTION_CUE_RE.search("\n".join(tail_lines)):
+    # Cues must come from prose asking for a selection, not from an option's
+    # contents (or generic offers to help after a list of recommended steps).
+    cue_lines = [line for line in tail_lines if not _OPTION_LINE_RE.match(line)]
+    if not _OPTION_QUESTION_CUE_RE.search("\n".join(cue_lines)):
         return ()
 
     options: list[str] = []
@@ -913,13 +916,13 @@ class SessionRuntime:
 
         # If an agent's final reply reads like it's asking the user to pick between a
         # few options, detect them now so we can offer buttons after the reply is sent.
-        # This is deliberately provider-neutral: Codex and Copilot run as one-shot
-        # subprocesses just like Claude, so a Telegram reply must become the next
+        # Claude uses structured AskUserQuestion requests instead. For Codex and
+        # Copilot, a Telegram reply must become the next
         # session turn rather than trying to hold an interactive CLI prompt open.
         # Tapping one sends the option text back as the next chat message — the same
         # as if the user had typed it.
         reply_options: tuple[str, ...] = ()
-        if segments[-1].kind == "prose" and update.effective_chat is not None:
+        if provider != "claude" and segments[-1].kind == "prose" and update.effective_chat is not None:
             reply_options = _detect_reply_options(segments[-1].text)
 
         for index, segment in enumerate(segments, start=1):

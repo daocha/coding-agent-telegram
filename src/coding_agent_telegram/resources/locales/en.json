@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude has questions. Select answers and submit, or type a reply or a new question to continue without choosing buttons.",
+  "claude.questions_submit": "Submit answers",
+  "claude.questions_incomplete": "Please select an answer for each question.",
   "bot.command.abort": "Abort the current agent run",
   "bot.command.branch": "Create and switch to a Git branch",
   "bot.command.commit": "Run validated Git commit commands",
