@@ -201,3 +201,31 @@ def test_detect_reply_options_keeps_menu_with_a_single_trailing_escape_question(
         "Patch it in place",
         "Something else?",
     )
+
+
+def test_detect_reply_options_ignores_steps_with_offer_to_help():
+    for closing in (
+        "Should I implement these changes?",
+        "Would you like me to explain further?",
+        "I recommend you go with these steps.",
+    ):
+        text = "1. Update the configuration\n2. Restart the service\n3. Check the logs\n" + closing
+        assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_ignores_selection_cue_inside_instructions():
+    text = "Steps to configure it:\n1. Choose one of the available models\n2. Save the settings"
+    assert _detect_reply_options(text) == ()
+
+
+def test_detect_reply_options_does_not_treat_go_with_it_as_a_choice_prompt():
+    # The reported session matched "go with it" in prose and then offered only
+    # steps 2 and 3 because step 1 exceeded the option label length limit.
+    text = (
+        "Removing the app deletes its data; the device keys go with it.\n\n"
+        "What to do:\n"
+        "1. " + "Keep a backup in a safe place. " * 6 + "\n"
+        "2. Decide where users will get the app.\n"
+        "3. Export a backup before switching."
+    )
+    assert _detect_reply_options(text) == ()

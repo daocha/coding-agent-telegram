@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude a des questions. Sélectionnez vos réponses et envoyez-les, ou saisissez une réponse ou une nouvelle question pour continuer sans utiliser les boutons.",
+  "claude.questions_submit": "Envoyer les réponses",
+  "claude.questions_incomplete": "Veuillez sélectionner une réponse pour chaque question.",
   "bot.command.abort": "Interrompre l’exécution actuelle de l’agent",
   "bot.command.branch": "Créer et changer de Git branche",
   "bot.command.commit": "Exécuter des commandes Git commit validées",

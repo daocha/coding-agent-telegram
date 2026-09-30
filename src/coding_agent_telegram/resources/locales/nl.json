@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude heeft vragen. Selecteer antwoorden en verstuur ze, of typ een antwoord of een nieuwe vraag om verder te gaan zonder de knoppen te gebruiken.",
+  "claude.questions_submit": "Antwoorden versturen",
+  "claude.questions_incomplete": "Selecteer voor elke vraag een antwoord.",
   "bot.command.abort": "Huidige agent-run afbreken",
   "bot.command.branch": "Git tak maken en wisselen",
   "bot.command.commit": "Gevalideerde Git commit-opdrachten uitvoeren",

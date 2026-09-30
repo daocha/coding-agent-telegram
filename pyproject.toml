@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "coding-agent-telegram"
 dynamic = ["version"]
-description = "Telegram bot bridge for local coding agents (Codex/Copilot CLI)"
+description = "Your AI Agent on Telegram integrating with CodeX, Claude Code & Copilot CLI"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

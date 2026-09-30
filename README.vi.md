@@ -608,6 +608,14 @@ Nếu có tin nhắn đến khi cùng project đã có agent chạy, bot sẽ tr
 
 Lock được giữ trong bộ nhớ, không phải trên đĩa, nên sẽ tự giải phóng khi agent hoàn tất, lỗi hoặc khi server khởi động lại.
 
+### Câu hỏi của Claude
+
+Claude sử dụng yêu cầu `AskUserQuestion` có cấu trúc để hiển thị các lựa chọn trong Telegram, hỗ trợ nhiều câu hỏi và chọn nhiều đáp án. Chọn câu trả lời rồi nhấn **Gửi câu trả lời**, hoặc nhập câu trả lời hay câu hỏi mới. Văn bản bạn nhập được chuyển ngay đến yêu cầu Claude đang chờ, thay vì xếp vào hàng đợi phía sau yêu cầu đó. Hủy sẽ đóng các câu hỏi; `/abort` sẽ dừng lượt chạy. Các nút hết hiệu lực khi yêu cầu kết thúc hoặc bot khởi động lại.
+
+Văn bản thông thường và danh sách đánh số của Claude không tạo nút. Codex và Copilot vẫn giữ các nút trả lời nhanh dựa trên văn bản như trước; các nút này là tùy chọn và không chặn câu hỏi tiếp theo được nhập trực tiếp.
+
+Tính năng này sử dụng giao thức điều khiển `stream-json` hai chiều của Claude CLI, cũng được Agent SDK sử dụng, mà không thêm phụ thuộc SDK hay thay đổi yêu cầu về phiên bản Python. Quá trình bắt tay kết nối đã được kiểm tra với Claude Code 2.1.284. Hãy cập nhật Claude Code. Cấu hình `dontAsk` hoặc cấm `AskUserQuestion` sẽ vô hiệu hóa câu hỏi có cấu trúc; bot không ghi đè các thiết lập quyền này.
+
 ### 💬 Câu hỏi trong hàng đợi
 
 Nếu project hiện tại đã có lần chạy tác nhân đang chạy, các tin nhắn văn bản gửi sau sẽ không bị từ chối mà được đưa vào queue.
