@@ -21,6 +21,7 @@ from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.agent_runner import AgentProgressInfo, MultiAgentRunner
+from coding_agent_telegram.claude_questions import ClaudeQuestions
 from coding_agent_telegram.config import AppConfig
 from coding_agent_telegram.filters import resolve_project_path
 from coding_agent_telegram.git_utils import GitWorkspaceManager, _sanitize_git_output
@@ -85,7 +86,7 @@ class CommandRouterBase:
             "value_options": set(),
         },
         "commit": {
-            "flags": {"-a", "--all", "--amend", "--no-edit"},
+            "flags": {"-a", "--all", "--amend", "--no-edit", "-o", "--only"},
             "value_options": {"-m", "--message"},
         },
         "restore": {
@@ -119,6 +120,7 @@ class CommandRouterBase:
 
     def __init__(self, deps: RouterDeps) -> None:
         self.deps = deps
+        self.claude_questions = ClaudeQuestions()
         self.git = GitWorkspaceManager()
         self.photo_attachments = PhotoAttachmentStore(deps.cfg.app_internal_root)
         self.speech_to_text = WhisperSpeechToText(deps.cfg)
@@ -311,6 +313,12 @@ class CommandRouterBase:
             kwargs["on_stall"] = self._make_stall_notifier(update, context, stall_message)
         if progress_label:
             kwargs["on_progress"] = self._make_progress_notifier(update, context, progress_label, progress_state)
+
+        if isinstance(getattr(fn, "__self__", None), MultiAgentRunner) and args and args[0] == "claude":
+            loop = asyncio.get_running_loop()
+            question_session_id = args[1] if fn.__name__ == "resume_session" else None
+            kwargs["on_question"] = lambda payload: asyncio.run_coroutine_threadsafe(
+                self.claude_questions.ask(update, context, payload, session_id=question_session_id), loop)
 
         stop_event = asyncio.Event()
         await self._safe_send_chat_action(context, chat.id, ChatAction.TYPING)

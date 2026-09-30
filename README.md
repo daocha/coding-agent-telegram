@@ -637,6 +637,14 @@ If a message arrives while an agent is already running on the same project, the 
 
 The lock is held in memory (not on disk), so it is automatically released when the agent finishes, errors out, or if the server restarts. There are no stale lock files to clean up after a crash.
 
+### Claude questions
+
+Claude uses structured `AskUserQuestion` requests to display Telegram choices, including multiple questions and multiple selections. Select answers and press **Submit answers**, or type an answer or a new question. A typed message is returned to the waiting Claude request immediately instead of being queued behind it. Cancel dismisses the questions; `/abort` stops the run. Buttons expire when their request finishes or the bot restarts.
+
+Ordinary Claude prose and numbered lists never create buttons. Codex and Copilot retain their existing text-based reply shortcuts; those buttons are optional and do not block typed follow-ups.
+
+This uses the Claude CLI's bidirectional `stream-json` control protocol, as used by the Agent SDK, without adding an SDK dependency or changing the Python requirement. The handshake was checked with Claude Code 2.1.284. Keep Claude Code up to date. Configuring `dontAsk` or disallowing `AskUserQuestion` disables structured questions; the bot does not override those permission settings.
+
 ### 💬 Queued questions
 
 If the current project already has one live agent run, later text messages are not rejected. They are queued instead:

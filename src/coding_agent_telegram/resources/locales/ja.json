@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude から質問があります。回答を選んで送信するか、回答や新しい質問を入力すると、ボタンを選ばずに続行できます。",
+  "claude.questions_submit": "回答を送信",
+  "claude.questions_incomplete": "各質問の回答を選んでください。",
   "bot.command.abort": "現在のエージェント実行を中止",
   "bot.command.branch": "Git ブランチ を作成して切り替え",
   "bot.command.commit": "検証済みの Git commit コマンドを実行",

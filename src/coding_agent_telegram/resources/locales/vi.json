@@ -1,4 +1,7 @@
 {
+  "claude.questions_hint": "Claude có câu hỏi. Hãy chọn câu trả lời rồi gửi, hoặc nhập câu trả lời hay câu hỏi mới để tiếp tục mà không cần chọn nút.",
+  "claude.questions_submit": "Gửi câu trả lời",
+  "claude.questions_incomplete": "Vui lòng chọn câu trả lời cho từng câu hỏi.",
   "bot.command.abort": "Hủy lần chạy tác nhân hiện tại",
   "bot.command.branch": "Tạo và chuyển sang Git nhánh",
   "bot.command.commit": "Chạy các lệnh Git commit đã được kiểm tra",
