@@ -26,13 +26,16 @@ class GitCommandMixin:
     MAX_RESET_PROMPTS = 500
     MAX_RESET_SELECTIONS = 500
     COMMIT_GENERATION_PROMPT = (
-        'Execute: Analyze and compare to git HEAD, then Generate a git commit command for the files you changed in this task, with a detailed changelog-style commit message. '
+        'Execute: Analyze and compare to git HEAD, then Generate a git commit command for the files you changed in this task, with a concise commit message: a short summary and at most two short detail paragraphs. '
+        'Only generate the command; do not stage files or create the commit yourself. '
         'Only include files you intentionally modified for this task. '
         'Do not include unrelated changed files. '
         'Do not include untracked files unless they were created for this task and are clearly required. '
         'Write the message as plain text: use one -m "<line>" flag per summary or bullet line (git joins multiple -m values into separate paragraphs automatically) instead of embedding literal newlines inside a single -m value. '
         'Do not use $(...), backticks, heredocs (<<EOF), printf, or echo to build the command or message — every part must be plain, directly readable text. '
-        'Output only a single executable command in a fenced bash code block, in this exact form: git add <files> && git commit -m "<summary line>" -m "<detail line>" -m "<detail line>" ... '
+        'Output only a single executable command in a fenced bash code block: git add <files> && git commit -m "<short summary>" with at most two additional -m values if needed. '
+        'Use only git add and git commit, joined with &&. A standalone git commit is also accepted when no staging is needed. '
+        'Supported commit flags are -m, --message, -a, --all, --only, -o, --amend, and --no-edit; use --only with explicit paths to exclude unrelated staged changes. '
         'If the file list is long, you may wrap it across lines with a trailing \\ for readability, but keep every -m value on its own single line.'
     )
 
@@ -477,17 +480,26 @@ class GitCommandMixin:
             if segment.kind != "code":
                 continue
             lines = [line.strip() for line in segment.text.splitlines() if line.strip()]
-            if not lines or not lines[0].startswith("git add "):
+            if not lines or not lines[0].startswith(("git add ", "git commit ")):
                 continue
             command = " ".join(line.removesuffix("\\").strip() for line in lines)
-            if "git commit " in command:
+            if self._generated_commit_is_valid(command):
                 return command
         stripped_lines = [line.strip() for line in (assistant_text or "").splitlines() if line.strip()]
-        if stripped_lines and stripped_lines[0].startswith("git add "):
+        if stripped_lines and stripped_lines[0].startswith(("git add ", "git commit ")):
             command = " ".join(line.removesuffix("\\").strip() for line in stripped_lines)
-            if "git commit " in command:
+            if self._generated_commit_is_valid(command):
                 return command
         return None
+
+    def _generated_commit_is_valid(self, command: str) -> bool:
+        commands, ignored = self._validated_commit_commands(command)
+        # Generated commands are approved as a whole. Never execute just the
+        # staging portion when the commit itself is unsupported or malformed.
+        return bool(
+            commands and not ignored and commands[-1][0] == "commit"
+            and all(args[0] == "add" for args in commands[:-1])
+        )
 
     @require_allowed_chat()
     async def handle_commit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -791,7 +803,7 @@ class GitCommandMixin:
         self._commit_generation_prompts().pop(token, None)
 
         generated_command = await self._generate_commit_command_with_provider(update, context)
-        if generated_command is None:
+        if generated_command is None or not self._generated_commit_is_valid(generated_command):
             await query.edit_message_text(self._t(update, "git.no_valid_commit_commands"))
             return
 
@@ -910,7 +922,7 @@ class GitCommandMixin:
         ):
             return
         command = str(payload.get("command") or "").strip()
-        if not command:
+        if not command or not self._generated_commit_is_valid(command):
             self._generated_commit_commands().pop(token, None)
             await query.edit_message_text(self._t(update, "git.no_valid_commit_commands"))
             return

@@ -86,7 +86,7 @@ class CommandRouterBase:
             "value_options": set(),
         },
         "commit": {
-            "flags": {"-a", "--all", "--amend", "--no-edit"},
+            "flags": {"-a", "--all", "--amend", "--no-edit", "-o", "--only"},
             "value_options": {"-m", "--message"},
         },
         "restore": {
