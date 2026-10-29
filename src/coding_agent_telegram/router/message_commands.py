@@ -536,6 +536,9 @@ class MessageCommandMixin:
                 SimpleNamespace(args=[session_name] if session_name else [], bot=context.bot),
             )
             return
+        if self._awaiting_start_session_name_text(update.effective_chat.id):
+            await self._handle_start_session_name_text(update, context, update.message.text)
+            return
         await self._process_user_message(update, context, update.message.text)
 
     @require_allowed_chat()

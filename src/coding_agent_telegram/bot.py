@@ -42,6 +42,7 @@ def _describe_message_types(message) -> list[str]:
 
 def default_bot_commands(*, enable_commit_command: bool, locale: str = DEFAULT_LOCALE) -> list[BotCommand]:
     commands = [
+        BotCommand("start", translate(locale, "bot.command.start")),
         BotCommand("provider", translate(locale, "bot.command.provider")),
         BotCommand("model", translate(locale, "bot.command.model")),
         BotCommand("project", translate(locale, "bot.command.project")),
@@ -153,6 +154,7 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
         )
 
     app.add_handler(MessageHandler(allowed_private, log_incoming_private_message, block=False), group=-1)
+    app.add_handler(CommandHandler("start", router.handle_start, filters=allowed_private, block=False))
     app.add_handler(CommandHandler("provider", router.handle_provider, filters=allowed_private))
     app.add_handler(CommandHandler("model", router.handle_model, filters=allowed_private))
     app.add_handler(CommandHandler("project", router.handle_project, filters=allowed_private))
@@ -197,6 +199,9 @@ def build_application(token: str, router: CommandRouter, *, allowed_chat_ids: se
             pattern=r"^reset:(?:select:[0-9a-f]{12}:(?:local|origin)-(?:default|current)|(?:confirm|cancel):[0-9a-f]{12})$",
         )
     )
+    app.add_handler(CallbackQueryHandler(router.handle_start_project_callback, pattern=r"^startproject:", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_start_project_page_callback, pattern=r"^startprojpage:\d+$", block=False))
+    app.add_handler(CallbackQueryHandler(router.handle_start_name_callback, pattern=r"^startname:(?:custom|default)$", block=False))
     app.add_handler(CallbackQueryHandler(router.handle_trust_project_callback, pattern=r"^trustproject:(yes|no):"))
     app.add_handler(MessageHandler(allowed_private & tg_filters.PHOTO, router.handle_photo, block=False))
     app.add_handler(MessageHandler(allowed_private & tg_filters.AUDIO, router.handle_audio, block=False))

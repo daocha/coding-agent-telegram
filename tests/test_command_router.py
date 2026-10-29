@@ -12619,3 +12619,122 @@ def test_reply_options_allow_unrelated_followup(tmp_path: Path, provider: str):
     assert any("Done." in message[1] for message in bot.messages)
     assert not old_tokens.intersection(router._agent_reply_option_tokens)
     assert other_chat_token in router._agent_reply_option_tokens
+
+
+def test_start_command_walks_through_provider_project_and_creates_session(tmp_path: Path):
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "frontend").mkdir()
+    runner = DummyRunner()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    store.set_current_project_folder("bot-a", 123, "old-project")
+    store.set_current_provider("bot-a", 123, "claude")
+    store.set_current_branch("bot-a", 123, "old-branch")
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=runner, bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+    bot = FakeBot()
+
+    asyncio.run(router.handle_start(make_update(), SimpleNamespace(args=["fresh-task"], bot=bot)))
+
+    state = store.get_chat_state("bot-a", 123)
+    assert "current_provider" not in state and "current_project_folder" not in state
+    assert "current_branch" not in state
+    assert "Starting a brand new task" in bot.messages[0][1]
+    assert "Provider selection is required" in bot.messages[-1][1]
+    assert runner.create_calls == []
+
+    # Provider chosen via button -> project buttons are offered.
+    provider_update = make_update()
+    provider_update.callback_query = SimpleNamespace(data="provider:set:codex", answer=None, edit_message_text=None)
+
+    async def noop(*_args):
+        return None
+
+    provider_update.callback_query.answer = noop
+    provider_update.callback_query.edit_message_text = noop
+    asyncio.run(router.handle_provider_callback(provider_update, SimpleNamespace(args=[], bot=bot)))
+    project_prompt = bot.sent_messages[-1]
+    assert "Choose the project" in project_prompt["text"]
+    buttons = [b.callback_data for row in project_prompt["reply_markup"].inline_keyboard for b in row]
+    assert buttons == ["startproject:backend", "startproject:frontend"]
+    assert runner.create_calls == []
+
+    # Project chosen via button -> session is created with the chosen provider/project/name.
+    project_update = make_update()
+    project_update.callback_query = SimpleNamespace(data="startproject:backend", answer=noop, edit_message_text=noop)
+    asyncio.run(router.handle_start_project_callback(project_update, SimpleNamespace(args=[], bot=bot)))
+
+    state = store.get_chat_state("bot-a", 123)
+    session = state["sessions"][state["active_session_id"]]
+    assert (session["name"], session["provider"], session["project_folder"]) == ("fresh-task", "codex", "backend")
+    assert state.get("pending_action") is None
+
+
+def _callback_update(data: str):
+    async def noop(*_args, **_kwargs):
+        return None
+
+    update = make_update()
+    update.callback_query = SimpleNamespace(data=data, answer=noop, edit_message_text=noop)
+    return update
+
+
+def test_start_without_name_asks_for_session_name_and_accepts_custom_name(tmp_path: Path):
+    (tmp_path / "backend").mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+    bot = FakeBot()
+
+    asyncio.run(router.handle_start(make_update(), SimpleNamespace(args=[], bot=bot)))
+    prompt = bot.sent_messages[-1]
+    assert "name" in prompt["text"].lower()
+    assert [b.callback_data for row in prompt["reply_markup"].inline_keyboard for b in row] == [
+        "startname:custom",
+        "startname:default",
+    ]
+    assert "Provider selection is required" not in prompt["text"]
+
+    asyncio.run(router.handle_start_name_callback(_callback_update("startname:custom"), SimpleNamespace(args=[], bot=bot)))
+    assert router._awaiting_start_session_name_text(123)
+
+    text_update = make_update()
+    text_update.message.text = "My Task"
+    asyncio.run(router.handle_message(text_update, SimpleNamespace(args=[], bot=bot)))
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["session_name"] == "My Task" and not pending.get("awaiting_session_name")
+    assert "Provider selection is required" in bot.messages[-1][1]
+
+
+def test_start_default_name_choice_continues_wizard(tmp_path: Path):
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    router._provider_available = lambda provider: True
+    bot = FakeBot()
+
+    asyncio.run(router.handle_start(make_update(), SimpleNamespace(args=[], bot=bot)))
+    asyncio.run(router.handle_start_name_callback(_callback_update("startname:default"), SimpleNamespace(args=[], bot=bot)))
+
+    pending = store.get_chat_state("bot-a", 123)["pending_action"]
+    assert pending["use_session_id_as_name"] is True and not pending.get("awaiting_session_name")
+    assert "Provider selection is required" in bot.messages[-1][1]
+
+
+def test_start_project_buttons_are_paginated(tmp_path: Path):
+    for i in range(20):
+        (tmp_path / f"proj{i:02d}").mkdir()
+    cfg = make_config(tmp_path)
+    store = SessionStore(cfg.state_file, cfg.state_backup_file)
+    router = CommandRouter(RouterDeps(cfg=cfg, store=store, agent_runner=DummyRunner(), bot_id="bot-a"))
+    update = make_update()
+
+    text, markup = router._build_project_page(update, router._list_workspace_project_folders(), 1)
+    data = [b.callback_data for row in markup.inline_keyboard for b in row]
+    assert data[: router.START_PROJECT_PAGE_SIZE][0] == "startproject:proj00"
+    assert data[-1] == "startprojpage:2" and "1/3" in text
+
+    text, markup = router._build_project_page(update, router._list_workspace_project_folders(), 3)
+    data = [b.callback_data for row in markup.inline_keyboard for b in row]
+    assert data[-1] == "startprojpage:2" and data.count("startproject:proj19") == 1

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from types import SimpleNamespace
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from coding_agent_telegram.claude_health import claude_auth_failure_message, is_claude_auth_failure
@@ -86,6 +86,9 @@ class SessionLifecycleCommandMixin:
         project_folder = str(chat_state.get("current_project_folder") or "").strip()
         if not project_folder:
             self._hold_pending_action_for_prerequisite(chat_id, pending_action)
+            if pending_action and pending_action.get("start_wizard"):
+                await self._prompt_for_project_selection(update, context)
+                return None
             await send_text(
                 update,
                 context,
@@ -220,6 +223,9 @@ class SessionLifecycleCommandMixin:
         chat_id = update.effective_chat.id
         pending_action = self._pending_action(chat_id)
         if not pending_action:
+            return False
+        if pending_action.get("awaiting_session_name"):
+            # /start is still waiting for the user to pick or type a session name.
             return False
         completed = False
 
@@ -363,4 +369,82 @@ class SessionLifecycleCommandMixin:
                 "use_session_id_as_name": not bool(session_name),
             },
         )
+        await self._continue_pending_action(update, context, drain_queue_after_completion=True)
+
+    @require_allowed_chat()
+    async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self._notify_if_current_project_busy(update, context):
+            return
+        chat_id = update.effective_chat.id
+        session_name = " ".join(context.args).strip() or None
+        # Forget the previous provider/project/branch so the prerequisite resolver asks
+        # for each one in turn (provider -> project -> branch) before creating the session.
+        self.deps.store.clear_current_selection(self.deps.bot_id, chat_id)
+        self._store_pending_action(
+            chat_id,
+            {
+                "kind": "new_session",
+                "session_name": session_name,
+                "use_session_id_as_name": not bool(session_name),
+                "start_wizard": True,
+                "awaiting_session_name": not session_name,
+            },
+        )
+        await send_text(update, context, self._t(update, "start.intro"))
+        if not session_name:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=self._t(update, "start.ask_session_name"),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton(self._t(update, "start.button_custom_name"), callback_data="startname:custom")],
+                        [InlineKeyboardButton(self._t(update, "start.button_default_name"), callback_data="startname:default")],
+                    ]
+                ),
+            )
+            return
+        await self._continue_pending_action(update, context, drain_queue_after_completion=True)
+
+    def _awaiting_start_session_name_text(self, chat_id: int) -> bool:
+        pending = self._pending_action(chat_id)
+        return isinstance(pending, dict) and bool(pending.get("awaiting_session_name_text"))
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_start_name_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+        await query.answer()
+        chat_id = update.effective_chat.id
+        pending = self._pending_action(chat_id)
+        if not isinstance(pending, dict) or not pending.get("awaiting_session_name"):
+            return
+        choice = query.data.partition(":")[2]
+        pending = dict(pending)
+        if choice == "custom":
+            pending["awaiting_session_name_text"] = True
+            self._store_pending_action(chat_id, pending)
+            await query.edit_message_text(self._t(update, "start.enter_session_name"))
+            return
+        pending.pop("awaiting_session_name", None)
+        pending.pop("awaiting_session_name_text", None)
+        self._store_pending_action(chat_id, pending)
+        await query.edit_message_text(self._t(update, "start.using_default_name"))
+        await self._continue_pending_action(update, context, drain_queue_after_completion=True)
+
+    async def _handle_start_session_name_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+        chat_id = update.effective_chat.id
+        name = " ".join(text.split())
+        if not name:
+            await send_text(update, context, self._t(update, "start.enter_session_name"))
+            return
+        existing = self.deps.store.list_sessions(self.deps.bot_id, chat_id)
+        if any(data.get("name", "").strip().lower() == name.lower() for data in existing.values()):
+            await send_text(update, context, self._t(update, "lifecycle.session_name_exists", session_name=name))
+            return
+        pending = dict(self._pending_action(chat_id) or {})
+        pending.update(session_name=name, use_session_id_as_name=False)
+        pending.pop("awaiting_session_name", None)
+        pending.pop("awaiting_session_name_text", None)
+        self._store_pending_action(chat_id, pending)
         await self._continue_pending_action(update, context, drain_queue_after_completion=True)
