@@ -270,6 +270,10 @@ Le bot accepte actuellement :
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>Démarrer une toute nouvelle tâche de zéro. Le bot demande d'abord un nom de session (<b>utiliser un nom de session personnalisé</b> puis le saisir, ou <b>utiliser le nom de session par défaut</b>), vous guide ensuite à travers le fournisseur, le projet et la branche, puis crée la nouvelle session. Les boutons de projet listent les sous-dossiers directs non masqués de <code>WORKSPACE_ROOT</code>, avec pagination. Si vous passez <code>session_name</code>, la question du nom est ignorée.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>Choisir le fournisseur pour les nouvelles sessions. Le choix est stocké par bot et par chat jusqu’à modification.</td>
   </tr>

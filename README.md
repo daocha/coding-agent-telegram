@@ -284,6 +284,10 @@ The bot currently accepts:
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>Start a brand new task from scratch. The bot first asks for a session name (<b>use a customized session name</b>, then type it, or <b>use default session name</b>), then walks you through provider, project and branch, and finally creates the new session. Project buttons list the immediate, non-hidden subfolders of <code>WORKSPACE_ROOT</code>, paginated. If you pass <code>session_name</code>, the name question is skipped.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>Choose the provider for new sessions. The selection is stored per bot and chat until you change it.</td>
   </tr>

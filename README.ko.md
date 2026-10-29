@@ -272,6 +272,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>완전히 새로운 작업을 처음부터 시작합니다. 봇이 먼저 세션 이름을 묻고(<b>사용자 지정 세션 이름 사용</b>을 선택해 직접 입력하거나 <b>기본 세션 이름 사용</b> 선택), 이어서 제공자, 프로젝트, 브랜치를 단계별로 안내한 뒤 새 세션을 만듭니다. 프로젝트 버튼은 <code>WORKSPACE_ROOT</code> 바로 아래의 숨김이 아닌 하위 폴더를 페이지로 나누어 보여 줍니다. <code>session_name</code> 을 함께 입력하면 이름 질문은 건너뜁니다.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>새 세션용 제공자를 선택합니다. 선택 내용은 바꿀 때까지 bot/chat 단위로 저장됩니다.</td>
   </tr>

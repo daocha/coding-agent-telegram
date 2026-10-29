@@ -270,6 +270,10 @@ https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>まったく新しいタスクを最初から開始します。まずセッション名を尋ねられ（<b>カスタムセッション名を使用</b>を選んで入力するか、<b>デフォルトのセッション名を使用</b>を選択）、続いてプロバイダー、プロジェクト、ブランチを順に選び、最後に新しいセッションを作成します。プロジェクトのボタンには <code>WORKSPACE_ROOT</code> 直下の非表示でないサブフォルダーがページ分割で表示されます。<code>session_name</code> を指定すると名前の確認は省略されます。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>新しいセッション用のプロバイダーを選択します。選択は変更するまで bot と chat ごとに保存されます。</td>
   </tr>

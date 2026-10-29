@@ -270,6 +270,10 @@ bot 目前接受：
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>從頭開始一個全新任務。機器人會先詢問工作階段名稱（選擇<b>使用自訂工作階段名稱</b>後輸入名稱，或選擇<b>使用預設工作階段名稱</b>），接著依序引導你選擇提供者、專案和分支，最後建立新工作階段。專案按鈕會分頁列出 <code>WORKSPACE_ROOT</code> 底下第一層的非隱藏子資料夾。若直接帶上 <code>session_name</code>，則略過名稱詢問。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>為新的工作階段選擇提供者。這個選擇會按 bot 與 chat 儲存，直到你手動修改。</td>
   </tr>
