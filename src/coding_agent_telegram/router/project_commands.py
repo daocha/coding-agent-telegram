@@ -238,7 +238,79 @@ class ProjectCommandMixin:
         if not is_valid_project_folder(folder):
             await send_text(update, context, self._t(update, "project.invalid_project_folder"))
             return
+        await self._select_project(update, context, folder)
 
+    START_PROJECT_PAGE_SIZE = 8
+
+    def _list_workspace_project_folders(self) -> list[str]:
+        root = self.deps.cfg.workspace_root
+        try:
+            entries = [entry.name for entry in root.iterdir() if entry.is_dir()]
+        except OSError:
+            return []
+        # Hidden folders and the app's internal folder are not projects; the callback
+        # payload must also fit Telegram's 64-byte callback_data limit.
+        return sorted(
+            name
+            for name in entries
+            if not name.startswith(".")
+            and is_valid_project_folder(name)
+            and len(f"startproject:{name}".encode()) <= 64
+        )
+
+    def _build_project_page(self, update: Update, folders: list[str], page: int) -> tuple[str, InlineKeyboardMarkup | None]:
+        total_pages = max(1, (len(folders) + self.START_PROJECT_PAGE_SIZE - 1) // self.START_PROJECT_PAGE_SIZE)
+        page = min(max(page, 1), total_pages)
+        start = (page - 1) * self.START_PROJECT_PAGE_SIZE
+        rows = [
+            [InlineKeyboardButton(name, callback_data=f"startproject:{name}")]
+            for name in folders[start : start + self.START_PROJECT_PAGE_SIZE]
+        ]
+        nav: list[InlineKeyboardButton] = []
+        if page > 1:
+            nav.append(InlineKeyboardButton(self._t(update, "diff.button_prev_page"), callback_data=f"startprojpage:{page - 1}"))
+        if page < total_pages:
+            nav.append(InlineKeyboardButton(self._t(update, "diff.button_next_page"), callback_data=f"startprojpage:{page + 1}"))
+        if nav:
+            rows.append(nav)
+        text = self._t(update, "start.choose_project")
+        if total_pages > 1:
+            text += "\n" + self._t(update, "start.project_page", page=page, total_pages=total_pages)
+        return text, InlineKeyboardMarkup(rows) if rows else None
+
+    async def _prompt_for_project_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text, keyboard = self._build_project_page(update, self._list_workspace_project_folders(), 1)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=keyboard)
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_start_project_page_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+        await query.answer()
+        try:
+            page = int(query.data.partition(":")[2])
+        except ValueError:
+            return
+        text, keyboard = self._build_project_page(update, self._list_workspace_project_folders(), page)
+        await query.edit_message_text(text, reply_markup=keyboard)
+
+    @require_allowed_chat(answer_callback=True)
+    async def handle_start_project_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+        await query.answer()
+        folder = query.data.partition(":")[2]
+        if not is_valid_project_folder(folder):
+            await query.edit_message_text(self._t(update, "project.invalid_project_folder"))
+            return
+        if await self._notify_if_current_project_busy(update, context):
+            return
+        await query.edit_message_text(self._t(update, "start.project_selected", folder=folder))
+        await self._select_project(update, context, folder)
+
+    async def _select_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE, folder: str) -> None:
         chat_id = update.effective_chat.id
         chat_state = self.deps.store.get_chat_state(self.deps.bot_id, chat_id)
         previous_project_folder = chat_state.get("current_project_folder")
