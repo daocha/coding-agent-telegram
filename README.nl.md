@@ -270,6 +270,10 @@ De bot accepteert momenteel:
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>Een gloednieuwe taak vanaf nul starten. De bot vraagt eerst om een sessienaam (<b>eigen sessienaam gebruiken</b> en die typen, of <b>standaard sessienaam gebruiken</b>), begeleidt je daarna door aanbieder, project en branch en maakt ten slotte de nieuwe sessie aan. De projectknoppen tonen de directe, niet-verborgen submappen van <code>WORKSPACE_ROOT</code>, met paginering. Als je <code>session_name</code> opgeeft, wordt de naamvraag overgeslagen.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>Kies de aanbieder voor nieuwe sessies. Die keuze wordt per bot en chat bewaard totdat je die wijzigt.</td>
   </tr>

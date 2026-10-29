@@ -270,6 +270,10 @@ Hiện tại bot chấp nhận:
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>Bắt đầu một tác vụ hoàn toàn mới từ đầu. Bot trước tiên hỏi tên phiên (<b>dùng tên phiên tùy chỉnh</b> rồi nhập tên, hoặc <b>dùng tên phiên mặc định</b>), sau đó hướng dẫn bạn chọn nhà cung cấp, dự án và nhánh từng bước, cuối cùng tạo phiên mới. Các nút dự án liệt kê những thư mục con trực tiếp, không ẩn của <code>WORKSPACE_ROOT</code>, có phân trang. Nếu bạn truyền <code>session_name</code>, câu hỏi về tên sẽ được bỏ qua.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>Chọn nhà cung cấp cho các phiên mới. Lựa chọn này được lưu theo từng bot và chat cho đến khi bạn thay đổi.</td>
   </tr>

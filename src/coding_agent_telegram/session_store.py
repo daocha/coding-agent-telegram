@@ -198,6 +198,15 @@ class SessionStore:
 
         self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
 
+    def clear_current_selection(self, bot_id: str, chat_id: int) -> None:
+        """Forget the chat's provider, project and branch so a fresh setup flow re-asks for each."""
+
+        def mutate(chat_data: dict[str, Any]) -> None:
+            for key in ("current_provider", "current_project_folder", "current_branch"):
+                chat_data.pop(key, None)
+
+        self._mutate_chat_data(bot_id, chat_id, mutate, create=True)
+
     def set_current_provider(self, bot_id: str, chat_id: int, provider: str) -> None:
         def mutate(chat_data: dict[str, Any]) -> None:
             chat_data["current_provider"] = _normalize_provider(provider)
@@ -369,6 +378,11 @@ class SessionStore:
                 return
             session = chat_data.get("sessions", {}).get(active_session_id)
             if not session:
+                return
+            current_project = chat_data.get("current_project_folder")
+            if current_project and session.get("project_folder") != current_project:
+                # The chat switched to another project; don't rewrite the old project's session branch.
+                chat_data["current_branch"] = branch_name
                 return
             session["branch_name"] = branch_name
             session["updated_at"] = self._now()
