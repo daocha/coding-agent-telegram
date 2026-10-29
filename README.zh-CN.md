@@ -272,6 +272,10 @@ bot 当前接受：
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>从头开始一个全新任务。机器人会先询问会话名称（选择<b>使用自定义会话名称</b>后输入名称，或选择<b>使用默认会话名称</b>），然后依次引导你选择提供方、项目和分支，最后创建新会话。项目按钮会分页列出 <code>WORKSPACE_ROOT</code> 下一级的非隐藏子文件夹。如果直接带上 <code>session_name</code>，则跳过名称询问。</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>为新会话选择提供方。该选择会按 bot 和 chat 保存，直到你手动修改。</td>
   </tr>

@@ -270,6 +270,10 @@ Der Bot akzeptiert derzeit:
 
 <table>
   <tr>
+    <td width="332"><code>/start [session_name]</code></td>
+    <td>Eine komplett neue Aufgabe von Grund auf starten. Der Bot fragt zuerst nach einem Sitzungsnamen (<b>eigenen Sitzungsnamen verwenden</b> und eintippen, oder <b>Standard-Sitzungsnamen verwenden</b>), führt dich dann durch Anbieter, Projekt und Branch und erstellt zuletzt die neue Sitzung. Die Projekt-Buttons listen die direkten, nicht versteckten Unterordner von <code>WORKSPACE_ROOT</code> auf, mit Seitennavigation. Wenn du <code>session_name</code> angibst, entfällt die Namensfrage.</td>
+  </tr>
+  <tr>
     <td width="332"><code>/provider</code></td>
     <td>Provider für neue Sessions wählen. Die Auswahl wird pro Bot und Chat gespeichert, bis du sie änderst.</td>
   </tr>
